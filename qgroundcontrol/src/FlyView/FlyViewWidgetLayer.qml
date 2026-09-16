@@ -50,6 +50,20 @@ Item {
         standoffPanel.toggle()
     }
 
+    // STRATUM: opens the Set Standoff panel (if not already visible) and pre-fills
+    // the target lat/lon fields with the coordinate the operator picked from the map
+    // click menu. The panel's own textChanged handlers push the pending marker.
+    function openStandoffWithTarget(coordinate) {
+        if (!coordinate || !coordinate.isValid) {
+            return
+        }
+        if (!standoffPanel.visible) {
+            standoffPanel.open()
+        }
+        standoffLatField.text = coordinate.latitude.toFixed(7)
+        standoffLonField.text = coordinate.longitude.toFixed(7)
+    }
+
     QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
     // STRATUM: AOP edit-mode action bar. Shown only while defining the Area of

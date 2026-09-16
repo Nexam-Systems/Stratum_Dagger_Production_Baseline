@@ -78,6 +78,10 @@ FlightMap {
 
     signal standoffTargetPicked(var coordinate)
 
+    // STRATUM: emitted by the map-click "Set Standoff here" menu item. Handled in
+    // FlyView.qml by opening the Set Standoff panel pre-filled with the coordinate.
+    signal setStandoffHereRequested(var coordinate)
+
     function startStandoffPick() { _standoffPickMode = true }
     function stopStandoffPick() {
         _standoffPickMode = false
@@ -507,6 +511,160 @@ FlightMap {
             function onPointAdded(coordinate) { trajectoryPolyline.addCoordinate(coordinate) }
             function onUpdateLastPoint(coordinate) { trajectoryPolyline.replaceCoordinate(trajectoryPolyline.pathLength() - 1, coordinate) }
             function onPointsCleared() { trajectoryPolyline.path = [] }
+        }
+    }
+
+    // STRATUM: operator (GCS) situational awareness on the map.
+    // Records the operator's movement, draws a tactical marker at the operator's
+    // position, and shows a bearing/distance line from the operator to the active
+    // vehicle. Populated by QGCPositionManager (same source as the base FlightMap
+    // GCS icon), so nothing extra needs to be wired.
+    property var  _gcsPosition:               QGroundControl.qgcPositionManger.gcsPosition
+    property var  _gcsTrail:                  []
+    readonly property real _gcsTrailThresholdM: 2.0
+    readonly property int  _gcsTrailMax:        5000
+
+    Connections {
+        target: QGroundControl.qgcPositionManger
+        function onGcsPositionChanged(gcsPosition) {
+            _root._gcsPosition = gcsPosition
+            if (!gcsPosition.isValid) {
+                return
+            }
+            var trail = _root._gcsTrail
+            if (trail.length > 0) {
+                var last = trail[trail.length - 1]
+                if (last.distanceTo(gcsPosition) < _root._gcsTrailThresholdM) {
+                    return
+                }
+            }
+            trail = trail.concat([gcsPosition])
+            if (trail.length > _root._gcsTrailMax) {
+                trail = trail.slice(trail.length - _root._gcsTrailMax)
+            }
+            _root._gcsTrail = trail
+            gcsTrailPolyline.path = trail
+        }
+    }
+
+    // Operator movement trail (accent green, dim).
+    MapPolyline {
+        id:         gcsTrailPolyline
+        line.width: 2
+        line.color: "#3DFFA6"
+        opacity:    0.55
+        z:          QGroundControl.zOrderTrajectoryLines
+        visible:    _root._gcsTrail.length >= 2 && !pipMode
+    }
+
+    // Bearing line: operator -> active vehicle (amber, distinguishes it from the
+    // red trajectory and the green operator trail).
+    MapPolyline {
+        id:         gcsBearingLine
+        line.width: 2
+        line.color: "#F59E0B"
+        opacity:    0.85
+        z:          QGroundControl.zOrderTrajectoryLines
+        visible:    !pipMode && _root._gcsPosition && _root._gcsPosition.isValid &&
+                    _root._activeVehicleCoordinate && _root._activeVehicleCoordinate.isValid
+        path:       visible ? [_root._gcsPosition, _root._activeVehicleCoordinate] : []
+    }
+
+    // STRATUM operator marker: concentric accent-green rings + "OP" label.
+    // Layered above the base FlightMap GCS logo so it reads clearly in daylight.
+    MapQuickItem {
+        id:             gcsMarker
+        coordinate:     _root._gcsPosition
+        visible:        _root._gcsPosition && _root._gcsPosition.isValid && !pipMode
+        anchorPoint.x:  sourceItem.width  / 2
+        anchorPoint.y:  sourceItem.height / 2
+        z:              QGroundControl.zOrderVehicles
+
+        sourceItem: Item {
+            width:  ScreenTools.defaultFontPixelHeight * 2.6
+            height: ScreenTools.defaultFontPixelHeight * 2.6
+
+            Rectangle {
+                anchors.centerIn: parent
+                width:            parent.width  * 0.85
+                height:           parent.height * 0.85
+                radius:           width / 2
+                color:            "#333DFFA6"
+                border.color:     "#3DFFA6"
+                border.width:     2
+            }
+            Rectangle {
+                anchors.centerIn: parent
+                width:            parent.width  * 0.42
+                height:           parent.height * 0.42
+                radius:           width / 2
+                color:            "#3DFFA6"
+                border.color:     "#00180C"
+                border.width:     1
+            }
+            QGCLabel {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top:              parent.bottom
+                anchors.topMargin:        1
+                text:                     qsTr("OP")
+                font.pointSize:           ScreenTools.smallFontPointSize
+                font.bold:                true
+                color:                    "#3DFFA6"
+                style:                    Text.Outline
+                styleColor:               "#000000"
+            }
+        }
+    }
+
+    // Bearing / distance chip anchored at midpoint of the operator->vehicle line.
+    MapQuickItem {
+        id:             gcsBearingChip
+        visible:        gcsBearingLine.visible
+        coordinate:     visible ? QtPositioning.coordinate(
+                                    (_root._gcsPosition.latitude  + _root._activeVehicleCoordinate.latitude)  / 2,
+                                    (_root._gcsPosition.longitude + _root._activeVehicleCoordinate.longitude) / 2)
+                                : QtPositioning.coordinate()
+        anchorPoint.x:  sourceItem.width  / 2
+        anchorPoint.y:  sourceItem.height / 2
+        z:              QGroundControl.zOrderVehicles
+
+        sourceItem: Rectangle {
+            color:          "#CC101418"
+            border.color:   "#F59E0B"
+            border.width:   1
+            radius:         3
+            implicitWidth:  chipRow.implicitWidth  + ScreenTools.defaultFontPixelWidth
+            implicitHeight: chipRow.implicitHeight + (ScreenTools.defaultFontPixelHeight * 0.25)
+
+            Row {
+                id:                 chipRow
+                anchors.centerIn:   parent
+                spacing:            ScreenTools.defaultFontPixelWidth * 0.5
+
+                QGCLabel {
+                    text: {
+                        if (!gcsBearingLine.visible) return ""
+                        var az = _root._gcsPosition.azimuthTo(_root._activeVehicleCoordinate)
+                        if (az < 0) az += 360
+                        var s = Math.round(az).toString()
+                        while (s.length < 3) s = "0" + s
+                        return s + "\u00B0"
+                    }
+                    color:          "#F59E0B"
+                    font.bold:      true
+                    font.pointSize: ScreenTools.smallFontPointSize
+                }
+                QGCLabel {
+                    text: {
+                        if (!gcsBearingLine.visible) return ""
+                        var d = _root._gcsPosition.distanceTo(_root._activeVehicleCoordinate)
+                        if (d >= 1000) return (d / 1000).toFixed(2) + " km"
+                        return Math.round(d) + " m"
+                    }
+                    color:          "#F1F4F7"
+                    font.pointSize: ScreenTools.smallFontPointSize
+                }
+            }
         }
     }
 
@@ -1085,6 +1243,17 @@ FlightMap {
                         }
                     }
 
+                    // STRATUM: opens the Set Standoff panel pre-filled with the clicked
+                    // coordinate. Same entry surface as the ribbon's "Set Standoff" button.
+                    QGCButton {
+                        Layout.fillWidth:   true
+                        text:               qsTr("Set standoff here")
+                        onClicked: {
+                            mapClickDropPanel.close()
+                            _root.setStandoffHereRequested(mapClickCoord)
+                        }
+                    }
+
                     QGCButton {
                         Layout.fillWidth:   true
                         text:               qsTr("Set Heading")
@@ -1120,7 +1289,7 @@ FlightMap {
         if (!globals.guidedControllerFlyView.guidedUIVisible &&
             (globals.guidedControllerFlyView.showGotoLocation || globals.guidedControllerFlyView.showOrbit ||
              globals.guidedControllerFlyView.showROI || globals.guidedControllerFlyView.showSetHome ||
-             globals.guidedControllerFlyView.showSetEstimatorOrigin)) {
+             globals.guidedControllerFlyView.showSetEstimatorOrigin || _activeVehicle)) {
 
             position = Qt.point(position.x, position.y)
             var clickCoord = _root.toCoordinate(position, false /* clipToViewPort */)

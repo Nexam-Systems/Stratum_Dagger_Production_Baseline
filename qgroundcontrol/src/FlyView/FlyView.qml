@@ -380,6 +380,15 @@ Item {
                 }
             }
         }
+
+        // STRATUM: map click "Set standoff here" -> open the Set Standoff panel
+        // pre-filled with the clicked coordinate (same panel as the ribbon button).
+        Connections {
+            target: mapControl
+            function onSetStandoffHereRequested(coordinate) {
+                widgetLayer.openStandoffWithTarget(coordinate)
+            }
+        }
     }
 
     FlyViewToolBar {

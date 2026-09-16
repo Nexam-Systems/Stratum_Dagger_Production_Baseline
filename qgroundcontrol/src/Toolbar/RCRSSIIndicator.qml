@@ -40,7 +40,7 @@ Item {
         id:             rssiRow
         anchors.top:    parent.top
         anchors.bottom: parent.bottom
-        spacing:        ScreenTools.defaultFontPixelWidth
+        spacing:        ScreenTools.defaultFontPixelWidth * 0.5
 
         QGCColoredImage {
             width:              height
@@ -51,6 +51,15 @@ Item {
             fillMode:           Image.PreserveAspectFit
             opacity:            _rcRSSIAvailable ? 1 : 0.5
             color:              qgcPal.buttonText
+        }
+
+        QGCLabel {
+            anchors.verticalCenter: parent.verticalCenter
+            text:                   _rcRSSIAvailable ? (_activeVehicle.rcRSSI.rawValue + qsTr("%")) : qsTr("--")
+            color:                  qgcPal.buttonText
+            font.pointSize:         ScreenTools.smallFontPointSize
+            font.bold:              true
+            font.family:            ScreenTools.demiboldFontFamily
         }
 
         SignalStrength {

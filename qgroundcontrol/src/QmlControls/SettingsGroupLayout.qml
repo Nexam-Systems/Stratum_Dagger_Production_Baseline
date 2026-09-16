@@ -67,6 +67,20 @@ ColumnLayout {
         border.width:       showBorder ? 1 : 0
         radius:             ScreenTools.defaultFontPixelHeight / 2
 
+        // STRATUM: 3-px accent rail on the leading edge of every settings card. Makes
+        // each panel visually distinct at a glance in the graphite palette and gives
+        // the tactical look real presence instead of a single-hex-shift refresh.
+        Rectangle {
+            visible:    showBorder
+            width:      3
+            height:     parent.height - (parent.radius * 2)
+            anchors.left:               parent.left
+            anchors.verticalCenter:     parent.verticalCenter
+            color:      QGroundControl.globalPalette.brandingPurple
+            opacity:    0.9
+            radius:     1
+        }
+
         Repeater {
             model: showDividers ? _ySortedChildren.length : 0
 

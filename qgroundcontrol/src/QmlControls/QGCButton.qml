@@ -54,7 +54,9 @@ Button {
         Rectangle {
             anchors.fill: parent
             color: qgcPal.buttonHighlight
-            opacity: _showHighlight ? 1 : control.enabled && control.hovered ? .2 : 0
+            // STRATUM: bumped hover overlay from 0.2 -> 0.4 so hovered buttons visibly
+            // glow accent-green in daylight; pressed / checked still full-opacity.
+            opacity: _showHighlight ? 1 : control.enabled && control.hovered ? .4 : 0
             radius: parent.radius
         }
     }

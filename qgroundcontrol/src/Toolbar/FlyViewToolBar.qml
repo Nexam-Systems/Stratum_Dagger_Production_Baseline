@@ -63,6 +63,19 @@ Item {
         color:          _ribbonColor
     }
 
+    // STRATUM: 2-px accent under-rule at the base of the toolbar. Reads the ribbon
+    // as a discrete strip on the map background instead of a bare color band. Uses
+    // the current branding accent so a palette re-tune propagates automatically.
+    Rectangle {
+        anchors.left:   parent.left
+        anchors.right:  parent.right
+        anchors.bottom: parent.bottom
+        height:         2
+        color:          qgcPal.brandingPurple
+        opacity:        0.85
+        z:              10
+    }
+
     QGCFlickable {
         anchors.fill:       parent
         contentWidth:       toolBarLayout.width
