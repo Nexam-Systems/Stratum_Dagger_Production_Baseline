@@ -45,11 +45,11 @@ Item {
     // as a discrete button on the neutral tactical ribbon.
     Rectangle {
         anchors.fill:           mainLayout
-        anchors.topMargin:      -ScreenTools.defaultFontPixelHeight * 0.15
-        anchors.bottomMargin:   -ScreenTools.defaultFontPixelHeight * 0.15
-        anchors.leftMargin:     -ScreenTools.defaultFontPixelWidth * 0.4
-        anchors.rightMargin:    -ScreenTools.defaultFontPixelWidth * 0.4
-        radius:                 ScreenTools.defaultFontPixelHeight * 0.35
+        anchors.topMargin:      ScreenTools.defaultFontPixelHeight * 0.15
+        anchors.bottomMargin:   ScreenTools.defaultFontPixelHeight * 0.15
+        anchors.leftMargin:     ScreenTools.defaultFontPixelWidth * 0.2
+        anchors.rightMargin:    ScreenTools.defaultFontPixelWidth * 0.2
+        radius:                 ScreenTools.defaultFontPixelHeight * 0.3
         color:                  Qt.rgba(1, 1, 1, _hovered ? 0.12 : 0.06)
         border.color:           Qt.rgba(1, 1, 1, _hovered ? 0.35 : 0.18)
         border.width:           1

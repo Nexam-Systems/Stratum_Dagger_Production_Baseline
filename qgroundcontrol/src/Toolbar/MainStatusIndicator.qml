@@ -33,16 +33,16 @@ RowLayout {
     // STRATUM: light hover chip that sits behind the label + chevron. Rounded to read
     // as a discrete button on the neutral tactical ribbon.
     Rectangle {
-        anchors.fill:       parent
-        anchors.topMargin:   ScreenTools.defaultFontPixelHeight * 0.25
-        anchors.bottomMargin: ScreenTools.defaultFontPixelHeight * 0.25
-        anchors.leftMargin:  -ScreenTools.defaultFontPixelWidth * 0.4
-        anchors.rightMargin: -ScreenTools.defaultFontPixelWidth * 0.4
-        radius:             ScreenTools.defaultFontPixelHeight * 0.35
-        color:              Qt.rgba(1, 1, 1, _hovered ? 0.12 : 0.06)
-        border.color:       Qt.rgba(1, 1, 1, _hovered ? 0.35 : 0.18)
-        border.width:       1
-        z:                  -1
+        anchors.fill:           parent
+        anchors.topMargin:      ScreenTools.defaultFontPixelHeight * 0.2
+        anchors.bottomMargin:   ScreenTools.defaultFontPixelHeight * 0.2
+        anchors.leftMargin:     ScreenTools.defaultFontPixelWidth * 0.2
+        anchors.rightMargin:    ScreenTools.defaultFontPixelWidth * 0.2
+        radius:                 ScreenTools.defaultFontPixelHeight * 0.3
+        color:                  Qt.rgba(1, 1, 1, _hovered ? 0.12 : 0.06)
+        border.color:           Qt.rgba(1, 1, 1, _hovered ? 0.35 : 0.18)
+        border.width:           1
+        z:                      -1
         Behavior on color { ColorAnimation { duration: 120 } }
         Behavior on border.color { ColorAnimation { duration: 120 } }
     }
