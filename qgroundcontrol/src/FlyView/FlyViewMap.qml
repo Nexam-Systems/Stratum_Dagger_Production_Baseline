@@ -520,6 +520,7 @@ FlightMap {
     // vehicle. Populated by QGCPositionManager (same source as the base FlightMap
     // GCS icon), so nothing extra needs to be wired.
     property var  _gcsPosition:               QGroundControl.qgcPositionManger.gcsPosition
+    property real _gcsHeading:                QGroundControl.qgcPositionManger.gcsHeading
     property var  _gcsTrail:                  []
     readonly property real _gcsTrailThresholdM: 2.0
     readonly property int  _gcsTrailMax:        5000
@@ -547,11 +548,11 @@ FlightMap {
         }
     }
 
-    // Operator movement trail (accent green, dim).
+    // Operator movement trail (accent cyan, dim).
     MapPolyline {
         id:         gcsTrailPolyline
         line.width: 2
-        line.color: "#3DFFA6"
+        line.color: "#48D6FF"
         opacity:    0.55
         z:          QGroundControl.zOrderTrajectoryLines
         visible:    _root._gcsTrail.length >= 2 && !pipMode
@@ -570,8 +571,11 @@ FlightMap {
         path:       visible ? [_root._gcsPosition, _root._activeVehicleCoordinate] : []
     }
 
-    // STRATUM operator marker: concentric accent-green rings + "OP" label.
-    // Layered above the base FlightMap GCS logo so it reads clearly in daylight.
+    // STRATUM operator marker: concentric accent-cyan rings + heading wedge + "OP"
+    // label. Layered above the base FlightMap GCS logo so it reads clearly in
+    // daylight. When QGCPositionManager provides a valid direction (gcsHeading is
+    // not NaN, i.e. the GPS source reports movement bearing) the wedge points along
+    // that heading, matching the vehicle icon's heading behaviour.
     MapQuickItem {
         id:             gcsMarker
         coordinate:     _root._gcsPosition
@@ -589,8 +593,8 @@ FlightMap {
                 width:            parent.width  * 0.85
                 height:           parent.height * 0.85
                 radius:           width / 2
-                color:            "#333DFFA6"
-                border.color:     "#3DFFA6"
+                color:            "#3348D6FF"
+                border.color:     "#48D6FF"
                 border.width:     2
             }
             Rectangle {
@@ -598,10 +602,46 @@ FlightMap {
                 width:            parent.width  * 0.42
                 height:           parent.height * 0.42
                 radius:           width / 2
-                color:            "#3DFFA6"
-                border.color:     "#00180C"
+                color:            "#48D6FF"
+                border.color:     "#001622"
                 border.width:     1
             }
+
+            // Rotating heading wedge rendered on top of the rings so the chevron
+            // reads as a compass needle. Hidden when the GPS source does not report
+            // a bearing (gcsHeading = NaN).
+            Item {
+                id:                 gcsHeadingWedge
+                anchors.fill:       parent
+                visible:            !isNaN(_root._gcsHeading)
+                rotation:           isNaN(_root._gcsHeading) ? 0 : _root._gcsHeading
+
+                Canvas {
+                    id:             gcsHeadingCanvas
+                    anchors.fill:   parent
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.reset()
+                        var cx    = width / 2
+                        var tip   = 0
+                        var baseY = height * 0.28
+                        var half  = width * 0.13
+                        ctx.beginPath()
+                        ctx.moveTo(cx,        tip)
+                        ctx.lineTo(cx - half, baseY)
+                        ctx.lineTo(cx + half, baseY)
+                        ctx.closePath()
+                        ctx.fillStyle   = "#48D6FF"
+                        ctx.strokeStyle = "#001622"
+                        ctx.lineWidth   = 1.5
+                        ctx.fill()
+                        ctx.stroke()
+                    }
+                    onWidthChanged:  requestPaint()
+                    onHeightChanged: requestPaint()
+                }
+            }
+
             QGCLabel {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top:              parent.bottom
@@ -609,7 +649,7 @@ FlightMap {
                 text:                     qsTr("OP")
                 font.pointSize:           ScreenTools.smallFontPointSize
                 font.bold:                true
-                color:                    "#3DFFA6"
+                color:                    "#48D6FF"
                 style:                    Text.Outline
                 styleColor:               "#000000"
             }
