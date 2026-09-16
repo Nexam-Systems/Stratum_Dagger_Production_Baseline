@@ -232,7 +232,9 @@ ApplicationWindow {
         showVehicleConfig()
         let vehicleComponent = globals.activeVehicle.autopilotPlugin.findKnownVehicleComponent(knownVehicleComponent)
         if (vehicleComponent) {
-            toolDrawerLoader.item.showVehicleComponentPanel(vehicleComponent)
+            // STRATUM: use the focused entry point so the sidebar hides and the drawer
+            // exposes only the requested page (e.g. "Configure Joystick" from the NX menu).
+            toolDrawerLoader.item.showFocusedVehicleComponentPanel(vehicleComponent)
         }
     }
 

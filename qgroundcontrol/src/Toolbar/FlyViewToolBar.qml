@@ -25,32 +25,21 @@ Item {
     property real   _leftRightMargin:   ScreenTools.defaultFontPixelWidth * 0.75
     property var    _guidedController:  globals.guidedControllerFlyView
 
-    // STRATUM: solid ribbon colour reflects operational state. Kept in lock-step with
-    // FlyViewToolStrip.qml and FlightMap/MapItems/VehicleMapItem.qml.
-    readonly property string _abortModeName:      qsTr("Abort")
+    // STRATUM: the fly-view ribbon stays a single neutral chrome band so operators are
+    // not conditioned to a rotating rainbow of state colours. Only the Engagement flight
+    // mode -- the safety-critical live-fire state -- turns the ribbon solid red. Every
+    // other state (Standoff, Takeoff, Hold, Manual, Abort, disconnected, ...) keeps the
+    // same dark graphite background; individual telemetry chips (RSSI, comms, battery)
+    // still colour themselves for warning/critical thresholds.
     readonly property string _engagementModeName: qsTr("Engagement")
-    readonly property string _holdModeName:       _activeVehicle ? _activeVehicle.pauseFlightMode : qsTr("Hold")
     property color _ribbonColor: {
-        if (!_activeVehicle) {
-            return "#6B7280"                    // disconnected / no vehicle
+        if (_activeVehicle && _activeVehicle.flightMode === _engagementModeName) {
+            return "#DC2626"                    // engagement (live-fire safety colour)
         }
-        if (_communicationLost) {
-            return "#6B7280"                    // disconnected
-        }
-        var mode = _activeVehicle.flightMode
-        if (mode === _abortModeName) {
-            return "#F59E0B"                    // abort
-        }
-        if (mode === _engagementModeName) {
-            return "#DC2626"                    // engagement
-        }
-        if (mode === qsTr("Standoff") || mode === qsTr("Takeoff") || mode === _holdModeName || _activeVehicle.flying) {
-            return "#22C55E"                    // normal operations
-        }
-        return "#1E88E5"                        // connected, on the ground / ready
+        return "#1B2228"                        // neutral tactical chrome (windowShade dark)
     }
-    // STRATUM: all ribbon content (logo, status text, mode, telemetry) renders black.
-    readonly property color _ribbonTextColor: "#000000"
+    // STRATUM: light-on-dark ribbon text. Red engagement bg still reads with light text.
+    readonly property color _ribbonTextColor: "#F1F4F7"
 
     function dropMainStatusIndicatorTool() {
         mainStatusIndicator.dropMainStatusIndicator();

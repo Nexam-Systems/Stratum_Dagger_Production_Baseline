@@ -39,6 +39,10 @@ Rectangle {
     property var    _expandedComponents:     ({})
     property int    _expandedRevision:       0
     property string _searchQuery:            ""
+    // STRATUM: focus one component (e.g. Joystick) and hide the sidebar so the drawer
+    // only exposes that one page. Set by showFocusedVehicleComponentPanel() and cleared
+    // by the summary/parameters/panel entry points.
+    property bool   _focusedMode:            false
 
     function _setExpanded(compIndex, value) {
         _expandedComponents[compIndex] = value
@@ -128,6 +132,7 @@ Rectangle {
         _selectedSpecial = "summary"
         _selectedComponentIndex = -1
         _selectedSectionIndex = -1
+        _focusedMode = false
         if (_fullParameterVehicleAvailable) {
             if (_activeVehicle.autopilotPlugin.vehicleComponents.length === 0) {
                 panelLoader.setSourceComponent(noComponentsVehicleSummaryComponent)
@@ -146,6 +151,7 @@ Rectangle {
             _selectedSpecial = specialName
             _selectedComponentIndex = -1
             _selectedSectionIndex = -1
+            _focusedMode = false
             panelLoader.setSource(qmlSource)
         }
     }
@@ -205,6 +211,13 @@ Rectangle {
                 return
             }
         }
+    }
+
+    // STRATUM: opens a single vehicle-component page and hides the sidebar so the
+    // drawer only exposes that one page (e.g. "Configure Joystick" from the NX menu).
+    function showFocusedVehicleComponentPanel(vehicleComponent) {
+        _focusedMode = true
+        showVehicleComponentPanel(vehicleComponent)
     }
 
     Component.onCompleted: _showSummaryPanel()
@@ -323,7 +336,8 @@ Rectangle {
 
     ColumnLayout {
         id:                 leftPanel
-        width:              Math.max(buttonColumn.implicitWidth + _horizontalMargin, ScreenTools.defaultFontPixelWidth * 22)
+        width:              _focusedMode ? 0 : Math.max(buttonColumn.implicitWidth + _horizontalMargin, ScreenTools.defaultFontPixelWidth * 22)
+        visible:            !_focusedMode
         anchors.topMargin:  _verticalMargin
         anchors.top:        parent.top
         anchors.bottom:     parent.bottom
@@ -558,7 +572,8 @@ Rectangle {
         anchors.left:           leftPanel.right
         anchors.top:            parent.top
         anchors.bottom:         parent.bottom
-        width:                  1
+        width:                  _focusedMode ? 0 : 1
+        visible:                !_focusedMode
         color:                  qgcPal.windowShade
     }
 

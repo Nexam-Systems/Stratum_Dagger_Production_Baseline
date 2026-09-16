@@ -8,10 +8,10 @@ import QGroundControl.FactControls
 SettingsGroupLayout {
     heading:            qsTr("NMEA External GPS")
     Layout.fillWidth:   true
+    // STRATUM: always expose the NMEA GPS device + baudrate on desktop so the operator
+    // can activate the external GCS GPS regardless of RID location-type or the
+    // autoConnect user-visible flags (which some plugins default to false on setup).
     visible:            !ScreenTools.isMobile
-                        && QGroundControl.settingsManager.autoConnectSettings.autoConnectNmeaPort.userVisible
-                        && QGroundControl.settingsManager.autoConnectSettings.autoConnectNmeaBaud.userVisible
-                        && _locationType !== RemoteIDSettings.LocationType.TAKEOFF
 
     property int    _locationType:    QGroundControl.settingsManager.remoteIDSettings.locationType.value
 

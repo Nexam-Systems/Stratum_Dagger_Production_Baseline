@@ -20,12 +20,42 @@ RowLayout {
     property var    _vehicleInAir:      _activeVehicle ? _activeVehicle.flying || _activeVehicle.landing : false
     property bool   _vtolInFWDFlight:   _activeVehicle ? _activeVehicle.vtolInFwdFlight : false
 
+    // STRATUM: hover + press affordance so the status readout reads as a real button.
+    property bool   _hovered:           statusHoverArea.containsMouse
+
     function dropMainStatusIndicator() {
         let overallStatusComponent = _activeVehicle ? overallStatusIndicatorPage : overallStatusOfflineIndicatorPage
         mainWindow.showIndicatorDrawer(overallStatusComponent, control)
     }
 
     QGCPalette { id: qgcPal }
+
+    // STRATUM: light hover chip that sits behind the label + chevron. Rounded to read
+    // as a discrete button on the neutral tactical ribbon.
+    Rectangle {
+        anchors.fill:       parent
+        anchors.topMargin:   ScreenTools.defaultFontPixelHeight * 0.25
+        anchors.bottomMargin: ScreenTools.defaultFontPixelHeight * 0.25
+        anchors.leftMargin:  -ScreenTools.defaultFontPixelWidth * 0.4
+        anchors.rightMargin: -ScreenTools.defaultFontPixelWidth * 0.4
+        radius:             ScreenTools.defaultFontPixelHeight * 0.35
+        color:              Qt.rgba(1, 1, 1, _hovered ? 0.12 : 0.06)
+        border.color:       Qt.rgba(1, 1, 1, _hovered ? 0.35 : 0.18)
+        border.width:       1
+        z:                  -1
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on border.color { ColorAnimation { duration: 120 } }
+    }
+
+    MouseArea {
+        id:                 statusHoverArea
+        anchors.fill:       parent
+        hoverEnabled:       !ScreenTools.isMobile
+        cursorShape:        Qt.PointingHandCursor
+        acceptedButtons:    Qt.NoButton
+        propagateComposedEvents: true
+        z:                  -2
+    }
 
     QGCLabel {
         id:                 mainStatusLabel

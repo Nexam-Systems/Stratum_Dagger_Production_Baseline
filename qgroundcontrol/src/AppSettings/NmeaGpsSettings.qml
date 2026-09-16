@@ -7,7 +7,10 @@ import QGroundControl.FactControls
 
 SettingsGroupLayout {
     heading: qsTr("NMEA GPS")
-    visible: QGroundControl.settingsManager.autoConnectSettings.autoConnectNmeaPort.userVisible && QGroundControl.settingsManager.autoConnectSettings.autoConnectNmeaBaud.userVisible
+    // STRATUM: always expose the NMEA GPS device + baudrate on desktop so the operator
+    // can activate the external GCS GPS from Comm Links regardless of the autoConnect
+    // user-visible flags (which some plugins default to false on setup).
+    visible: !ScreenTools.isMobile
 
     LabelledComboBox {
         id: nmeaPortCombo

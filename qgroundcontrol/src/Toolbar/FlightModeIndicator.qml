@@ -8,7 +8,8 @@ import QGroundControl.FactControls
 
 Item {
     id:                     control
-    Layout.preferredWidth:  mainLayout.width
+    Layout.preferredWidth:  mainLayout.width + ScreenTools.defaultFontPixelWidth
+    Layout.preferredHeight: mainLayout.height
 
     property bool   showIndicator:          true
     property bool   waitForParameters:      false
@@ -23,6 +24,9 @@ Item {
     property bool _vtolInFWDFlight: activeVehicle ? activeVehicle.vtolInFwdFlight : false
     property var  _vehicleInAir:    activeVehicle ? activeVehicle.flying || activeVehicle.landing : false
 
+    // STRATUM: hover affordance so the flight-mode readout reads as a real button.
+    property bool _hovered:         flightModeHoverArea.containsMouse
+
     // STRATUM: "TRACKING Active" ribbon cue. Derived state -- bound to the inbound
     // NEXAM_TARGET_TRACK (42004) fact group on Vehicle. status.value === 1 is
     // StatusTracking (see VehicleTargetTrackFactGroup.h). The fact group's 300 ms
@@ -36,6 +40,33 @@ Item {
     property bool _tracking:        _stratumIsDagger && _hasTrackGroup ? (_targetTrack.status.value === 1) : false
 
     QGCPalette { id: qgcPal }
+
+    // STRATUM: light hover chip that sits behind the label + chevron. Rounded to read
+    // as a discrete button on the neutral tactical ribbon.
+    Rectangle {
+        anchors.fill:           mainLayout
+        anchors.topMargin:      -ScreenTools.defaultFontPixelHeight * 0.15
+        anchors.bottomMargin:   -ScreenTools.defaultFontPixelHeight * 0.15
+        anchors.leftMargin:     -ScreenTools.defaultFontPixelWidth * 0.4
+        anchors.rightMargin:    -ScreenTools.defaultFontPixelWidth * 0.4
+        radius:                 ScreenTools.defaultFontPixelHeight * 0.35
+        color:                  Qt.rgba(1, 1, 1, _hovered ? 0.12 : 0.06)
+        border.color:           Qt.rgba(1, 1, 1, _hovered ? 0.35 : 0.18)
+        border.width:           1
+        z:                      -1
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on border.color { ColorAnimation { duration: 120 } }
+    }
+
+    MouseArea {
+        id:                 flightModeHoverArea
+        anchors.fill:       mainLayout
+        hoverEnabled:       !ScreenTools.isMobile
+        cursorShape:        Qt.PointingHandCursor
+        acceptedButtons:    Qt.NoButton
+        propagateComposedEvents: true
+        z:                  -2
+    }
 
     RowLayout {
         id:                     mainLayout

@@ -33,10 +33,11 @@ QGCPalette::~QGCPalette()
 
 void QGCPalette::_buildMap()
 {
-    // STRATUM tactical dark theme: unified signal-green accent (#3DFFA6, matches the
-    // Fly-view camera controls) on a deep-graphite surface stack. Surface levels are
-    // spaced ~8-12 luminance steps apart so panels, buttons and separators stay
-    // distinguishable in direct sunlight without relying on drop shadows.
+    // STRATUM tactical dark theme: unified signal-cyan accent (#48D6FF) on a deep-
+    // graphite surface stack. Surface levels are spaced ~8-12 luminance steps apart so
+    // panels, buttons and separators stay distinguishable in direct sunlight without
+    // relying on drop shadows. Cyan replaces the earlier mint-green so the base palette
+    // stays neutral and reserves warm/red hues for critical states (Engagement, Abort).
     //
     //                                      Light                 Dark
     //                                      Disabled   Enabled    Disabled   Enabled
@@ -51,10 +52,10 @@ void QGCPalette::_buildMap()
     DECLARE_QGC_COLOR(button,               "#ffffff", "#ffffff", "#3A4149", "#2A3239")
     DECLARE_QGC_COLOR(buttonBorder,         "#9d9d9d", "#9F9F00", "#3A4149", "#4A5560")
     DECLARE_QGC_COLOR(buttonText,           "#9d9d9d", "#333333", "#8B959D", "#F1F4F7")
-    DECLARE_QGC_COLOR(buttonHighlight,      "#e4e4e4", "#9F9F00", "#2A3239", "#3DFFA6")
-    DECLARE_QGC_COLOR(buttonHighlightText,  "#2c2c2c", "#ffffff", "#2c2c2c", "#00180C")
-    DECLARE_QGC_COLOR(primaryButton,        "#585858", "#8cb3be", "#2A3239", "#3DFFA6")
-    DECLARE_QGC_COLOR(primaryButtonText,    "#2c2c2c", "#333333", "#2c2c2c", "#00180C")
+    DECLARE_QGC_COLOR(buttonHighlight,      "#e4e4e4", "#9F9F00", "#2A3239", "#48D6FF")
+    DECLARE_QGC_COLOR(buttonHighlightText,  "#2c2c2c", "#ffffff", "#2c2c2c", "#001622")
+    DECLARE_QGC_COLOR(primaryButton,        "#585858", "#8cb3be", "#2A3239", "#48D6FF")
+    DECLARE_QGC_COLOR(primaryButtonText,    "#2c2c2c", "#333333", "#2c2c2c", "#001622")
     DECLARE_QGC_COLOR(textField,            "#ffffff", "#ffffff", "#707070", "#ffffff")
     DECLARE_QGC_COLOR(textFieldText,        "#808080", "#333333", "#000000", "#000000")
     DECLARE_QGC_COLOR(mapButton,            "#585858", "#333333", "#585858", "#000000")
@@ -82,7 +83,7 @@ void QGCPalette::_buildMap()
 
     // Colors not affecting by theming
     //                                                      Disabled     Enabled
-    DECLARE_QGC_NONTHEMED_COLOR(brandingPurple,             "#3DFFA6", "#3DFFA6")
+    DECLARE_QGC_NONTHEMED_COLOR(brandingPurple,             "#48D6FF", "#48D6FF")
     DECLARE_QGC_NONTHEMED_COLOR(brandingBlue,               "#48D6FF", "#6045c5")
     DECLARE_QGC_NONTHEMED_COLOR(toolStripFGColor,           "#707070", "#ffffff")
     DECLARE_QGC_NONTHEMED_COLOR(photoCaptureButtonColor,    "#707070", "#ffffff")

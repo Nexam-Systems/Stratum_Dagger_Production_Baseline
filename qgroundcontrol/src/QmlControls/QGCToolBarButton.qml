@@ -33,13 +33,22 @@ Button {
         border.color:   "red"
         border.width:   QGroundControl.corePlugin.showTouchAreas ? 3 : 0
 
-        // STRATUM: hover affordance -- a soft dark tint so operators can see the
-        // ribbon icons are real click targets. Sits above the state-driven ribbon
-        // colour and below the icon.
+        // STRATUM: hover affordance -- a soft light tint that works over both the dark
+        // neutral ribbon and the red engagement ribbon, plus a subtle bottom accent bar
+        // so operators can see the ribbon icon is a real click target.
         Rectangle {
             anchors.fill:   parent
-            color:          Qt.rgba(0, 0, 0, 0.18)
+            color:          Qt.rgba(1, 1, 1, 0.10)
             visible:        button.hovered && !button.checked
+        }
+        Rectangle {
+            anchors.left:   parent.left
+            anchors.right:  parent.right
+            anchors.bottom: parent.bottom
+            height:         2
+            color:          qgcPal.brandingPurple
+            opacity:        button.hovered ? 0.9 : 0
+            Behavior on opacity { NumberAnimation { duration: 120 } }
         }
     }
 
