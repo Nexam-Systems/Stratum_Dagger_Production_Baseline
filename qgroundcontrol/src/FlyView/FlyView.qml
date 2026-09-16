@@ -43,6 +43,18 @@ Item {
         id: engagementController
     }
 
+    // STRATUM: joystick safety-critical combos. When two buttons are assigned to the
+    // "Engage" action (or the "Abort" action) the joystick's multi-button-combo path
+    // only fires the signal when BOTH buttons are pressed together. Both signals route
+    // to EngagementController so joystick engage/abort behave exactly like the on-screen
+    // controls (arm-on-engage safety, ABRT_* param push, etc).
+    Connections {
+        target: joystickManager.activeJoystick
+        ignoreUnknownSignals: true
+        function onStratumEngageRequested() { engagementController.engage() }
+        function onStratumAbortRequested()  { engagementController.abort() }
+    }
+
     // STRATUM: low-battery RTL safety monitor. While armed, if the battery pack voltage
     // stays at or below the configured threshold (flyViewSettings.lowBatteryRTLVoltage,
     // 0 = disabled) continuously for _holdSeconds, prompt the operator to send an RTL.

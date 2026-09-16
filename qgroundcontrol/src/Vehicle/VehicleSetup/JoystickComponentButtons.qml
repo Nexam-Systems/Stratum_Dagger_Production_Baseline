@@ -104,6 +104,133 @@ ColumnLayout {
         }
     }
 
+    // STRATUM: safety-critical two-button combos. Assigning the same joystick action
+    // (Engage / Abort) to two buttons uses the existing multi-button-combo path in
+    // Joystick::_executeButtonAction -- BOTH buttons must be pressed together to fire.
+    // This section provides a dedicated, clearly-labelled UI for that, so operators
+    // do not have to discover it via the general button-assignment row above.
+    Rectangle {
+        Layout.fillWidth:   true
+        Layout.topMargin:   ScreenTools.defaultFontPixelHeight
+        color:              "transparent"
+        border.color:       qgcPal.groupBorder
+        border.width:       1
+        radius:             ScreenTools.defaultBorderRadius
+        implicitHeight:     stratumComboColumn.implicitHeight + ScreenTools.defaultFontPixelHeight
+
+        ColumnLayout {
+            id:                 stratumComboColumn
+            anchors.left:       parent.left
+            anchors.right:      parent.right
+            anchors.top:        parent.top
+            anchors.margins:    ScreenTools.defaultFontPixelHeight / 2
+            spacing:            ScreenTools.defaultFontPixelHeight / 2
+
+            QGCLabel {
+                text:           qsTr("Safety-Critical Two-Button Combos")
+                font.bold:      true
+                font.pointSize: ScreenTools.defaultFontPointSize + 1
+            }
+
+            QGCLabel {
+                Layout.fillWidth:   true
+                wrapMode:           Text.WordWrap
+                text: qsTr("Pick two buttons for each safety action. Both buttons must be pressed together to fire.")
+            }
+
+            RowLayout {
+                spacing: ScreenTools.defaultFontPixelWidth
+                QGCLabel { text: qsTr("Engagement"); Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 12 }
+                QGCComboBox {
+                    id: engageBtnACombo
+                    model: joystick.buttonCount
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 6
+                    property int _initialIndex: stratumComboColumn._findAssignedButton(qsTr("Engage"), 0)
+                    Component.onCompleted: currentIndex = _initialIndex
+                }
+                QGCComboBox {
+                    id: engageBtnBCombo
+                    model: joystick.buttonCount
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 6
+                    property int _initialIndex: stratumComboColumn._findAssignedButton(qsTr("Engage"), 1)
+                    Component.onCompleted: currentIndex = _initialIndex
+                }
+                QGCButton {
+                    text: qsTr("Apply")
+                    onClicked: stratumComboColumn._applyCombo(qsTr("Engage"),
+                                                              engageBtnACombo.currentIndex,
+                                                              engageBtnBCombo.currentIndex)
+                }
+                QGCButton {
+                    text: qsTr("Clear")
+                    onClicked: stratumComboColumn._clearCombo(qsTr("Engage"))
+                }
+            }
+
+            RowLayout {
+                spacing: ScreenTools.defaultFontPixelWidth
+                QGCLabel { text: qsTr("Abort"); Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 12 }
+                QGCComboBox {
+                    id: abortBtnACombo
+                    model: joystick.buttonCount
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 6
+                    property int _initialIndex: stratumComboColumn._findAssignedButton(qsTr("Abort"), 0)
+                    Component.onCompleted: currentIndex = _initialIndex
+                }
+                QGCComboBox {
+                    id: abortBtnBCombo
+                    model: joystick.buttonCount
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 6
+                    property int _initialIndex: stratumComboColumn._findAssignedButton(qsTr("Abort"), 1)
+                    Component.onCompleted: currentIndex = _initialIndex
+                }
+                QGCButton {
+                    text: qsTr("Apply")
+                    onClicked: stratumComboColumn._applyCombo(qsTr("Abort"),
+                                                              abortBtnACombo.currentIndex,
+                                                              abortBtnBCombo.currentIndex)
+                }
+                QGCButton {
+                    text: qsTr("Clear")
+                    onClicked: stratumComboColumn._clearCombo(qsTr("Abort"))
+                }
+            }
+
+            QGCPalette { id: qgcPal }
+
+            // Returns the button index of the nth button currently assigned to `action`.
+            // Falls back to 0 so an unset combo defaults to button 0 in the picker.
+            function _findAssignedButton(action, nth) {
+                var found = []
+                var actions = joystick.buttonActions
+                for (var i = 0; i < joystick.buttonCount; i++) {
+                    if (actions[i] === action) {
+                        found.push(i)
+                    }
+                }
+                return nth < found.length ? found[nth] : 0
+            }
+
+            function _clearCombo(action) {
+                var actions = joystick.buttonActions
+                for (var i = 0; i < joystick.buttonCount; i++) {
+                    if (actions[i] === action) {
+                        joystick.setButtonAction(i, joystick.buttonActionNone)
+                    }
+                }
+            }
+
+            function _applyCombo(action, btnA, btnB) {
+                if (btnA === btnB) {
+                    return
+                }
+                _clearCombo(action)
+                joystick.setButtonAction(btnA, action)
+                joystick.setButtonAction(btnB, action)
+            }
+        }
+    }
+
     /*Column {
         id:         buttonCol
         Layout.fillWidth: true

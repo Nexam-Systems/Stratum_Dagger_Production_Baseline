@@ -97,6 +97,17 @@ Item {
                 font.pointSize:     ScreenTools.smallFontPointSize
             }
         }
+
+        // STRATUM: dropdown chevron so the flight-mode label reads as a menu trigger.
+        QGCLabel {
+            id:                 flightModeChevron
+            Layout.alignment:   Qt.AlignVCenter
+            Layout.leftMargin:  -ScreenTools.defaultFontPixelWidth * 0.2
+            text:               "\u25BE"
+            color:              ribbonTextColor
+            font.pointSize:     ScreenTools.smallFontPointSize
+            opacity:            0.85
+        }
     }
 
     MouseArea {

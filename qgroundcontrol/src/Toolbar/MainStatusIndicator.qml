@@ -45,8 +45,9 @@ RowLayout {
         property string _abortText:         qsTr("Abort")
 
         // STRATUM: ribbon status reflects the live operational state. It is derived from
-        // the dynamic armed / flying / landing telemetry — a disarmed or landed vehicle
-        // can never read "Flying".
+        // the dynamic armed / flying / landing telemetry -- a disarmed or landed vehicle
+        // can never read "Flying". A disarmed vehicle only reads "Ready" when the
+        // firmware's pre-arm check + sensor health both pass; otherwise "Not Ready".
         text: {
             if (!_activeVehicle) {
                 return _disconnectedText
@@ -56,6 +57,12 @@ RowLayout {
             }
             // Disarmed on the ground: never "Flying" regardless of the last flight mode.
             if (!_armed) {
+                if (_activeVehicle.readyToFlyAvailable && !_activeVehicle.readyToFly) {
+                    return _notReadyToFlyText
+                }
+                if (!_activeVehicle.allSensorsHealthy) {
+                    return _notReadyToFlyText
+                }
                 return _readyToFlyText
             }
             var mode = _activeVehicle.flightMode
@@ -101,6 +108,22 @@ RowLayout {
             }
         }
 
+        QGCMouseArea {
+            anchors.fill:   parent
+            onClicked:      dropMainStatusIndicator()
+        }
+    }
+
+    // STRATUM: dropdown chevron so the status label reads as a menu trigger, not a
+    // passive status word. Rendered in the same ribbon text colour.
+    QGCLabel {
+        id:                 mainStatusChevron
+        Layout.alignment:   Qt.AlignVCenter
+        Layout.leftMargin:  -ScreenTools.defaultFontPixelWidth * 0.4
+        text:               "\u25BE"
+        color:              ribbonTextColor
+        font.pointSize:     ScreenTools.smallFontPointSize
+        opacity:            0.85
         QGCMouseArea {
             anchors.fill:   parent
             onClicked:      dropMainStatusIndicator()

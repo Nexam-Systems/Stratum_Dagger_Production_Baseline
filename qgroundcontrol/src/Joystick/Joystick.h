@@ -373,6 +373,11 @@ signals:
     void rawChannelValuesChanged(QVector<int> channelValues); ///< Signalled during PollingForConfiguration
     void rawButtonPressedChanged(int index, bool pressed); ///< Signalled during PollingForConfiguration
 
+    // STRATUM: safety-critical operator combo actions. Emitted when the assigned
+    // multi-button combo fires; FlyView.qml wires these to EngagementController.
+    void stratumEngageRequested();
+    void stratumAbortRequested();
+
     // Sensor event signals (for event-driven updates)
     void gyroscopeDataUpdated(const QVector3D &data);
     void accelerometerDataUpdated(const QVector3D &data);
@@ -518,5 +523,11 @@ private:
     static constexpr const char *_buttonActionLandingGearRetract=  QT_TR_NOOP("Landing gear retract");
     static constexpr const char *_buttonActionMotorInterlockEnable=   QT_TR_NOOP("Motor Interlock enable");
     static constexpr const char *_buttonActionMotorInterlockDisable=  QT_TR_NOOP("Motor Interlock disable");
+
+    // STRATUM: safety-critical operator actions. Assigning a pair of buttons to the
+    // same action leverages the multi-button-combo path in _executeButtonAction (both
+    // buttons must be pressed together to fire).
+    static constexpr const char *_buttonActionStratumEngage =         QT_TR_NOOP("Engage");
+    static constexpr const char *_buttonActionStratumAbort =          QT_TR_NOOP("Abort");
 
 };

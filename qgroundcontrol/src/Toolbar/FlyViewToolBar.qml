@@ -113,6 +113,22 @@ Item {
                             onClicked:          mainWindow.showToolSelectDialog()
                         }
 
+                        // STRATUM: dropdown chevron next to the NX mark so operators see
+                        // the logo is a menu trigger (Fly / Configure / Settings / Close).
+                        QGCLabel {
+                            Layout.alignment:   Qt.AlignVCenter
+                            Layout.leftMargin:  -ScreenTools.defaultFontPixelWidth * 0.6
+                            text:               "\u25BE"
+                            color:              _ribbonTextColor
+                            font.pointSize:     ScreenTools.smallFontPointSize
+                            opacity:            0.85
+                            MouseArea {
+                                anchors.fill:   parent
+                                onClicked:      mainWindow.showToolSelectDialog()
+                                cursorShape:    Qt.PointingHandCursor
+                            }
+                        }
+
                         MainStatusIndicator {
                             id:                 mainStatusIndicator
                             objectName:         "toolbar_mainStatusIndicator"

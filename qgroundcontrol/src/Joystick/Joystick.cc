@@ -1788,6 +1788,14 @@ void Joystick::_buildAvailableButtonsActionList(Vehicle *vehicle)
         [this]() { emit motorInterlock(false); }));
 #endif
 
+    // STRATUM: safety-critical operator combo actions. Assigning the same action to
+    // two buttons produces a real two-key combo (both must be pressed together to
+    // fire) via the existing multi-button path in _executeButtonAction.
+    _availableButtonActions->append(new AvailableButtonAction(_buttonActionStratumEngage,
+        [this]() { emit stratumEngageRequested(); }));
+    _availableButtonActions->append(new AvailableButtonAction(_buttonActionStratumAbort,
+        [this]() { emit stratumAbortRequested(); }));
+
     const auto customActions = QGCCorePlugin::instance()->joystickActions();
     for (const auto &action : customActions) {
         // onDown is nullptr — dispatch falls through to unknownAction (DownTransition only).

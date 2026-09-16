@@ -70,16 +70,23 @@ ToolIndicatorPage {
                 objectName: "toolbar_viewConfigure"
                 implicitHeight: root._toolButtonHeight
                 Layout.fillWidth: true
-                text: qsTr("Configure")
+                text: qsTr("Configure Joystick")
                 imageResource: "/res/GearWithPaperPlane.svg"
-                // STRATUM: re-enabled so operators can reach Joystick calibration
-                // (and firmware / parameters / sensors) via the stock QGC Vehicle
-                // Configuration flow. Set visible: false to hide again if needed.
+                // STRATUM: operators only need the joystick calibration page. Skip the
+                // full Vehicle Configuration tree and open the Joystick component
+                // directly (falls back to the summary page if the vehicle / autopilot
+                // plugin isn't ready yet).
                 visible: true
                 onClicked: {
                     if (mainWindow.allowViewSwitch()) {
                         mainWindow.closeIndicatorDrawer()
-                        mainWindow.showVehicleConfig()
+                        var vehicle = globals.activeVehicle
+                        if (vehicle && vehicle.autopilotPlugin &&
+                            vehicle.autopilotPlugin.knownVehicleComponentAvailable(AutoPilotPlugin.KnownJoystickVehicleComponent)) {
+                            mainWindow.showKnownVehicleComponentConfigPage(AutoPilotPlugin.KnownJoystickVehicleComponent)
+                        } else {
+                            mainWindow.showVehicleConfig()
+                        }
                     }
                 }
             }

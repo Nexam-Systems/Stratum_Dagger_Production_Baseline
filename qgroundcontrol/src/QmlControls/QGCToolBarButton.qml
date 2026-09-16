@@ -13,6 +13,10 @@ Button {
     leftPadding:        _horizontalMargin
     rightPadding:       _horizontalMargin
     checkable:          false
+    // STRATUM: enable hover so the ribbon logo/status buttons reveal an affordance
+    // (a subtle darkening) when the operator points at them; without hoverEnabled
+    // the ribbon reads as passive labels instead of buttons.
+    hoverEnabled:       !ScreenTools.isMobile
 
     property bool logo: false
     // STRATUM: when set to an opaque colour, the logo SVG is tinted (monochrome) with it
@@ -28,6 +32,15 @@ Button {
         color:          button.checked ? qgcPal.buttonHighlight : Qt.rgba(0,0,0,0)
         border.color:   "red"
         border.width:   QGroundControl.corePlugin.showTouchAreas ? 3 : 0
+
+        // STRATUM: hover affordance -- a soft dark tint so operators can see the
+        // ribbon icons are real click targets. Sits above the state-driven ribbon
+        // colour and below the icon.
+        Rectangle {
+            anchors.fill:   parent
+            color:          Qt.rgba(0, 0, 0, 0.18)
+            visible:        button.hovered && !button.checked
+        }
     }
 
     contentItem: Row {
