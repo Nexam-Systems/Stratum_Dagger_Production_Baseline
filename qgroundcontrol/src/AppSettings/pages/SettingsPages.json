@@ -42,8 +42,7 @@
             "name": "Comm Links",
             "qml": "CommLinksSettings.qml",
             "icon": "qrc:/InstrumentValueIcons/usb.svg",
-            "pageDefinition": "CommLinks.SettingsUI.json",
-            "visible": "false"
+            "pageDefinition": "CommLinks.SettingsUI.json"
         },
         {
             "name": "App Logging",
