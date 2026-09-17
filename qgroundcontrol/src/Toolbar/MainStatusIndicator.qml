@@ -6,7 +6,7 @@ import QGroundControl.Controls
 
 RowLayout {
     id:         control
-    spacing:    ScreenTools.defaultFontPixelWidth
+    spacing:    ScreenTools.defaultFontPixelWidth * 0.25
 
     property var    _activeVehicle:     QGroundControl.multiVehicleManager.activeVehicle
     property bool   _armed:             _activeVehicle ? _activeVehicle.armed : false
@@ -30,14 +30,19 @@ RowLayout {
 
     QGCPalette { id: qgcPal }
 
-    // STRATUM: light hover chip that sits behind the label + chevron. Rounded to read
-    // as a discrete button on the neutral tactical ribbon.
+    // STRATUM: light hover chip that hugs the status word + chevron. Rounded so it
+    // reads as a discrete button on the neutral tactical ribbon. The chip is scoped
+    // to just the label + chevron so an adjacent VTOL mode label (when present)
+    // keeps its own interactive region.
     Rectangle {
-        anchors.fill:           parent
-        anchors.topMargin:      ScreenTools.defaultFontPixelHeight * 0.2
-        anchors.bottomMargin:   ScreenTools.defaultFontPixelHeight * 0.2
-        anchors.leftMargin:     ScreenTools.defaultFontPixelWidth * 0.2
-        anchors.rightMargin:    ScreenTools.defaultFontPixelWidth * 0.2
+        anchors.left:           mainStatusLabel.left
+        anchors.right:          mainStatusChevron.right
+        anchors.top:            parent.top
+        anchors.bottom:         parent.bottom
+        anchors.topMargin:      ScreenTools.defaultFontPixelHeight * 0.15
+        anchors.bottomMargin:   ScreenTools.defaultFontPixelHeight * 0.15
+        anchors.leftMargin:     -ScreenTools.defaultFontPixelWidth * 0.35
+        anchors.rightMargin:    -ScreenTools.defaultFontPixelWidth * 0.35
         radius:                 ScreenTools.defaultFontPixelHeight * 0.3
         color:                  Qt.rgba(1, 1, 1, _hovered ? 0.12 : 0.06)
         border.color:           Qt.rgba(1, 1, 1, _hovered ? 0.35 : 0.18)
@@ -49,12 +54,17 @@ RowLayout {
 
     MouseArea {
         id:                 statusHoverArea
-        anchors.fill:       parent
+        anchors.left:       mainStatusLabel.left
+        anchors.right:      mainStatusChevron.right
+        anchors.top:        parent.top
+        anchors.bottom:     parent.bottom
+        anchors.leftMargin: -ScreenTools.defaultFontPixelWidth * 0.35
+        anchors.rightMargin:-ScreenTools.defaultFontPixelWidth * 0.35
         hoverEnabled:       !ScreenTools.isMobile
         cursorShape:        Qt.PointingHandCursor
-        acceptedButtons:    Qt.NoButton
-        propagateComposedEvents: true
-        z:                  -2
+        acceptedButtons:    Qt.LeftButton
+        onClicked:          dropMainStatusIndicator()
+        z:                  10
     }
 
     QGCLabel {
@@ -137,11 +147,6 @@ RowLayout {
                 return iconColor
             }
         }
-
-        QGCMouseArea {
-            anchors.fill:   parent
-            onClicked:      dropMainStatusIndicator()
-        }
     }
 
     // STRATUM: dropdown chevron so the status label reads as a menu trigger, not a
@@ -149,15 +154,10 @@ RowLayout {
     QGCLabel {
         id:                 mainStatusChevron
         Layout.alignment:   Qt.AlignVCenter
-        Layout.leftMargin:  -ScreenTools.defaultFontPixelWidth * 0.4
         text:               "\u25BE"
         color:              ribbonTextColor
         font.pointSize:     ScreenTools.smallFontPointSize
         opacity:            0.85
-        QGCMouseArea {
-            anchors.fill:   parent
-            onClicked:      dropMainStatusIndicator()
-        }
     }
 
     QGCLabel {

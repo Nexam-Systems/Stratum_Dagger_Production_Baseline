@@ -844,6 +844,19 @@ void LinkManager::_addSerialAutoConnectLink()
                 _nmeaBaud = _autoConnectSettings->autoConnectNmeaBaud()->cookedValue().toUInt();
                 newPort->setBaudRate(static_cast<qint32>(_nmeaBaud));
                 qCDebug(LinkManagerLog) << "Configuring nmea baudrate" << _nmeaBaud;
+                // STRATUM: explicitly open the serial port up front. QNmeaPositionInfoSource
+                // will try to open the device inside startUpdates(), but on Windows the
+                // open can fail silently if another process (e.g. a receiver's config tool)
+                // recently held the port. Opening here surfaces the failure to the log so
+                // the operator can tell the GCS marker is missing because the port is busy
+                // rather than because the receiver isn't sending fixes.
+                if (!newPort->open(QIODevice::ReadOnly)) {
+                    qCWarning(LinkManagerLog) << "Failed to open NMEA serial port" << _nmeaDeviceName
+                                              << "error:" << newPort->errorString();
+                } else {
+                    qCDebug(LinkManagerLog) << "Opened NMEA serial port" << _nmeaDeviceName
+                                            << "at" << _nmeaBaud << "baud";
+                }
                 // This will stop polling old device if previously set
                 QGCPositionManager::instance()->setNmeaSourceDevice(newPort);
                 if (_nmeaPort) {

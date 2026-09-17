@@ -525,6 +525,21 @@ FlightMap {
     readonly property real _gcsTrailThresholdM: 2.0
     readonly property int  _gcsTrailMax:        5000
 
+    // STRATUM: seed the trail with the current position on load so the operator
+    // marker appears immediately when the NMEA source produced a fix before the
+    // map was created. Also logs the initial validity for field diagnostics.
+    Component.onCompleted: {
+        var p = QGroundControl.qgcPositionManger.gcsPosition
+        console.log("STRATUM FlyViewMap: initial gcsPosition valid=", p && p.isValid,
+                    "coord=", p ? p.latitude + "," + p.longitude : "null",
+                    "heading=", _gcsHeading)
+        if (p && p.isValid) {
+            _gcsPosition = p
+            _gcsTrail = [p]
+            gcsTrailPolyline.path = _gcsTrail
+        }
+    }
+
     Connections {
         target: QGroundControl.qgcPositionManger
         function onGcsPositionChanged(gcsPosition) {
