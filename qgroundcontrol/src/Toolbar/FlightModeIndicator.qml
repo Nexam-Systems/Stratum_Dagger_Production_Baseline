@@ -10,6 +10,11 @@ Item {
     id:                     control
     Layout.preferredWidth:  mainLayout.width + ScreenTools.defaultFontPixelWidth
     Layout.preferredHeight: mainLayout.height
+    // STRATUM: match ribbon height so the chip pill is the same height as the
+    // adjacent "Ready / Not Ready" chip. Loader anchors give parent full ribbon
+    // height; without an explicit binding the Item collapses to mainLayout.height.
+    height:                 parent ? parent.height : mainLayout.height
+    width:                  mainLayout.width + ScreenTools.defaultFontPixelWidth
 
     property bool   showIndicator:          true
     property bool   waitForParameters:      false
@@ -41,14 +46,18 @@ Item {
 
     QGCPalette { id: qgcPal }
 
-    // STRATUM: light hover chip that sits behind the label + chevron. Rounded to read
-    // as a discrete button on the neutral tactical ribbon.
+    // STRATUM: light hover chip that sits behind the flight-mode content. Anchored
+    // to the root Item so it fills the ribbon height and reads as a pill matching
+    // the "Ready / Not Ready" chip.
     Rectangle {
-        anchors.fill:           mainLayout
+        anchors.left:           mainLayout.left
+        anchors.right:          flightModeChevron.right
+        anchors.top:            parent.top
+        anchors.bottom:         parent.bottom
         anchors.topMargin:      ScreenTools.defaultFontPixelHeight * 0.15
         anchors.bottomMargin:   ScreenTools.defaultFontPixelHeight * 0.15
-        anchors.leftMargin:     ScreenTools.defaultFontPixelWidth * 0.2
-        anchors.rightMargin:    ScreenTools.defaultFontPixelWidth * 0.2
+        anchors.leftMargin:     -ScreenTools.defaultFontPixelWidth * 0.35
+        anchors.rightMargin:    -ScreenTools.defaultFontPixelWidth * 0.35
         radius:                 ScreenTools.defaultFontPixelHeight * 0.3
         color:                  Qt.rgba(1, 1, 1, _hovered ? 0.12 : 0.06)
         border.color:           Qt.rgba(1, 1, 1, _hovered ? 0.35 : 0.18)
@@ -60,12 +69,17 @@ Item {
 
     MouseArea {
         id:                 flightModeHoverArea
-        anchors.fill:       mainLayout
+        anchors.left:       mainLayout.left
+        anchors.right:      flightModeChevron.right
+        anchors.top:        parent.top
+        anchors.bottom:     parent.bottom
+        anchors.leftMargin: -ScreenTools.defaultFontPixelWidth * 0.35
+        anchors.rightMargin:-ScreenTools.defaultFontPixelWidth * 0.35
         hoverEnabled:       !ScreenTools.isMobile
         cursorShape:        Qt.PointingHandCursor
-        acceptedButtons:    Qt.NoButton
-        propagateComposedEvents: true
-        z:                  -2
+        acceptedButtons:    Qt.LeftButton
+        onClicked:          mainWindow.showIndicatorDrawer(drawerComponent, control)
+        z:                  10
     }
 
     RowLayout {
@@ -139,11 +153,6 @@ Item {
             font.pointSize:     ScreenTools.smallFontPointSize
             opacity:            0.85
         }
-    }
-
-    MouseArea {
-        anchors.fill:   mainLayout
-        onClicked:      mainWindow.showIndicatorDrawer(drawerComponent, control)
     }
 
     Component {

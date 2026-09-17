@@ -525,6 +525,30 @@ FlightMap {
     readonly property real _gcsTrailThresholdM: 2.0
     readonly property int  _gcsTrailMax:        5000
 
+    // STRATUM: effective heading for the operator marker chevron. Most consumer
+    // NMEA receivers only emit a track-angle (RMC) while moving, so gcsHeading is
+    // NaN when the operator is stationary. Fall back to the last trail-segment
+    // azimuth so the chevron still points along the direction the operator is
+    // walking. When even that is unavailable (no trail yet), point at the active
+    // vehicle so the chevron still gives useful spatial context. If nothing is
+    // known, default to north (0).
+    property real _gcsEffectiveHeading: {
+        if (!isNaN(_gcsHeading)) return _gcsHeading
+        if (_gcsTrail.length >= 2) {
+            var a = _gcsTrail[_gcsTrail.length - 2]
+            var b = _gcsTrail[_gcsTrail.length - 1]
+            if (a && b && a.isValid && b.isValid && a.distanceTo(b) > 0.5) {
+                return a.azimuthTo(b)
+            }
+        }
+        if (_gcsPosition && _gcsPosition.isValid &&
+            _activeVehicleCoordinate && _activeVehicleCoordinate.isValid) {
+            return _gcsPosition.azimuthTo(_activeVehicleCoordinate)
+        }
+        return 0
+    }
+    property bool _gcsHeadingIsFallback: isNaN(_gcsHeading)
+
     // STRATUM: seed the trail with the current position on load so the operator
     // marker appears immediately when the NMEA source produced a fix before the
     // map was created. Also logs the initial validity for field diagnostics.
@@ -622,14 +646,17 @@ FlightMap {
                 border.width:     1
             }
 
-            // Rotating heading wedge rendered on top of the rings so the chevron
-            // reads as a compass needle. Hidden when the GPS source does not report
-            // a bearing (gcsHeading = NaN).
+            // Rotating heading chevron rendered on top of the rings. Rotation uses
+            // _gcsEffectiveHeading so it still points along the operator's motion
+            // when the receiver only emits position (no track angle). Fallback
+            // headings are dimmed so a stale/inferred direction reads differently
+            // from a live GPS heading.
             Item {
                 id:                 gcsHeadingWedge
                 anchors.fill:       parent
-                visible:            !isNaN(_root._gcsHeading)
-                rotation:           isNaN(_root._gcsHeading) ? 0 : _root._gcsHeading
+                rotation:           _root._gcsEffectiveHeading
+                opacity:            _root._gcsHeadingIsFallback ? 0.55 : 1.0
+                Behavior on rotation { RotationAnimation { duration: 150; direction: RotationAnimation.Shortest } }
 
                 Canvas {
                     id:             gcsHeadingCanvas
@@ -638,9 +665,9 @@ FlightMap {
                         var ctx = getContext("2d")
                         ctx.reset()
                         var cx    = width / 2
-                        var tip   = 0
-                        var baseY = height * 0.28
-                        var half  = width * 0.13
+                        var tip   = -height * 0.08
+                        var baseY = height * 0.32
+                        var half  = width * 0.18
                         ctx.beginPath()
                         ctx.moveTo(cx,        tip)
                         ctx.lineTo(cx - half, baseY)
