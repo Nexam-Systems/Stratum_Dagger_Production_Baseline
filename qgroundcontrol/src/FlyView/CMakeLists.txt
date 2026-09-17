@@ -41,6 +41,7 @@ qt_add_qml_module(FlyViewModule
         FlyViewCameraControlsDaggerRoot.qml
         FlyViewDropperAction.qml
         FlyViewDropperPanel.qml
+        FlyViewFlightModeAction.qml
         FlyViewInsetViewer.qml
         FlyViewInstrumentPanel.qml
         FlyViewGripperButton.qml
