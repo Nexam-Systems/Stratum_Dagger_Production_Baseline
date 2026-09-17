@@ -11,13 +11,16 @@ import QGroundControl.Controls
 // mode confirms via a modal dialog (matching Land/Hold behaviour) then writes
 // Vehicle.flightMode by its advertised name.
 ToolStripAction {
-    id:         action
+    // NOTE: id must NOT be "action" -- QGCButton inherits AbstractButton.action,
+    // which would shadow this id inside the drop-panel button bindings and blank
+    // out every entry.
+    id:         _root
     text:       qsTr("Flight Mode")
     iconSource: "/qmlimages/FlightModesComponentIcon.png"
     visible:    true
     enabled:    !!QGroundControl.multiVehicleManager.activeVehicle
 
-    // Same whitelist as the (retired) top-ribbon picker. Empty list = show every mode.
+    // Empty list = show every mode reported by the firmware plugin.
     readonly property var _allowedModes: [
         qsTr("Takeoff"), qsTr("Land"),
         qsTr("Safe Recovery"), qsTr("Return"),
@@ -47,45 +50,46 @@ ToolStripAction {
 
     dropPanelComponent: Component {
         ColumnLayout {
+            id:      panelColumn
             spacing: ScreenTools.defaultFontPixelHeight * 0.25
 
             property var _vehicle: QGroundControl.multiVehicleManager.activeVehicle
             property var _modes: {
                 if (!_vehicle) return []
-                if (action._allowedModes.length === 0) return _vehicle.flightModes
+                if (_root._allowedModes.length === 0) return _vehicle.flightModes
                 return _vehicle.flightModes.filter(function(m) {
-                    return action._allowedModes.indexOf(m) !== -1
+                    return _root._allowedModes.indexOf(m) !== -1
                 })
             }
+
+            QGCPalette { id: qgcPal }
 
             QGCLabel {
                 Layout.fillWidth:       true
                 horizontalAlignment:    Text.AlignHCenter
-                text:                   _vehicle ? qsTr("Current: %1")
-                                                    .arg(action._displayLabel(_vehicle.flightMode))
-                                                 : qsTr("No vehicle")
+                text:                   panelColumn._vehicle
+                                            ? qsTr("Current: %1").arg(_root._displayLabel(panelColumn._vehicle.flightMode))
+                                            : qsTr("No vehicle")
                 font.bold:              true
                 color:                  qgcPal.text
             }
 
             Repeater {
-                model: _modes
+                model: panelColumn._modes
 
                 QGCButton {
                     Layout.fillWidth:       true
                     Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 18
-                    text:                   action._displayLabel(modelData)
-                    highlighted:            _vehicle && _vehicle.flightMode === modelData
+                    text:                   _root._displayLabel(modelData)
+                    highlighted:            panelColumn._vehicle && panelColumn._vehicle.flightMode === modelData
 
                     onClicked: {
                         var mode = modelData
                         dropPanel.hide()
-                        action._commandMode(mode)
+                        _root._commandMode(mode)
                     }
                 }
             }
-
-            QGCPalette { id: qgcPal }
         }
     }
 }
