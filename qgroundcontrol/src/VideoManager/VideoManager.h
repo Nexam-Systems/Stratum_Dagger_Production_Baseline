@@ -169,17 +169,17 @@ private:
     // STRATUM: persistent UDP socket used to enable + receive C12 gimbal-attitude
     // frames (GAA/GAC). Bound to a local ephemeral port; the camera replies to
     // whichever source port sent the enable, so we keep this socket alive for
-    // the life of the app. Rate-limited pu
+    // the life of the app. Rate-limited push to the vehicle-messages drawer.
+    QUdpSocket *_c12Socket = nullptr;
+    qint64 _lastC12AttitudeReportMs = 0;
+    bool _c12AttitudeStreamEnabled = false;
 
     // STRATUM: persistent UDP socket for the Skydroid AI V1.2.0 binary tracking
     // protocol (UDP :1030). Bound locally so we can eventually parse the AI result
     // frames the camera streams back. Sequence counter is monotonic per-process.
     QUdpSocket *_c12AiSocket = nullptr;
     quint16 _c12AiSequence = 0;
-    bool _c12AiEnabled = false;sh to the vehicle-messages drawer.
-    QUdpSocket *_c12Socket = nullptr;
-    qint64 _lastC12AttitudeReportMs = 0;
-    bool _c12AttitudeStreamEnabled = false;
+    bool _c12AiEnabled = false;
 
     InitState _initState = InitState::NotStarted;
     QFuture<bool> _gstInitFuture;
