@@ -87,35 +87,35 @@ Item {
 
     // Timer used by _toggleTrack to gap SUM 01 (arm tracker) and GOT (feed target).
     // Some C12 firmware drops GOT when it arrives back-to-back with SUM 01.
+    // STRATUM: retained only to satisfy older QML that still references the id;
+    // the actual tracker start path is now a single AI SET_REGION call, no gap
+    // is required. Kept as a no-op timer (never restarted) so removing existing
+    // consumers stays a single-file change.
     Timer {
         id: _trackFeedTimer
         interval: 120
         repeat: false
-        onTriggered: {
-            if (!root._send("track-center")) {
-                root._trackActive = false
-                root.statusMessage(qsTr("Tracking start failed (GOT)"))
-                return
-            }
-            root.statusMessage(qsTr("◎ Tracker armed → target 640,360"))
-        }
     }
 
     function _toggleTrack() {
         _trackActive = !_trackActive
         if (_trackActive) {
-            // C12 protocol §3.3.4→§3.3.5 order: SUM 01 arms tracker mode ("Tracking
-            // acknowledged"), then GOT feeds the target pixel on the 1280×720 frame.
-            if (!_send("track-ack")) {
+            // STRATUM: C12 in-camera tracker is driven by the Skydroid AI V1.2.0
+            // binary protocol on UDP :1030 (SET_REGION). The old #TPUG.SUM/GOT
+            // pair on :5000 does not actually engage the tracker on real
+            // hardware; this call sends enable_ai + a centre region in one hop.
+            if (!QGroundControl.videoManager.sendCameraAction("track-center")) {
                 _trackActive = false
+                root.statusMessage(qsTr("Tracking start failed"))
                 return
             }
-            _trackFeedTimer.restart()
+            root.statusMessage(qsTr("◎ Tracker locked on centre region"))
         } else {
-            if (_send("track-stop")) {
+            if (QGroundControl.videoManager.sendCameraAction("track-stop")) {
                 root.statusMessage(qsTr("✕ Tracking off"))
             } else {
                 _trackActive = true
+                root.statusMessage(qsTr("Tracking stop failed"))
             }
         }
     }

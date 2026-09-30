@@ -60,6 +60,15 @@ public:
     Q_INVOKABLE void stopVideo();
     Q_INVOKABLE bool sendCameraAction(const QString &action);
     Q_INVOKABLE bool sendCameraTrackPoint(int x, int y);
+    // STRATUM: start C12 in-camera tracking on a screen region. Coordinates are
+    // normalized 0..1 (letterbox-corrected by the caller). videoSource: 0=visible,
+    // 1=IR. Uses the Skydroid AI V1.2.0 binary protocol on UDP :1030 (SET_REGION),
+    // preceded by TRACK_CONTROL/enable_ai the first time. This is the sequence the
+    // Skydroid reference PC app uses and the only one confirmed to actually engage
+    // the on-camera tracker.
+    Q_INVOKABLE bool sendC12TrackRegion(qreal x0, qreal y0, qreal x1, qreal y1, int videoSource = 0);
+    // STRATUM: stop C12 in-camera tracking (AI V1.2.0 release + disable).
+    Q_INVOKABLE bool stopC12Track();
     Q_INVOKABLE bool sendSiyiCameraAction(const QString &action);
     // STRATUM: reprogram the C12 gimbal's IP via Skydroid/YunZhuo "IPV" command.
     // Sends to the current stored IP; on success rewrites videoSettings.daggerC12Host
@@ -148,6 +157,9 @@ private:
     void _enableC12AttitudeStream(bool enabled);
     void _processC12Frame(const QByteArray &frame);
 
+    void _ensureC12AiSocket();
+    bool _sendC12AiPacket(quint8 control, const QByteArray &payload);
+
     QList<VideoReceiver*> _videoReceivers;
     SubtitleWriter *_subtitleWriter = nullptr;
     VideoSettings *_videoSettings = nullptr;
@@ -157,7 +169,14 @@ private:
     // STRATUM: persistent UDP socket used to enable + receive C12 gimbal-attitude
     // frames (GAA/GAC). Bound to a local ephemeral port; the camera replies to
     // whichever source port sent the enable, so we keep this socket alive for
-    // the life of the app. Rate-limited push to the vehicle-messages drawer.
+    // the life of the app. Rate-limited pu
+
+    // STRATUM: persistent UDP socket for the Skydroid AI V1.2.0 binary tracking
+    // protocol (UDP :1030). Bound locally so we can eventually parse the AI result
+    // frames the camera streams back. Sequence counter is monotonic per-process.
+    QUdpSocket *_c12AiSocket = nullptr;
+    quint16 _c12AiSequence = 0;
+    bool _c12AiEnabled = false;sh to the vehicle-messages drawer.
     QUdpSocket *_c12Socket = nullptr;
     qint64 _lastC12AttitudeReportMs = 0;
     bool _c12AttitudeStreamEnabled = false;

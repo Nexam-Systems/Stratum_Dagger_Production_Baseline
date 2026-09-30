@@ -116,11 +116,23 @@ bool VideoManager::sendCameraAction(const QString &action)
     } else if (normalizedAction == "rec-stop") {
         payload = QByteArrayLiteral("#TPUD2wREC0043");
     } else if (normalizedAction == "track-center") {
-        payload = QByteArrayLiteral("#TPUG8wGOT0280016895");
+        // STRATUM: previously sent #TPUG8wGOT + #TPUG2wSUM01 on :5000. Field
+        // testing (and the Skydroid reference PC app) confirmed those never
+        // actually engage the C12's on-camera tracker. The working path is the
+        // AI V1.2.0 binary protocol on :1030 with a SET_REGION rectangle,
+        // preceded by TRACK_CONTROL/enable_ai. Do that here with a small centre
+        // region so the pre-existing "track-center" button still works.
+        return sendC12TrackRegion(0.42, 0.36, 0.58, 0.64, 0);
     } else if (normalizedAction == "track-stop") {
-        payload = QByteArrayLiteral("#TPUG2wSUM0061");
+        return stopC12Track();
     } else if (normalizedAction == "track-ack") {
-        payload = QByteArrayLiteral("#TPUG2wSUM0162");
+        // STRATUM: legacy alias — the AI path enables tracking implicitly on
+        // the first SET_REGION, so this becomes an explicit enable-only call.
+        _ensureC12AiSocket();
+        QByteArray p; p.reserve(10);
+        p.append(char(1)); p.append(char(0));
+        for (int i = 0; i < 4; ++i) { p.append(char(0)); p.append(char(0)); }
+        return _sendC12AiPacket(2 /*TRACK_CONTROL*/, p);
     } else if (normalizedAction == "palette-off") {
         payload = QByteArrayLiteral("#TPUD2wIMG0046");
     } else if (normalizedAction == "palette-01") {
@@ -160,32 +172,15 @@ bool VideoManager::sendCameraAction(const QString &action)
 
 bool VideoManager::sendCameraTrackPoint(int x, int y)
 {
-    const int clampedX = qBound(0, x, 1280);
-    const int clampedY = qBound(0, y, 720);
-    const QString xHex = QString::number(clampedX, 16).toUpper().rightJustified(4, '0');
-    const QString yHex = QString::number(clampedY, 16).toUpper().rightJustified(4, '0');
-    const QByteArray base = QByteArrayLiteral("#TPUG8wGOT") + xHex.toUtf8() + yHex.toUtf8();
-
-    int sum = 0;
-    for (int i = 0; i < base.size(); ++i) {
-        sum += static_cast<unsigned char>(base.at(i));
-    }
-
-    const QByteArray payload = base + QByteArray::number(sum & 0xFF, 16).toUpper().rightJustified(2, '0');
-    QUdpSocket socket;
-    const QHostAddress host(_daggerC12Host());
-    if (host.isNull()) {
-        qCWarning(VideoManagerLog) << "sendCameraTrackPoint: invalid C12 host" << _daggerC12Host();
-        return false;
-    }
-    // C12 TOP V1.1.6 §3.3.5 (GOT sets the target point on the 1280x720 frame)
-    // then §3.3.4 SUM 01 acknowledges/arms the tracker on the selected target.
-    // Sending SUM before GOT leaves the tracker without a target and it silently no-ops.
-    const QByteArray sumAck = QByteArrayLiteral("#TPUG2wSUM0162");
-    if (socket.writeDatagram(payload, host, 5000) != payload.size()) {
-        return false;
-    }
-    return socket.writeDatagram(sumAck, host, 5000) == sumAck.size();
+    // STRATUM: back this compatibility shim with the AI protocol (Python's main.py
+    // proves SUM 01 + GOT on :5000 do NOT engage the C12 tracker). Convert the
+    // 1280x720 pixel point into a 160x160 normalized region and delegate.
+    const qreal cx = qBound(0.0, qreal(x) / 1280.0, 1.0);
+    const qreal cy = qBound(0.0, qreal(y) / 720.0, 1.0);
+    const qreal hw = 80.0 / 1280.0;
+    const qreal hh = 80.0 / 720.0;
+    return sendC12TrackRegion(qMax(0.0, cx - hw), qMax(0.0, cy - hh),
+                              qMin(1.0, cx + hw), qMin(1.0, cy + hh), 0);
 }
 
 // STRATUM: Reprogram the C12 gimbal's IP. Skydroid "IPV" set command:
@@ -424,6 +419,145 @@ void VideoManager::_processC12Frame(const QByteArray &frame)
     if (_activeVehicle) {
         _activeVehicle->showStatusText(kSeverityInfo, line);
     }
+}
+
+// STRATUM: Skydroid AI V1.2.0 binary tracking protocol (UDP :1030).
+//
+// This is the protocol the Skydroid reference PC app uses to drive the C12's
+// on-camera visual tracker. The gimbal-side ASCII #TPUG.SUM/GOT frames on :5000
+// documented in the TOP protocol are *not* the tracker start path — field
+// testing (and the reference app's source) confirmed only this AI binary path
+// actually engages the tracker.
+//
+// Frame layout (little-endian multi-byte fields):
+//   [0..1]   HEADER  = 0xAA, 0xA5
+//   [2..3]   LEN     = payload length (u16 LE)
+//   [4..5]   SEQ     = monotonic per-process counter (u16 LE)
+//   [6]      CTRL    = 1 SET_REGION, 2 TRACK_CONTROL
+//   [7..]    PAYLOAD
+//   [tail-2] CRC16   = CRC-16/XMODEM over HEADER..end-of-PAYLOAD (u16 LE)
+//   [tail]   TAIL    = 0xCD
+//
+// Payloads used here:
+//   TRACK_CONTROL (10 bytes):  { u8 cmd, u8 video, u16 x0, u16 y0, u16 x1, u16 y1 }
+//                              cmd 0 = release, 1 = enable, 3 = disable
+//   SET_REGION    (9 bytes):   { u8 video, u16 x0, u16 y0, u16 x1, u16 y1 }
+//                              coordinates on the 1280x720 original frame.
+static constexpr quint16 kC12AiPort = 1030;
+
+static uint16_t _c12AiCrc16(const uint8_t *data, int length)
+{
+    uint16_t crc = 0;
+    for (int i = 0; i < length; ++i) {
+        crc ^= uint16_t(data[i]) << 8;
+        for (int b = 0; b < 8; ++b) {
+            crc = (crc & 0x8000) ? uint16_t((crc << 1) ^ 0x1021) : uint16_t(crc << 1);
+        }
+    }
+    return crc;
+}
+
+void VideoManager::_ensureC12AiSocket()
+{
+    if (_c12AiSocket) return;
+    _c12AiSocket = new QUdpSocket(this);
+    // Bind to :1030 so the camera's AI-result frames come back on the port
+    // Python's reference app uses. If :1030 is unavailable (another instance,
+    // another local app) fall back to an ephemeral port — send-only will still
+    // work; only inbound AI-result parsing would be affected.
+    if (!_c12AiSocket->bind(QHostAddress::AnyIPv4, kC12AiPort,
+                            QAbstractSocket::ShareAddress | QAbstractSocket::ReuseAddressHint)) {
+        qCInfo(VideoManagerLog) << "C12 AI socket: :1030 busy, using ephemeral port —"
+                                << _c12AiSocket->errorString();
+        (void) _c12AiSocket->bind(QHostAddress::AnyIPv4, 0);
+    }
+}
+
+bool VideoManager::_sendC12AiPacket(quint8 control, const QByteArray &payload)
+{
+    _ensureC12AiSocket();
+    if (!_c12AiSocket) return false;
+    const QHostAddress host(_daggerC12Host());
+    if (host.isNull()) {
+        qCWarning(VideoManagerLog) << "_sendC12AiPacket: invalid C12 host" << _daggerC12Host();
+        return false;
+    }
+    QByteArray frame;
+    frame.reserve(2 + 2 + 2 + 1 + payload.size() + 2 + 1);
+    frame.append(char(0xAA)); frame.append(char(0xA5));
+    const quint16 len = quint16(payload.size());
+    frame.append(char(len & 0xFF)); frame.append(char((len >> 8) & 0xFF));
+    const quint16 seq = _c12AiSequence++;
+    frame.append(char(seq & 0xFF)); frame.append(char((seq >> 8) & 0xFF));
+    frame.append(char(control));
+    frame.append(payload);
+    const uint16_t crc = _c12AiCrc16(reinterpret_cast<const uint8_t *>(frame.constData()), frame.size());
+    frame.append(char(crc & 0xFF)); frame.append(char((crc >> 8) & 0xFF));
+    frame.append(char(0xCD));
+    return _c12AiSocket->writeDatagram(frame, host, kC12AiPort) == frame.size();
+}
+
+bool VideoManager::sendC12TrackRegion(qreal x0, qreal y0, qreal x1, qreal y1, int videoSource)
+{
+    // Sort + clamp to the 1280x720 frame the C12 tracker expects.
+    if (x0 > x1) qSwap(x0, x1);
+    if (y0 > y1) qSwap(y0, y1);
+    const int px0 = qBound(0, int(qRound(qBound(0.0, x0, 1.0) * 1279.0)), 1279);
+    const int py0 = qBound(0, int(qRound(qBound(0.0, y0, 1.0) *  719.0)),  719);
+    const int px1 = qBound(0, int(qRound(qBound(0.0, x1, 1.0) * 1279.0)), 1279);
+    const int py1 = qBound(0, int(qRound(qBound(0.0, y1, 1.0) *  719.0)),  719);
+    if (px1 - px0 < 8 || py1 - py0 < 8) {
+        qCInfo(VideoManagerLog) << "sendC12TrackRegion: rejecting degenerate box"
+                                << px0 << py0 << px1 << py1;
+        return false;
+    }
+    const quint8 vid = (videoSource == 1) ? 1 : 0;
+
+    // Enable the AI subsystem once per session — matches Python main.py's
+    // start_region_track path (enable_ai then set_region).
+    if (!_c12AiEnabled) {
+        QByteArray enablePayload; enablePayload.reserve(10);
+        enablePayload.append(char(1) /*cmd=enable*/); enablePayload.append(char(0));
+        for (int i = 0; i < 4; ++i) { enablePayload.append(char(0)); enablePayload.append(char(0)); }
+        if (!_sendC12AiPacket(2 /*TRACK_CONTROL*/, enablePayload)) {
+            qCWarning(VideoManagerLog) << "sendC12TrackRegion: enable_ai failed";
+            return false;
+        }
+        _c12AiEnabled = true;
+    }
+
+    QByteArray regionPayload; regionPayload.reserve(9);
+    regionPayload.append(char(vid));
+    auto pushU16 = [&](int v) {
+        regionPayload.append(char(v & 0xFF));
+        regionPayload.append(char((v >> 8) & 0xFF));
+    };
+    pushU16(px0); pushU16(py0); pushU16(px1); pushU16(py1);
+    const bool ok = _sendC12AiPacket(1 /*SET_REGION*/, regionPayload);
+    qCInfo(VideoManagerLog).nospace()
+        << "C12 track region video=" << vid
+        << " (" << px0 << "," << py0 << ")->(" << px1 << "," << py1 << ") "
+        << (ok ? "sent" : "FAILED");
+    return ok;
+}
+
+bool VideoManager::stopC12Track()
+{
+    _ensureC12AiSocket();
+    // Release then disable — same pair main.py sends on operator release.
+    QByteArray releasePayload; releasePayload.reserve(10);
+    releasePayload.append(char(0) /*cmd=release*/); releasePayload.append(char(0));
+    for (int i = 0; i < 4; ++i) { releasePayload.append(char(0)); releasePayload.append(char(0)); }
+    const bool relOk = _sendC12AiPacket(2 /*TRACK_CONTROL*/, releasePayload);
+
+    QByteArray disablePayload; disablePayload.reserve(10);
+    disablePayload.append(char(3) /*cmd=disable*/); disablePayload.append(char(0));
+    for (int i = 0; i < 4; ++i) { disablePayload.append(char(0)); disablePayload.append(char(0)); }
+    const bool disOk = _sendC12AiPacket(2 /*TRACK_CONTROL*/, disablePayload);
+
+    _c12AiEnabled = false;
+    qCInfo(VideoManagerLog) << "C12 track stop (release" << relOk << "disable" << disOk << ")";
+    return relOk && disOk;
 }
 
 // STRATUM: SIYI A2 mini SDK v3 packet builder + UDP sender.

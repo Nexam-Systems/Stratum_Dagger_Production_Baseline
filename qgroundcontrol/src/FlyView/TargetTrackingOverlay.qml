@@ -1,16 +1,23 @@
 import QtQuick
 
+import QGroundControl
+
 // STRATUM: operator-in-the-loop visual target designation overlay.
 //
 // Draws on top of the live video. A click drops a fixed-size selection box on the
-// target; a drag draws a custom box. On release the normalized box is sent to the
-// companion tracker via Vehicle::sendTargetSelect (NEXAM_TARGET_SELECT / 42003). The
-// companion runs the OpenCV tracker and streams NEXAM_TARGET_TRACK (42004) back, which
-// arrives here as vehicle.targetTrack.* facts and is drawn as the red tracked box.
+// target; a drag draws a custom box. On release the normalized box is sent to two
+// downstream trackers so operators can use whichever is available on the airframe:
+//   * Companion (OpenCV) tracker via Vehicle::sendTargetSelect
+//     (NEXAM_TARGET_SELECT / 42003). Streams NEXAM_TARGET_TRACK (42004) back,
+//     which lands as vehicle.targetTrack.* and is drawn as the red tracked box.
+//   * C12 on-camera AI tracker via VideoManager.sendC12TrackRegion (Skydroid AI
+//     V1.2.0 binary on UDP :1030). Only fired when the operator has actually
+//     selected the C12 (daggerCamera == 1) so we never spam UDP at a fixed IP
+//     the operator hasn't opted into.
 //
-// This is intentionally decoupled from the camera-tracking path (VehicleCameraControl):
-// it needs no CAMERA_INFORMATION capability handshake, only a connected vehicle and a
-// running video stream, because the tracker lives on the companion, not in a camera.
+// This is intentionally decoupled from the camera-tracking path
+// (VehicleCameraControl): it needs no CAMERA_INFORMATION capability handshake,
+// only a connected vehicle and a running video stream.
 Item {
     id: rootItem
 
@@ -23,6 +30,21 @@ Item {
     property real fixedBoxFrac: 0.15
 
     readonly property bool _enabled: !!vehicle && videoWidth > 0 && videoHeight > 0
+
+    // STRATUM: gate the C12-AI dispatch on the operator having explicitly picked
+    // the C12 as the active camera so we don't send stray UDP at :1030 when the
+    // airframe is flying an A2 mini or a standard MAVLink camera.
+    readonly property var _videoSettings: QGroundControl.settingsManager.videoSettings
+    readonly property bool _c12Active: _videoSettings && _videoSettings.daggerCamera.rawValue === 1
+    // C12 AI SET_REGION carries a "video source" byte (0=visible/TV, 1=IR/thermal).
+    // Derive it from whichever stored URL the live rtspUrl currently matches so the
+    // tracker latches onto the feed the operator is actually looking at.
+    readonly property int _c12VideoSource: {
+        if (!_videoSettings) return 0
+        var live = _videoSettings.rtspUrl.rawValue
+        var ir = _videoSettings.daggerC12IrRtspUrl.rawValue
+        return (ir !== "" && live === ir) ? 1 : 0
+    }
 
     // Drag state (parent/view coordinates)
     property real _dragStartX: 0
@@ -58,6 +80,9 @@ Item {
         var x1 = Math.min(1.0, cx + hw)
         var y1 = Math.min(1.0, cy + hh)
         vehicle.sendTargetSelect(x0, y0, x1, y1, 1)
+        if (_c12Active) {
+            QGroundControl.videoManager.sendC12TrackRegion(x0, y0, x1, y1, _c12VideoSource)
+        }
     }
 
     function mouseDragStart(mouseX, mouseY) {
@@ -96,6 +121,9 @@ Item {
             return
         }
         vehicle.sendTargetSelect(x0, y0, x1, y1, 1)
+        if (_c12Active) {
+            QGroundControl.videoManager.sendC12TrackRegion(x0, y0, x1, y1, _c12VideoSource)
+        }
     }
 
     // --- selection overlay (green box while dragging) ------------------------
