@@ -131,8 +131,8 @@ signals:
     void recordingChanged(bool recording);
     void recordingStarted(const QString &filename);
     void streamingChanged();
-    void uvcVideoSourceIDCha
-    void c12TrackingActiveChanged();nged();
+    void uvcVideoSourceIDChanged();
+    void c12TrackingActiveChanged();
     void videoSizeChanged();
 
 private slots:
@@ -193,8 +193,8 @@ private:
     // STRATUM: persistent UDP socket for the Skydroid AI V1.2.0 binary tracking
     // protocol (UDP :1030). Bound locally so we can eventually parse the AI result
     // frames the camera streams back. Sequence counter is monotonic per-process.
-    QUdpSocket *_c12AiSocket = 
-    bool _c12TrackActive = false;nullptr;
+    QUdpSocket *_c12AiSocket = nullptr;
+    bool _c12TrackActive = false;
     quint16 _c12AiSequence = 0;
     bool _c12AiEnabled = false;
 
