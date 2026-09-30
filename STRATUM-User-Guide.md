@@ -6,14 +6,13 @@ right-hand camera controls, and the flight instruments along the bottom. Each
 section pairs a screenshot with a plain-English explanation of what every button
 and readout does.
 
-> Screenshots in this guide are taken from the shipping STRATUM UI and live in
-> the `Dropper/UI/` folder next to this document.
+> Screenshots in this guide live in the `UI/` folder next to this document.
 
 ---
 
 ## 1. The main screen at a glance
 
-![STRATUM main screen](../UI/main_UI.PNG)
+![STRATUM main screen](UI/main_UI.PNG)
 
 STRATUM's fly view is divided into six regions:
 
@@ -32,7 +31,7 @@ The rest of this guide zooms into each region.
 
 ## 2. Top ribbon — vehicle status and quick actions
 
-![Top ribbon](../UI/topbar.PNG)
+![Top ribbon](UI/topbar.PNG)
 
 Reading the ribbon left to right:
 
@@ -40,7 +39,7 @@ Reading the ribbon left to right:
 
 Clicking the **NX** logo opens the STRATUM main menu:
 
-![NX menu](../UI/nxbutton.PNG)
+![NX menu](UI/nxbutton.PNG)
 
 - **Fly** — returns you to the flight screen you see in this guide.
 - **Configure Joystick** — pairs and calibrates a USB/BT joystick or transmitter.
@@ -66,7 +65,7 @@ preflight drawer.
 
 ### 2.3 Status drawer (opens when you click the arm chip)
 
-![Status drawer](../UI/status.PNG)
+![Status drawer](UI/status.PNG)
 
 The drawer is split into three parts:
 
@@ -126,7 +125,7 @@ To the right of GPS, four small icons summarise connectivity and power:
 
 ## 3. Left command strip — the pilot's action buttons
 
-![Left command strip](../UI/left%20panel.PNG)
+![Left command strip](UI/left%20panel.PNG)
 
 The green strip on the left of the map is the primary way you command the
 aircraft. Buttons are stacked in the order you typically use them.
@@ -163,7 +162,7 @@ switch the flight controller between modes such as *Manual*, *Hold*,
 
 #### 3.5.1 Flight Mode picker
 
-![Flight Mode picker](../UI/flightmode.PNG)
+![Flight Mode picker](UI/flightmode.PNG)
 
 The picker lists every mode STRATUM allows you to command:
 
@@ -210,7 +209,7 @@ The main satellite map shows every geometry that matters to the mission:
 
 ### 4.1 GCS icon, heading, and trail
 
-![GCS marker with heading, trail, and bearing to vehicle](../UI/gcsuavcion.PNG)
+![GCS marker with heading, trail, and bearing to vehicle](UI/gcsuavcion.PNG)
 
 STRATUM draws your **ground station** on the map so you always know where you
 are relative to the aircraft:
@@ -237,7 +236,7 @@ UPrecise).
 
 ## 5. Video window (bottom-left)
 
-![Small camera pane with overlay](../UI/camerasmall.PNG)
+![Small camera pane with overlay](UI/camerasmall.PNG)
 
 The bottom-left corner shows the live camera feed with a compact telemetry
 overlay burned in. Click the pane to swap it with the map (picture-in-picture

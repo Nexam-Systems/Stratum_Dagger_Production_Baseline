@@ -16,6 +16,7 @@ class SubtitleWriter;
 class Vehicle;
 class VideoReceiver;
 class VideoSettings;
+class QUdpSocket;
 
 class VideoManager : public QObject
 {
@@ -113,6 +114,10 @@ private slots:
     void _communicationLostChanged(bool communicationLost);
     void _setActiveVehicle(Vehicle *vehicle);
     void _videoSourceChanged();
+    // STRATUM: C12 gimbal attitude (GAC) stream reader — parses angles into the
+    // vehicle-messages drawer at ~1 Hz. Bound to the same persistent UDP socket
+    // that sends the GAA enable to the camera.
+    void _onC12AttitudeDatagram();
 
 private:
     enum class InitState : uint8_t {
@@ -139,11 +144,23 @@ private:
     void _stopReceiver(VideoReceiver *receiver);
     static void _cleanupOldVideos();
 
+    void _ensureC12Socket();
+    void _enableC12AttitudeStream(bool enabled);
+    void _processC12Frame(const QByteArray &frame);
+
     QList<VideoReceiver*> _videoReceivers;
     SubtitleWriter *_subtitleWriter = nullptr;
     VideoSettings *_videoSettings = nullptr;
     QQuickWindow *_mainWindow = nullptr;
     Vehicle *_activeVehicle = nullptr;
+
+    // STRATUM: persistent UDP socket used to enable + receive C12 gimbal-attitude
+    // frames (GAA/GAC). Bound to a local ephemeral port; the camera replies to
+    // whichever source port sent the enable, so we keep this socket alive for
+    // the life of the app. Rate-limited push to the vehicle-messages drawer.
+    QUdpSocket *_c12Socket = nullptr;
+    qint64 _lastC12AttitudeReportMs = 0;
+    bool _c12AttitudeStreamEnabled = false;
 
     InitState _initState = InitState::NotStarted;
     QFuture<bool> _gstInitFuture;

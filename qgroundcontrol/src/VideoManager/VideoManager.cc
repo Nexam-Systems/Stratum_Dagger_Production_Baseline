@@ -28,6 +28,7 @@
 
 #include <QtConcurrent/QtConcurrent>
 #include <QtCore/QApplicationStatic>
+#include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QEventLoop>
@@ -177,12 +178,14 @@ bool VideoManager::sendCameraTrackPoint(int x, int y)
         qCWarning(VideoManagerLog) << "sendCameraTrackPoint: invalid C12 host" << _daggerC12Host();
         return false;
     }
-    // C12 protocol §3.3.4→§3.3.5: SUM 01 arms the tracker, then GOT feeds the target.
+    // C12 TOP V1.1.6 §3.3.5 (GOT sets the target point on the 1280x720 frame)
+    // then §3.3.4 SUM 01 acknowledges/arms the tracker on the selected target.
+    // Sending SUM before GOT leaves the tracker without a target and it silently no-ops.
     const QByteArray sumAck = QByteArrayLiteral("#TPUG2wSUM0162");
-    if (socket.writeDatagram(sumAck, host, 5000) != sumAck.size()) {
+    if (socket.writeDatagram(payload, host, 5000) != payload.size()) {
         return false;
     }
-    return socket.writeDatagram(payload, host, 5000) == payload.size();
+    return socket.writeDatagram(sumAck, host, 5000) == sumAck.size();
 }
 
 // STRATUM: Reprogram the C12 gimbal's IP. Skydroid "IPV" set command:
@@ -294,6 +297,133 @@ QString VideoManager::readC12CameraIp(int timeoutMs)
     }
     qCInfo(VideoManagerLog) << "readC12CameraIp: no reply from" << currentHost << "within" << timeoutMs << "ms";
     return QString();
+}
+
+// STRATUM: C12 gimbal-attitude support (Skydroid TOP protocol V1.1.6 §3.3.2).
+//
+// Enabling: send #TPUG2wGAA<rateHex>  (rate 01..64 hex = 1..100 Hz, 00 = off).
+// Stream:   #TP<addr><C><r>GAC Y0Y1Y2Y3 P0P1P2P3 R0R1R2R3 CC
+//           Each 4-char group is signed int16 in 0.01° units, high byte first
+//           (e.g. 'EC78' = 0xEC78 = -5000 = -50.00°). CC = (sum & 0xFF) as 2-hex.
+// Socket:   persistent so the camera keeps our source port stable; the reply
+//           lands on the same port. Frames land in _onC12AttitudeDatagram().
+static constexpr int    kC12AttitudeRateHz            = 5;
+static constexpr int    kC12AttitudeReportIntervalMs  = 1000;
+static constexpr quint16 kC12ControlPort              = 5000;
+static constexpr int    kSeverityInfo                 = 6;  // MAV_SEVERITY_INFO
+static constexpr int    kSeverityWarning              = 4;  // MAV_SEVERITY_WARNING
+
+static QByteArray _c12BuildFrame(const char addr[2], char lenHex, char ctrl,
+                                 const char flag[3], const QByteArray &data)
+{
+    QByteArray base;
+    base.reserve(3 + 2 + 1 + 1 + 3 + data.size() + 2);
+    base.append('#'); base.append('T'); base.append('P');
+    base.append(addr, 2);
+    base.append(lenHex);
+    base.append(ctrl);
+    base.append(flag, 3);
+    base.append(data);
+    int sum = 0;
+    for (int i = 0; i < base.size(); ++i) sum += static_cast<unsigned char>(base.at(i));
+    base += QByteArray::number(sum & 0xFF, 16).toUpper().rightJustified(2, '0');
+    return base;
+}
+
+void VideoManager::_ensureC12Socket()
+{
+    if (_c12Socket) return;
+    _c12Socket = new QUdpSocket(this);
+    if (!_c12Socket->bind(QHostAddress::AnyIPv4, 0, QUdpSocket::DontShareAddress)) {
+        qCWarning(VideoManagerLog) << "C12 attitude socket bind failed:"
+                                   << _c12Socket->errorString();
+    }
+    (void) connect(_c12Socket, &QUdpSocket::readyRead,
+                   this, &VideoManager::_onC12AttitudeDatagram);
+}
+
+void VideoManager::_enableC12AttitudeStream(bool enabled)
+{
+    _ensureC12Socket();
+    if (!_c12Socket) return;
+    const QHostAddress host(_daggerC12Host());
+    if (host.isNull()) {
+        qCWarning(VideoManagerLog) << "_enableC12AttitudeStream: invalid host"
+                                   << _daggerC12Host();
+        return;
+    }
+    const QByteArray rateHex = QByteArray::number(enabled ? kC12AttitudeRateHz : 0, 16)
+                                   .toUpper().rightJustified(2, '0');
+    const QByteArray frame = _c12BuildFrame("UG", '2', 'w', "GAA", rateHex);
+    if (_c12Socket->writeDatagram(frame, host, kC12ControlPort) != frame.size()) {
+        qCWarning(VideoManagerLog) << "GAA enable send failed to" << host.toString();
+        return;
+    }
+    _c12AttitudeStreamEnabled = enabled;
+    qCInfo(VideoManagerLog) << "C12 attitude stream"
+                            << (enabled ? "enabled" : "disabled")
+                            << "rate" << (enabled ? kC12AttitudeRateHz : 0) << "Hz";
+}
+
+void VideoManager::_onC12AttitudeDatagram()
+{
+    if (!_c12Socket) return;
+    while (_c12Socket->hasPendingDatagrams()) {
+        QByteArray buf(int(_c12Socket->pendingDatagramSize()), Qt::Uninitialized);
+        _c12Socket->readDatagram(buf.data(), buf.size());
+        _processC12Frame(buf);
+    }
+}
+
+void VideoManager::_processC12Frame(const QByteArray &frame)
+{
+    // Full GAC frame: 3 hdr + 2 addr + 1 len + 1 ctrl + 3 flag + 12 data + 2 chk = 24.
+    if (frame.size() < 12) return;
+    if (frame.at(0) != '#'
+        || (frame.at(1) != 'T' && frame.at(1) != 't')
+        || (frame.at(2) != 'P' && frame.at(2) != 'p')) return;
+
+    bool lenOk = false;
+    const int len = QByteArray(1, frame.at(5)).toInt(&lenOk, 16);
+    if (!lenOk) return;
+    // C12 TOP §2.2.3: length field counts data characters (=wire bytes), so the
+    // data window is [dataStart, dataStart+len) and the 2-char checksum sits after.
+    const int dataStart = 10;
+    const int dataEnd   = dataStart + len;
+    if (frame.size() < dataEnd + 2) return;
+
+    int sum = 0;
+    for (int i = 0; i < dataEnd; ++i) sum += static_cast<unsigned char>(frame.at(i));
+    bool chkOk = false;
+    const int recvChk = QByteArray(frame.constData() + dataEnd, 2).toInt(&chkOk, 16);
+    if (!chkOk || (sum & 0xFF) != recvChk) {
+        qCDebug(VideoManagerLog) << "C12 checksum mismatch, dropping" << frame;
+        return;
+    }
+
+    if (frame.mid(7, 3) != "GAC" || len != 0xC) return;
+
+    auto decode = [&](int offset) {
+        bool ok = false;
+        const uint16_t raw = frame.mid(dataStart + offset, 4).toUShort(&ok, 16);
+        return ok ? static_cast<double>(static_cast<int16_t>(raw)) * 0.01 : 0.0;
+    };
+    const double yawDeg   = decode(0);
+    const double pitchDeg = decode(4);
+    const double rollDeg  = decode(8);
+
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (now - _lastC12AttitudeReportMs < kC12AttitudeReportIntervalMs) return;
+    _lastC12AttitudeReportMs = now;
+
+    const QString line = QStringLiteral("C12 gimbal: yaw %1° pitch %2° roll %3°")
+                             .arg(yawDeg,   0, 'f', 2)
+                             .arg(pitchDeg, 0, 'f', 2)
+                             .arg(rollDeg,  0, 'f', 2);
+    qCDebug(VideoManagerLog) << line;
+    if (_activeVehicle) {
+        _activeVehicle->showStatusText(kSeverityInfo, line);
+    }
 }
 
 // STRATUM: SIYI A2 mini SDK v3 packet builder + UDP sender.
@@ -540,6 +670,19 @@ void VideoManager::init(QQuickWindow *mainWindow)
     (void) connect(MultiVehicleManager::instance(), &MultiVehicleManager::activeVehicleChanged, this, &VideoManager::_setActiveVehicle);
 
     (void) connect(this, &VideoManager::autoStreamConfiguredChanged, this, &VideoManager::_videoSourceChanged);
+
+    // STRATUM: bind the C12 attitude socket up front and enable the GAA stream
+    // whenever the operator has selected the C12 (daggerCamera == 1). We also
+    // re-send GAA on daggerCamera changes so the camera resumes streaming after
+    // a mode swap or camera reboot.
+    _ensureC12Socket();
+    if (_videoSettings->daggerCamera()->rawValue().toInt() == 1) {
+        _enableC12AttitudeStream(true);
+    }
+    (void) connect(_videoSettings->daggerCamera(), &Fact::rawValueChanged, this,
+                   [this](const QVariant &value) {
+                       _enableC12AttitudeStream(value.toInt() == 1);
+                   });
 
 #ifdef QGC_GST_STREAMING
     if (_initState == InitState::NotStarted) {

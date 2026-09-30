@@ -1264,6 +1264,8 @@ public:
     Q_INVOKABLE void resetAllMessages();
     Q_INVOKABLE void resetErrorLevelMessages();
     Q_INVOKABLE void clearMessages();
+    // STRATUM: push a text line into the vehicle-messages drawer (the box below ARM).
+    Q_INVOKABLE void showStatusText(int severity, const QString &text);
 
     bool messageTypeNone() const;
     bool messageTypeNormal() const;

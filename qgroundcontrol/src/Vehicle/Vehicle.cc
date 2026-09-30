@@ -3571,6 +3571,14 @@ bool Vehicle::messageTypeError() const { return m_statusTextHandler->messageType
 int Vehicle::messageCount() const { return m_statusTextHandler->messageCount(); }
 QString Vehicle::formattedMessages() const { return m_statusTextHandler->formattedMessages(); }
 
+void Vehicle::showStatusText(int severity, const QString &text)
+{
+    if (!m_statusTextHandler) return;
+    m_statusTextHandler->handleHTMLEscapedTextMessage(MAV_COMP_ID_MISSIONPLANNER,
+                                                       static_cast<MAV_SEVERITY>(severity),
+                                                       text.toHtmlEscaped(), QString());
+}
+
 void Vehicle::_createStatusTextHandler()
 {
     m_statusTextHandler = new StatusTextHandler(this);
