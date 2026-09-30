@@ -80,11 +80,17 @@ Item {
         // Ensure the RTSP source is active, then point it at the chosen feed. Writing
         // rtspUrl restarts the stream (VideoManager listens on its rawValueChanged), so
         // the video swaps between the TV and IR URLs — matching the web UI TV/IR buttons.
-        // STRATUM: record the RTSP stream locally via VideoManager instead of
-        // asking the C12 to record to its SD card (#TPUD2wREC01). On stop we pop
-        // a save-as dialog to move the temp file to a location the operator
-        // picks. Prompt-on-start would also work, but the user requested
-        // "ask us where to save at" after stopping.
+        if (_vs.videoSource.rawValue !== _vs.rtspVideoSource) {
+            _vs.videoSource.rawValue = _vs.rtspVideoSource
+        }
+        _vs.rtspUrl.rawValue = url
+        root.statusMessage(qsTr("%1 feed selected").arg(feed))
+    }
+
+    // STRATUM: record the RTSP stream locally via VideoManager instead of asking
+    // the C12 to record to its SD card. On stop we open a save-as dialog and move
+    // the temp file to the operator-chosen path.
+    function _toggleRec() {
         if (QGroundControl.videoManager.recording) {
             QGroundControl.videoManager.stopRecording()
             root.statusMessage(qsTr("■ Recording stopped — pick a save location"))
@@ -95,18 +101,7 @@ Item {
         }
     }
 
-    // Remember whichever temp file VideoManager gave us so we can move it on stop.
-    Connections {
-        target: QGroundControl.videoManager
-        function onRecordingStarted(filename) { root._pendingRecordFile = filename }
-        function onRecordingChanged(active) {
-            if (!active && root._pendingRecordFile !== "") {
-                // Seed the dialog with the auto-generated filename.
-                var fileOnly = root._pendingRecordFile.replace(/\\/g, "/").split("/").pop()
-                saveRecordingDialog.currentFile = "file:///" + root._pendingRecordFile
-                saveRecordingDialog.selectedFile = "file:///" + root._pendingRecordFile
-                saveRecordingDialog.open()
-            }
+    function _toggleTrack() {
         if (QGroundControl.videoManager.c12TrackingActive) {
             if (!QGroundControl.videoManager.sendCameraAction("track-stop")) {
                 root.statusMessage(qsTr("Tracking stop failed"))
@@ -118,48 +113,37 @@ Item {
                 root.statusMessage(qsTr("Tracking start failed"))
                 return
             }
-            root.statusMessage(qsTr("◎ Tracker locked on centre region"))statusMessage(qsTr("%1 feed selected").arg(feed))
-    }
-
-    function _toggleRec() {
-        _recActive = !_recActive
-        if (_send(_recActive ? "rec-start" : "rec-stop")) {
-            root.statusMessage(_recActive ? qsTr("● Recording started") : qsTr("■ Recording stopped"))
+            root.statusMessage(qsTr("◎ Tracker locked on centre region"))
         }
     }
 
-    // Timer used by _toggleTrack to gap SUM 01 (arm tracker) and GOT (feed target).
-    // Some C12 firmware drops GOT when it arrives back-to-back with SUM 01.
-    // STRATUM: retained only to satisfy older QML that still references the id;
-    // the actual tracker start path is now a single AI SET_REGION call, no gap
-    // is required. Kept as a no-op timer (never restarted) so removing existing
-    // consumers stays a single-file change.
-    Timer {
-        id: _trackFeedTimer
-        interval: 120
-        repeat: false
+    // Remember the temp file VideoManager wrote so we can move it on stop.
+    Connections {
+        target: QGroundControl.videoManager
+        function onRecordingStarted(filename) { root._pendingRecordFile = filename }
+        function onRecordingChanged(active) {
+            if (!active && root._pendingRecordFile !== "") {
+                saveRecordingDialog.currentFile = "file:///" + root._pendingRecordFile
+                saveRecordingDialog.selectedFile = "file:///" + root._pendingRecordFile
+                saveRecordingDialog.open()
+            }
+        }
     }
 
-    function _toggleTrack() {
-        _trackActive = !_trackActive
-        if (_trackActive) {
-            // STRATUM: C12 in-camera tracker is driven by the Skydroid AI V1.2.0
-            // binary protocol on UDP :1030 (SET_REGION). The old #TPUG.SUM/GOT
-            // pair on :5000 does not actually engage the tracker on real
-            // hardware; this call sends enable_ai + a centre region in one hop.
-            if (!QGroundControl.videoManager.sendCameraAction("track-center")) {
-                _trackActive = false
-                root.statusMessage(qsTr("Tracking start failed"))
-                return
-            }
-            root.statusMessage(qsTr("◎ Tracker locked on centre region"))
-        } else {
-            if (QGroundControl.videoManager.sendCameraAction("track-stop")) {
-                root.statusMessage(qsTr("✕ Tracking off"))
-            } else {
-                _trackActive = true
-                root.statusMessage(qsTr("Tracking stop failed"))
-            }
+    FileDialog {
+        id: saveRecordingDialog
+        title: qsTr("Save recording as…")
+        fileMode: FileDialog.SaveFile
+        nameFilters: ["Video files (*.mkv *.mp4)", "All files (*)"]
+        onAccepted: {
+            var ok = QGroundControl.videoManager.moveRecordedFile(
+                "file:///" + root._pendingRecordFile, saveRecordingDialog.selectedFile)
+            root.statusMessage(ok ? qsTr("💾 Saved") : qsTr("Save failed — recording kept at temp path"))
+            root._pendingRecordFile = ""
+        }
+        onRejected: {
+            root.statusMessage(qsTr("Recording kept at: %1").arg(root._pendingRecordFile))
+            root._pendingRecordFile = ""
         }
     }
 
@@ -252,10 +236,7 @@ Item {
             Item { Layout.fillWidth: true; Layout.preferredHeight: root._btnHeight }
         }
 
-        // ---- Zoom -------
-                    QGroundControl.videoManager.grabImage()
-                    root.statusMessage(qsTr("📷 Photo saved locally"))
-               
+        // ---- Zoom ----------------------------------------------------------
         RowLayout {
             Layout.fillWidth: true
             spacing: root._spacing
@@ -289,7 +270,10 @@ Item {
                 text: qsTr("📷 Capture")
                 implicitHeight: root._btnHeight
                 Layout.fillWidth: true
-                onClicked: { if (root._send("capture")) root.statusMessage(qsTr("📷 Photo captured")) }
+                onClicked: {
+                    QGroundControl.videoManager.grabImage()
+                    root.statusMessage(qsTr("📷 Photo saved locally"))
+                }
             }
             QGCButton {
                 text: root._recActive ? qsTr("■ Stop") : qsTr("● Rec")
@@ -302,11 +286,11 @@ Item {
 
         // ---- Track ---------------------------------------------------------
         QGCButton {
-            text: root._trackActive ? qsTr("✕ Stop Track") : qsTr("◎ Track")
+            text: root._trackActive ? qsTr("✕ Stop Tracking") : qsTr("◎ Track")
             implicitHeight: root._btnHeight
             Layout.fillWidth: true
             primary: root._trackActive
-            onClicked: root._toggleTrack()ing
+            onClicked: root._toggleTrack()
         }
 
         // ---- False-colour palette -----------------------------------------
