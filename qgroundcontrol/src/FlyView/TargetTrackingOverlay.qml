@@ -4,9 +4,10 @@ import QGroundControl
 
 // STRATUM: operator-in-the-loop visual target designation overlay.
 //
-// Draws on top of the live video. A click drops a fixed-size selection box on the
-// target; a drag draws a custom box. On release the normalized box is sent to two
-// downstream trackers so operators can use whichever is available on the airframe:
+// Draws on top of the live video. A click drops a fixed 200x200 px selection box
+// (on the 1280x720 protocol frame) centred on the click point. That normalized
+// box is sent to two downstream trackers so operators can use whichever is
+// available on the airframe:
 //   * Companion (OpenCV) tracker via Vehicle::sendTargetSelect
 //     (NEXAM_TARGET_SELECT / 42003). Streams NEXAM_TARGET_TRACK (42004) back,
 //     which lands as vehicle.targetTrack.* and is drawn as the red tracked box.
@@ -15,9 +16,8 @@ import QGroundControl
 //     selected the C12 (daggerCamera == 1) so we never spam UDP at a fixed IP
 //     the operator hasn't opted into.
 //
-// This is intentionally decoupled from the camera-tracking path
-// (VehicleCameraControl): it needs no CAMERA_INFORMATION capability handshake,
-// only a connected vehicle and a running video stream.
+// Drag on the video is reserved for gimbal pan/tilt (see FlyViewVideo.qml); this
+// overlay no longer draws a click-drag selection rectangle.
 Item {
     id: rootItem
 
@@ -25,9 +25,11 @@ Item {
     required property real videoWidth
     required property real videoHeight
 
-    // Fixed selection box size (fraction of the displayed video) used for a plain
-    // click. Matches the "fixed selection bounding box" designation mode.
-    property real fixedBoxFrac: 0.15
+    // STRATUM: fixed 200x200-pixel selection box on the 1280x720 protocol frame.
+    // The Skydroid AI tracker uses 1280x720 coordinates internally, so a fixed
+    // pixel size gives a repeatable tracker footprint regardless of the on-screen
+    // video scaling.
+    readonly property int fixedBoxPx: 200
 
     readonly property bool _enabled: !!vehicle && videoWidth > 0 && videoHeight > 0
 
@@ -46,13 +48,6 @@ Item {
         return (ir !== "" && live === ir) ? 1 : 0
     }
 
-    // Drag state (parent/view coordinates)
-    property real _dragStartX: 0
-    property real _dragStartY: 0
-    property real _dragCurrentX: 0
-    property real _dragCurrentY: 0
-    property bool _dragging: false
-
     readonly property real _marginH: (rootItem.width - videoWidth) / 2
     readonly property real _marginV: (rootItem.height - videoHeight) / 2
 
@@ -70,11 +65,11 @@ Item {
         if (!_enabled) {
             return
         }
-        // Fixed-size box centred on the click.
+        // Fixed 200x200 protocol-frame box centred on the click.
         var cx = _normX(mouseX)
         var cy = _normY(mouseY)
-        var hw = fixedBoxFrac / 2
-        var hh = fixedBoxFrac / 2
+        var hw = (fixedBoxPx / 2) / 1280.0
+        var hh = (fixedBoxPx / 2) /  720.0
         var x0 = Math.max(0.0, cx - hw)
         var y0 = Math.max(0.0, cy - hh)
         var x1 = Math.min(1.0, cx + hw)
@@ -85,58 +80,12 @@ Item {
         }
     }
 
-    function mouseDragStart(mouseX, mouseY) {
-        if (!_enabled) {
-            return
-        }
-        _dragStartX = mouseX
-        _dragStartY = mouseY
-        _dragCurrentX = mouseX
-        _dragCurrentY = mouseY
-        _dragging = true
-    }
-
-    function mouseDragPositionChanged(mouseX, mouseY) {
-        if (!_dragging) {
-            return
-        }
-        _dragCurrentX = mouseX
-        _dragCurrentY = mouseY
-    }
-
-    function mouseDragEnd(mouseX, mouseY) {
-        _dragging = false
-        if (!_enabled) {
-            return
-        }
-        var x0 = _normX(Math.min(_dragStartX, mouseX))
-        var x1 = _normX(Math.max(_dragStartX, mouseX))
-        var y0 = _normY(Math.min(_dragStartY, mouseY))
-        var y1 = _normY(Math.max(_dragStartY, mouseY))
-
-        // Ignore degenerate rectangles (near-horizontal / near-vertical drags):
-        // treat them as a click instead so a stray drag still designates a target.
-        if ((x1 - x0) < 0.02 || (y1 - y0) < 0.02) {
-            mouseClicked(mouseX, mouseY)
-            return
-        }
-        vehicle.sendTargetSelect(x0, y0, x1, y1, 1)
-        if (_c12Active) {
-            QGroundControl.videoManager.sendC12TrackRegion(x0, y0, x1, y1, _c12VideoSource)
-        }
-    }
-
-    // --- selection overlay (green box while dragging) ------------------------
-    Rectangle {
-        visible: _dragging
-        color: Qt.rgba(0.1, 0.85, 0.1, 0.25)
-        border.color: "green"
-        border.width: 2
-        x: Math.min(_dragStartX, _dragCurrentX)
-        y: Math.min(_dragStartY, _dragCurrentY)
-        width: Math.abs(_dragCurrentX - _dragStartX)
-        height: Math.abs(_dragCurrentY - _dragStartY)
-    }
+    // Kept as no-ops so existing FlyViewVideo MouseArea code that fans out drag
+    // events to this overlay still compiles. Region-from-drag has been retired
+    // (see file header) — drag on the video pans the gimbal instead.
+    function mouseDragStart(mouseX, mouseY) {}
+    function mouseDragPositionChanged(mouseX, mouseY) {}
+    function mouseDragEnd(mouseX, mouseY) {}
 
     // --- tracked target overlay (red box streamed back from the companion) ---
     Rectangle {

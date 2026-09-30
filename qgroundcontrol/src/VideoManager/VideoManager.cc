@@ -32,10 +32,12 @@
 #include <QtCore/QDir>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QEventLoop>
+#include <QtCore/QFile>
 #include <QtCore/QFutureWatcher>
 #include <QtCore/QPointer>
 #include <QtCore/QRunnable>
 #include <QtCore/QTimer>
+#include <QtCore/QUrl>
 #include <QtNetwork/QUdpSocket>
 #include <QtQml/QQmlEngine>
 #include <QtQuick/QQuickItem>
@@ -303,7 +305,10 @@ QString VideoManager::readC12CameraIp(int timeoutMs)
 // Socket:   persistent so the camera keeps our source port stable; the reply
 //           lands on the same port. Frames land in _onC12AttitudeDatagram().
 static constexpr int    kC12AttitudeRateHz            = 5;
-static constexpr int    kC12AttitudeReportIntervalMs  = 1000;
+// STRATUM: attitude is pushed into the vehicle-messages drawer at the raw camera
+// rate so the operator sees a continuous stream of yaw/pitch/roll under the ARM
+// button. If this becomes too chatty in real flight, raise this to 500 ms.
+static constexpr int    kC12AttitudeReportIntervalMs  = 0;
 static constexpr quint16 kC12ControlPort              = 5000;
 static constexpr int    kSeverityInfo                 = 6;  // MAV_SEVERITY_INFO
 static constexpr int    kSeverityWarning              = 4;  // MAV_SEVERITY_WARNING
@@ -538,6 +543,10 @@ bool VideoManager::sendC12TrackRegion(qreal x0, qreal y0, qreal x1, qreal y1, in
         << "C12 track region video=" << vid
         << " (" << px0 << "," << py0 << ")->(" << px1 << "," << py1 << ") "
         << (ok ? "sent" : "FAILED");
+    if (ok && !_c12TrackActive) {
+        _c12TrackActive = true;
+        emit c12TrackingActiveChanged();
+    }
     return ok;
 }
 
@@ -556,8 +565,59 @@ bool VideoManager::stopC12Track()
     const bool disOk = _sendC12AiPacket(2 /*TRACK_CONTROL*/, disablePayload);
 
     _c12AiEnabled = false;
+    if (_c12TrackActive) {
+        _c12TrackActive = false;
+        emit c12TrackingActiveChanged();
+    }
     qCInfo(VideoManagerLog) << "C12 track stop (release" << relOk << "disable" << disOk << ")";
     return relOk && disOk;
+}
+
+bool VideoManager::sendC12GimbalRate(int yaw, int pitch)
+{
+    _ensureC12Socket();
+    if (!_c12Socket) return false;
+    const QHostAddress host(_daggerC12Host());
+    if (host.isNull()) {
+        qCWarning(VideoManagerLog) << "sendC12GimbalRate: invalid C12 host" << _daggerC12Host();
+        return false;
+    }
+    const int cy = qBound(-127, yaw,   127);
+    const int cp = qBound(-127, pitch, 127);
+    const QByteArray yawHex   = QByteArray::number(uint8_t(cy) & 0xFF, 16).toUpper().rightJustified(2, '0');
+    const QByteArray pitchHex = QByteArray::number(uint8_t(cp) & 0xFF, 16).toUpper().rightJustified(2, '0');
+    const QByteArray yawFrame   = _c12BuildFrame("UG", '2', 'w', "GSY", yawHex);
+    const QByteArray pitchFrame = _c12BuildFrame("UG", '2', 'w', "GSP", pitchHex);
+    const bool y = _c12Socket->writeDatagram(yawFrame,   host, kC12ControlPort) == yawFrame.size();
+    const bool p = _c12Socket->writeDatagram(pitchFrame, host, kC12ControlPort) == pitchFrame.size();
+    return y && p;
+}
+
+bool VideoManager::moveRecordedFile(const QUrl &fromPath, const QUrl &toPath)
+{
+    const QString from = fromPath.isLocalFile() ? fromPath.toLocalFile() : fromPath.toString();
+    const QString to   = toPath.isLocalFile()   ? toPath.toLocalFile()   : toPath.toString();
+    if (from.isEmpty() || to.isEmpty()) {
+        qCWarning(VideoManagerLog) << "moveRecordedFile: empty path" << from << "->" << to;
+        return false;
+    }
+    if (!QFile::exists(from)) {
+        qCWarning(VideoManagerLog) << "moveRecordedFile: source missing" << from;
+        return false;
+    }
+    if (QFile::exists(to)) {
+        (void) QFile::remove(to);
+    }
+    if (!QFile::rename(from, to)) {
+        // Cross-volume rename fails on Windows; fall back to copy+remove.
+        if (!QFile::copy(from, to)) {
+            qCWarning(VideoManagerLog) << "moveRecordedFile: rename+copy failed" << from << "->" << to;
+            return false;
+        }
+        (void) QFile::remove(from);
+    }
+    qCInfo(VideoManagerLog) << "moveRecordedFile:" << from << "->" << to;
+    return true;
 }
 
 // STRATUM: SIYI A2 mini SDK v3 packet builder + UDP sender.
@@ -1586,6 +1646,9 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "recording started";
         if (!receiver->isThermal()) {
             _subtitleWriter->startCapturingTelemetry(filename, videoSize());
+            // STRATUM: re-emit so QML (FlyView REC button) can remember the temp
+            // filename and, on stop, prompt the operator for a save-as destination.
+            emit recordingStarted(filename);
         }
     });
 

@@ -114,11 +114,45 @@ Item {
         id:                         flyViewVideoMouseArea
         anchors.fill:               parent
         enabled:                    pipState.state === pipState.fullState
+        acceptedButtons:            Qt.LeftButton | Qt.RightButton
 
         property real _pressX:      0
         property real _pressY:      0
         property bool _dragging:    false
         readonly property real _dragThreshold: 10
+
+        // STRATUM: current C12 pan/tilt speed derived from the live drag delta.
+        // The Timer flushes these to the gimbal at 10 Hz so a UDP command is not
+        // emitted on every mouse motion frame. Range -100..+100, protocol accepts
+        // -127..+127 (0.5°/s per unit), so 100 caps at ~50°/s.
+        property int _c12YawSpeed:   0
+        property int _c12PitchSpeed: 0
+        readonly property var  _vs:        QGroundControl.settingsManager.videoSettings
+        readonly property bool _c12Active: _vs && _vs.daggerCamera.rawValue === 1
+
+        Timer {
+            id:       c12GimbalDragTimer
+            interval: 100
+            repeat:   true
+            onTriggered: {
+                if (flyViewVideoMouseArea._c12Active) {
+                    QGroundControl.videoManager.sendC12GimbalRate(
+                        flyViewVideoMouseArea._c12YawSpeed,
+                        flyViewVideoMouseArea._c12PitchSpeed)
+                }
+            }
+        }
+
+        function _updateC12DragSpeed(mouseX, mouseY) {
+            var w = videoStreaming.getWidth()
+            var h = videoStreaming.getHeight()
+            if (w <= 0 || h <= 0) return
+            var dx = mouseX - _pressX
+            var dy = mouseY - _pressY
+            // 200 = full-scale at half-screen drag; screen-down maps to pitch-down.
+            _c12YawSpeed   = Math.max(-100, Math.min(100, Math.round(dx / w * 200)))
+            _c12PitchSpeed = Math.max(-100, Math.min(100, Math.round(-dy / h * 200)))
+        }
 
         onDoubleClicked: QGroundControl.videoManager.fullScreen = !QGroundControl.videoManager.fullScreen
 
@@ -133,12 +167,18 @@ Item {
                 _dragging = true
                 onScreenGimbalController.mouseDragStart(_pressX, _pressY)
                 cameraTrackingController.mouseDragStart(_pressX, _pressY)
-                targetTrackingOverlay.mouseDragStart(_pressX, _pressY)
+                if (_c12Active) {
+                    _c12YawSpeed = 0
+                    _c12PitchSpeed = 0
+                    c12GimbalDragTimer.start()
+                }
             }
             if (_dragging) {
                 onScreenGimbalController.mouseDragPositionChanged(mouse.x, mouse.y)
                 cameraTrackingController.mouseDragPositionChanged(mouse.x, mouse.y)
-                targetTrackingOverlay.mouseDragPositionChanged(mouse.x, mouse.y)
+                if (_c12Active) {
+                    _updateC12DragSpeed(mouse.x, mouse.y)
+                }
             }
         }
 
@@ -146,13 +186,32 @@ Item {
             if (_dragging) {
                 onScreenGimbalController.mouseDragEnd()
                 cameraTrackingController.mouseDragEnd(mouse.x, mouse.y)
-                targetTrackingOverlay.mouseDragEnd(mouse.x, mouse.y)
+                if (_c12Active) {
+                    c12GimbalDragTimer.stop()
+                    QGroundControl.videoManager.sendC12GimbalRate(0, 0)
+                    _c12YawSpeed = 0
+                    _c12PitchSpeed = 0
+                }
             } else {
                 onScreenGimbalController.mouseClicked(mouse.x, mouse.y)
                 cameraTrackingController.mouseClicked(mouse.x, mouse.y)
                 targetTrackingOverlay.mouseClicked(mouse.x, mouse.y)
             }
             _dragging = false
+        }
+
+        // STRATUM: scroll-wheel zoom for the C12. Each wheel notch fires a single
+        // DZM zoom+ / zoom- command. Non-C12 cameras ignore the packet because
+        // sendCameraAction only speaks the Skydroid TOP protocol.
+        WheelHandler {
+            acceptedDevices:    PointerDevice.Mouse | PointerDevice.TouchPad
+            onWheel: (event) => {
+                if (event.angleDelta.y > 0) {
+                    QGroundControl.videoManager.sendCameraAction("zoom-in")
+                } else if (event.angleDelta.y < 0) {
+                    QGroundControl.videoManager.sendCameraAction("zoom-out")
+                }
+            }
         }
     }
 

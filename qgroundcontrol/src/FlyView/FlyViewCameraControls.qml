@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 import QGroundControl
@@ -40,8 +41,16 @@ Item {
     // Active feed is derived from which stored URL the live rtspUrl currently matches,
     // so the dropper panel and the video overlay always show the same TV/IR state.
     readonly property bool _feedIrActive: _irUrl !== "" && _vs.rtspUrl.rawValue === _irUrl
-    property bool _recActive:    false
-    property bool _trackActive:  false
+    // STRATUM: derive REC/Track state directly from VideoManager so the button
+    // labels stay in sync whether recording/tracking was toggled from this
+    // control or somewhere else (e.g. tracking started by a video click).
+    readonly property bool _recActive:   QGroundControl.videoManager.recording
+    readonly property bool _trackActive: QGroundControl.videoManager.c12TrackingActive
+
+    // Local recording bookkeeping — the filename VideoManager gave us on the
+    // most recent recordingStarted signal. Used to move the completed file to
+    // wherever the operator picks in the save dialog.
+    property string _pendingRecordFile: ""
 
     readonly property color _accent:    "#3DFFA6"
     readonly property color _accentDim:  "#1FB97D"
@@ -71,11 +80,45 @@ Item {
         // Ensure the RTSP source is active, then point it at the chosen feed. Writing
         // rtspUrl restarts the stream (VideoManager listens on its rawValueChanged), so
         // the video swaps between the TV and IR URLs — matching the web UI TV/IR buttons.
-        if (_vs.videoSource.rawValue !== _vs.rtspVideoSource) {
-            _vs.videoSource.rawValue = _vs.rtspVideoSource
+        // STRATUM: record the RTSP stream locally via VideoManager instead of
+        // asking the C12 to record to its SD card (#TPUD2wREC01). On stop we pop
+        // a save-as dialog to move the temp file to a location the operator
+        // picks. Prompt-on-start would also work, but the user requested
+        // "ask us where to save at" after stopping.
+        if (QGroundControl.videoManager.recording) {
+            QGroundControl.videoManager.stopRecording()
+            root.statusMessage(qsTr("■ Recording stopped — pick a save location"))
+        } else {
+            _pendingRecordFile = ""
+            QGroundControl.videoManager.startRecording()
+            root.statusMessage(qsTr("● Recording started (local)"))
         }
-        _vs.rtspUrl.rawValue = url
-        root.statusMessage(qsTr("%1 feed selected").arg(feed))
+    }
+
+    // Remember whichever temp file VideoManager gave us so we can move it on stop.
+    Connections {
+        target: QGroundControl.videoManager
+        function onRecordingStarted(filename) { root._pendingRecordFile = filename }
+        function onRecordingChanged(active) {
+            if (!active && root._pendingRecordFile !== "") {
+                // Seed the dialog with the auto-generated filename.
+                var fileOnly = root._pendingRecordFile.replace(/\\/g, "/").split("/").pop()
+                saveRecordingDialog.currentFile = "file:///" + root._pendingRecordFile
+                saveRecordingDialog.selectedFile = "file:///" + root._pendingRecordFile
+                saveRecordingDialog.open()
+            }
+        if (QGroundControl.videoManager.c12TrackingActive) {
+            if (!QGroundControl.videoManager.sendCameraAction("track-stop")) {
+                root.statusMessage(qsTr("Tracking stop failed"))
+                return
+            }
+            root.statusMessage(qsTr("✕ Tracking off"))
+        } else {
+            if (!QGroundControl.videoManager.sendCameraAction("track-center")) {
+                root.statusMessage(qsTr("Tracking start failed"))
+                return
+            }
+            root.statusMessage(qsTr("◎ Tracker locked on centre region"))statusMessage(qsTr("%1 feed selected").arg(feed))
     }
 
     function _toggleRec() {
@@ -209,7 +252,10 @@ Item {
             Item { Layout.fillWidth: true; Layout.preferredHeight: root._btnHeight }
         }
 
-        // ---- Zoom ----------------------------------------------------------
+        // ---- Zoom -------
+                    QGroundControl.videoManager.grabImage()
+                    root.statusMessage(qsTr("📷 Photo saved locally"))
+               
         RowLayout {
             Layout.fillWidth: true
             spacing: root._spacing
@@ -260,7 +306,7 @@ Item {
             implicitHeight: root._btnHeight
             Layout.fillWidth: true
             primary: root._trackActive
-            onClicked: root._toggleTrack()
+            onClicked: root._toggleTrack()ing
         }
 
         // ---- False-colour palette -----------------------------------------

@@ -4,6 +4,7 @@
 #include <QtCore/QPromise>
 #include <QtCore/QObject>
 #include <QtCore/QSize>
+#include <QtCore/QUrl>
 #include <QtQmlIntegration/QtQmlIntegration>
 
 #include <QtCore/QString>
@@ -44,6 +45,11 @@ class VideoManager : public QObject
     Q_PROPERTY(QSize    videoSize               READ videoSize                                  NOTIFY videoSizeChanged)
     Q_PROPERTY(QString  imageFile               READ imageFile                                  NOTIFY imageFileChanged)
     Q_PROPERTY(QString  uvcVideoSourceID        READ uvcVideoSourceID                           NOTIFY uvcVideoSourceIDChanged)
+    // STRATUM: true whenever a C12 in-camera track region is currently engaged.
+    // Reflects the last successful sendC12TrackRegion / stopC12Track call, so the
+    // FlyView Track button can be a one-source-of-truth toggle regardless of
+    // whether the operator armed tracking from the button or from a video click.
+    Q_PROPERTY(bool     c12TrackingActive       READ c12TrackingActive                          NOTIFY c12TrackingActiveChanged)
 
     friend class VideoManagerInitTest;
 
@@ -69,6 +75,14 @@ public:
     Q_INVOKABLE bool sendC12TrackRegion(qreal x0, qreal y0, qreal x1, qreal y1, int videoSource = 0);
     // STRATUM: stop C12 in-camera tracking (AI V1.2.0 release + disable).
     Q_INVOKABLE bool stopC12Track();
+    // STRATUM: C12 pan/tilt rate command (Skydroid TOP §3.2). yaw/pitch are signed
+    // 8-bit speeds in units of 0.5°/s; positive yaw = right, positive pitch = up.
+    // Both frames (GSY, GSP) are sent so a single call updates both axes.
+    Q_INVOKABLE bool sendC12GimbalRate(int yaw, int pitch);
+    // STRATUM: move a completed local recording (or any file) to a user-chosen
+    // destination. Both arguments accept QUrl (file:// from QML FileDialog) or a
+    // plain filesystem path string. Overwrites the destination if it exists.
+    Q_INVOKABLE bool moveRecordedFile(const QUrl &fromPath, const QUrl &toPath);
     Q_INVOKABLE bool sendSiyiCameraAction(const QString &action);
     // STRATUM: reprogram the C12 gimbal's IP via Skydroid/YunZhuo "IPV" command.
     // Sends to the current stored IP; on success rewrites videoSettings.daggerC12Host
@@ -90,6 +104,7 @@ public:
     bool isStreamSource() const;
     bool isUvc() const;
     bool recording() const { return _recording; }
+    bool c12TrackingActive() const { return _c12TrackActive; }
     bool streaming() const { return _streaming; }
     double aspectRatio() const;
     double hfov() const;
@@ -116,7 +131,8 @@ signals:
     void recordingChanged(bool recording);
     void recordingStarted(const QString &filename);
     void streamingChanged();
-    void uvcVideoSourceIDChanged();
+    void uvcVideoSourceIDCha
+    void c12TrackingActiveChanged();nged();
     void videoSizeChanged();
 
 private slots:
@@ -177,7 +193,8 @@ private:
     // STRATUM: persistent UDP socket for the Skydroid AI V1.2.0 binary tracking
     // protocol (UDP :1030). Bound locally so we can eventually parse the AI result
     // frames the camera streams back. Sequence counter is monotonic per-process.
-    QUdpSocket *_c12AiSocket = nullptr;
+    QUdpSocket *_c12AiSocket = 
+    bool _c12TrackActive = false;nullptr;
     quint16 _c12AiSequence = 0;
     bool _c12AiEnabled = false;
 
