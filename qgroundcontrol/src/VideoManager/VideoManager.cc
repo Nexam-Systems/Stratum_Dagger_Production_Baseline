@@ -66,13 +66,14 @@ VideoManager::VideoManager(QObject *parent)
     , _videoSettings(SettingsManager::instance()->videoSettings())
 {
     qCDebug(VideoManagerLog) << this;
-
+        if (receiver->name() != QStringLiteral("videoContent")) {
+            continue;
+        }
     (void) qRegisterMetaType<VideoReceiver::STATUS>("STATUS");
 
 #ifdef QGC_GST_STREAMING
     _gstreamerDisabledForUnitTests = _shouldSkipGStreamerForUnitTests();
-    if (_gstreamerDisabledForUnitTests) {
-        qCInfo(VideoManagerLog) << "Skipping GStreamer initialization for unit tests";
+        const QString videoFileName = videoFileNameTemplate.arg("");
     }
 #endif
 }
@@ -80,7 +81,9 @@ VideoManager::VideoManager(QObject *parent)
 VideoManager::~VideoManager()
 {
     qCDebug(VideoManagerLog) << this;
-}
+        if (receiver->name() != QStringLiteral("videoContent")) {
+            continue;
+        }
 
 // STRATUM: current C12 gimbal IP. Reads videoSettings.daggerC12Host; falls back to the
 // factory default so a missing/empty setting doesn't silently break the camera.
@@ -128,13 +131,7 @@ bool VideoManager::sendCameraAction(const QString &action)
     } else if (normalizedAction == "track-stop") {
         return stopC12Track();
     } else if (normalizedAction == "track-ack") {
-        // STRATUM: legacy alias — the AI path enables tracking implicitly on
-        // the first SET_REGION, so this becomes an explicit enable-only call.
-        _ensureC12AiSocket();
-        QByteArray p; p.reserve(10);
-        p.append(char(1)); p.append(char(0));
-        for (int i = 0; i < 4; ++i) { p.append(char(0)); p.append(char(0)); }
-        return _sendC12AiPacket(2 /*TRACK_CONTROL*/, p);
+        return setC12AiEnabled(true);
     } else if (normalizedAction == "palette-off") {
         payload = QByteArrayLiteral("#TPUD2wIMG0046");
     } else if (normalizedAction == "palette-01") {
@@ -412,6 +409,11 @@ void VideoManager::_processC12Frame(const QByteArray &frame)
     const double pitchDeg = decode(4);
     const double rollDeg  = decode(8);
 
+    _c12YawDeg = yawDeg;
+    _c12PitchDeg = pitchDeg;
+    _c12RollDeg = rollDeg;
+    emit c12AttitudeChanged();
+
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     if (now - _lastC12AttitudeReportMs < kC12AttitudeReportIntervalMs) return;
     _lastC12AttitudeReportMs = now;
@@ -521,14 +523,10 @@ bool VideoManager::sendC12TrackRegion(qreal x0, qreal y0, qreal x1, qreal y1, in
     // Enable the AI subsystem once per session — matches Python main.py's
     // start_region_track path (enable_ai then set_region).
     if (!_c12AiEnabled) {
-        QByteArray enablePayload; enablePayload.reserve(10);
-        enablePayload.append(char(1) /*cmd=enable*/); enablePayload.append(char(0));
-        for (int i = 0; i < 4; ++i) { enablePayload.append(char(0)); enablePayload.append(char(0)); }
-        if (!_sendC12AiPacket(2 /*TRACK_CONTROL*/, enablePayload)) {
+        if (!setC12AiEnabled(true)) {
             qCWarning(VideoManagerLog) << "sendC12TrackRegion: enable_ai failed";
             return false;
         }
-        _c12AiEnabled = true;
     }
 
     QByteArray regionPayload; regionPayload.reserve(9);
@@ -552,25 +550,38 @@ bool VideoManager::sendC12TrackRegion(qreal x0, qreal y0, qreal x1, qreal y1, in
 
 bool VideoManager::stopC12Track()
 {
-    _ensureC12AiSocket();
-    // Release then disable — same pair main.py sends on operator release.
-    QByteArray releasePayload; releasePayload.reserve(10);
-    releasePayload.append(char(0) /*cmd=release*/); releasePayload.append(char(0));
-    for (int i = 0; i < 4; ++i) { releasePayload.append(char(0)); releasePayload.append(char(0)); }
-    const bool relOk = _sendC12AiPacket(2 /*TRACK_CONTROL*/, releasePayload);
+    return setC12AiEnabled(false);
+}
 
-    QByteArray disablePayload; disablePayload.reserve(10);
-    disablePayload.append(char(3) /*cmd=disable*/); disablePayload.append(char(0));
-    for (int i = 0; i < 4; ++i) { disablePayload.append(char(0)); disablePayload.append(char(0)); }
-    const bool disOk = _sendC12AiPacket(2 /*TRACK_CONTROL*/, disablePayload);
+bool VideoManager::setC12AiEnabled(bool enabled)
+{
+    bool releaseSent = true;
+    if (!enabled) {
+        const QByteArray releasePayload(10, char(0));
+        releaseSent = _sendC12AiPacket(2, releasePayload);
+        if (releaseSent && _c12TrackActive) {
+            _c12TrackActive = false;
+            emit c12TrackingActiveChanged();
+        }
+    }
 
-    _c12AiEnabled = false;
-    if (_c12TrackActive) {
+    QByteArray controlPayload(10, char(0));
+    controlPayload[0] = enabled ? char(1) : char(3);
+    const bool controlSent = _sendC12AiPacket(2, controlPayload);
+    if (!controlSent) {
+        return false;
+    }
+    if (_c12AiEnabled != enabled) {
+        _c12AiEnabled = enabled;
+        emit c12AiEnabledChanged();
+    }
+    if (!enabled && _c12TrackActive) {
         _c12TrackActive = false;
         emit c12TrackingActiveChanged();
     }
-    qCInfo(VideoManagerLog) << "C12 track stop (release" << relOk << "disable" << disOk << ")";
-    return relOk && disOk;
+    qCInfo(VideoManagerLog) << "C12 AI" << (enabled ? "enable" : "disable")
+                           << "sent; release sent:" << releaseSent;
+    return releaseSent && controlSent;
 }
 
 bool VideoManager::sendC12GimbalRate(int yaw, int pitch)
@@ -1044,12 +1055,14 @@ void VideoManager::startRecording(const QString &videoFile)
     const QString videoFileNameTemplate = savePath + "/" + videoFileUrl + ".%1" + ext;
 
     for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
+        if (receiver->name() != QStringLiteral("videoContent")) {
+            continue;
+        }
         if (!receiver->started()) {
             qCDebug(VideoManagerLog) << "Video receiver is not ready.";
             continue;
         }
-        const QString streamName = (receiver->name() == QStringLiteral("videoContent")) ? "" : (receiver->name() + ".");
-        const QString videoFileName = videoFileNameTemplate.arg(streamName);
+        const QString videoFileName = videoFileNameTemplate.arg("");
         receiver->startRecording(videoFileName, fileFormat);
     }
 }
@@ -1057,6 +1070,9 @@ void VideoManager::startRecording(const QString &videoFile)
 void VideoManager::stopRecording()
 {
     for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
+        if (receiver->name() != QStringLiteral("videoContent")) {
+            continue;
+        }
         receiver->stopRecording();
     }
 }
@@ -1633,7 +1649,7 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
 
     (void) connect(receiver, &VideoReceiver::recordingChanged, this, [this, receiver](bool active) {
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "recording changed, active:" << (active ? "yes" : "no");
-        if (!receiver->isThermal()) {
+        if (receiver->name() == QStringLiteral("videoContent")) {
             _recording = active;
             if (!active) {
                 _subtitleWriter->stopCapturingTelemetry();
@@ -1644,7 +1660,7 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
 
     (void) connect(receiver, &VideoReceiver::recordingStarted, this, [this, receiver](const QString &filename) {
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "recording started";
-        if (!receiver->isThermal()) {
+        if (receiver->name() == QStringLiteral("videoContent")) {
             _subtitleWriter->startCapturingTelemetry(filename, videoSize());
             // STRATUM: re-emit so QML (FlyView REC button) can remember the temp
             // filename and, on stop, prompt the operator for a save-as destination.

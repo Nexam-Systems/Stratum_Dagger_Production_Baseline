@@ -51,6 +51,16 @@ Item {
     // most recent recordingStarted signal. Used to move the completed file to
     // wherever the operator picks in the save dialog.
     property string _pendingRecordFile: ""
+    property bool _saveDialogOpen: false
+    property bool _lookDownActive: false
+
+    readonly property var _admin: QGroundControl.settingsManager.adminSettings
+    readonly property int _c12MaxSpeed: {
+        if (!_admin) return 100
+        var raw = Number(_admin.c12GimbalMaxSpeed.rawValue)
+        if (!isFinite(raw)) return 100
+        return Math.max(1, Math.min(127, Math.round(raw)))
+    }
 
     readonly property color _accent:    "#3DFFA6"
     readonly property color _accentDim:  "#1FB97D"
@@ -117,12 +127,38 @@ Item {
         }
     }
 
+    function _fmtAngle(v) {
+        return isFinite(v) ? Number(v).toFixed(1) : "--"
+    }
+
+    function _stopLookDown() {
+        if (!root._lookDownActive) {
+            return
+        }
+        root._lookDownActive = false
+        lookDownTimer.stop()
+        QGroundControl.videoManager.sendC12GimbalRate(0, 0)
+    }
+
+    function _toggleLookDown() {
+        if (root._lookDownActive) {
+            _stopLookDown()
+            root.statusMessage(qsTr("Look down stopped"))
+            return
+        }
+        root._lookDownActive = true
+        lookDownTimer.start()
+        QGroundControl.videoManager.sendC12GimbalRate(0, -root._c12MaxSpeed)
+        root.statusMessage(qsTr("Looking down"))
+    }
+
     // Remember the temp file VideoManager wrote so we can move it on stop.
     Connections {
         target: QGroundControl.videoManager
         function onRecordingStarted(filename) { root._pendingRecordFile = filename }
         function onRecordingChanged(active) {
-            if (!active && root._pendingRecordFile !== "") {
+            if (!active && root._pendingRecordFile !== "" && !root._saveDialogOpen) {
+                root._saveDialogOpen = true
                 saveRecordingDialog.currentFile = "file:///" + root._pendingRecordFile
                 saveRecordingDialog.selectedFile = "file:///" + root._pendingRecordFile
                 saveRecordingDialog.open()
@@ -139,10 +175,12 @@ Item {
             var ok = QGroundControl.videoManager.moveRecordedFile(
                 "file:///" + root._pendingRecordFile, saveRecordingDialog.selectedFile)
             root.statusMessage(ok ? qsTr("💾 Saved") : qsTr("Save failed — recording kept at temp path"))
+            root._saveDialogOpen = false
             root._pendingRecordFile = ""
         }
         onRejected: {
             root.statusMessage(qsTr("Recording kept at: %1").arg(root._pendingRecordFile))
+            root._saveDialogOpen = false
             root._pendingRecordFile = ""
         }
     }
@@ -156,6 +194,7 @@ Item {
         Layout.fillWidth: true
         onPressedChanged: {
             if (pressed) {
+                root._stopLookDown()
                 root._send(ptzAction)
                 ptzHoldTimer.restart()
             } else {
@@ -169,6 +208,13 @@ Item {
             repeat: true
             onTriggered: root._send(ptzButton.ptzAction)
         }
+    }
+
+    Timer {
+        id: lookDownTimer
+        interval: 100
+        repeat: true
+        onTriggered: QGroundControl.videoManager.sendC12GimbalRate(0, -root._c12MaxSpeed)
     }
 
     Rectangle {
@@ -236,6 +282,17 @@ Item {
             Item { Layout.fillWidth: true; Layout.preferredHeight: root._btnHeight }
         }
 
+        QGCLabel {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            color: root._accentDim
+            font.pointSize: ScreenTools.smallFontPointSize
+            text: qsTr("Yaw %1°   Pitch %2°   Roll %3°")
+                    .arg(root._fmtAngle(QGroundControl.videoManager.c12YawDegrees))
+                    .arg(root._fmtAngle(QGroundControl.videoManager.c12PitchDegrees))
+                    .arg(root._fmtAngle(QGroundControl.videoManager.c12RollDegrees))
+        }
+
         // ---- Zoom ----------------------------------------------------------
         RowLayout {
             Layout.fillWidth: true
@@ -284,13 +341,54 @@ Item {
             }
         }
 
-        // ---- Track ---------------------------------------------------------
-        QGCButton {
-            text: root._trackActive ? qsTr("✕ Stop Tracking") : qsTr("◎ Track")
-            implicitHeight: root._btnHeight
+        // ---- Track / Look Down --------------------------------------------
+        RowLayout {
             Layout.fillWidth: true
-            primary: root._trackActive
-            onClicked: root._toggleTrack()
+            spacing: root._spacing
+
+            QGCButton {
+                text: root._trackActive ? qsTr("✕ Stop Tracking") : qsTr("◎ Track")
+                implicitHeight: root._btnHeight
+                Layout.fillWidth: true
+                primary: root._trackActive
+                onClicked: root._toggleTrack()
+            }
+
+            QGCButton {
+                text: root._lookDownActive ? qsTr("■ Stop Down") : qsTr("↓ Look Down")
+                implicitHeight: root._btnHeight
+                Layout.fillWidth: true
+                primary: root._lookDownActive
+                onClicked: root._toggleLookDown()
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: root._spacing
+
+            Switch {
+                text: qsTr("AI")
+                checked: QGroundControl.videoManager.c12AiEnabled
+                onClicked: {
+                    var enabled = !QGroundControl.videoManager.c12AiEnabled
+                    var sent = QGroundControl.videoManager.setC12AiEnabled(enabled)
+                    checked = Qt.binding(function() { return QGroundControl.videoManager.c12AiEnabled })
+                    root.statusMessage(sent
+                        ? (enabled ? qsTr("AI enable command sent") : qsTr("AI disable command sent"))
+                        : qsTr("AI command failed"))
+                }
+            }
+
+            QGCButton {
+                text: qsTr("Disable AI")
+                implicitHeight: root._btnHeight
+                Layout.fillWidth: true
+                onClicked: {
+                    var sent = QGroundControl.videoManager.setC12AiEnabled(false)
+                    root.statusMessage(sent ? qsTr("AI disable command sent") : qsTr("AI command failed"))
+                }
+            }
         }
 
         // ---- False-colour palette -----------------------------------------

@@ -4,7 +4,7 @@ import QGroundControl
 
 // STRATUM: operator-in-the-loop visual target designation overlay.
 //
-// Draws on top of the live video. A click drops a fixed 200x200 px selection box
+// Draws on top of the live video. A click drops a fixed selection box
 // (on the 1280x720 protocol frame) centred on the click point. That normalized
 // box is sent to two downstream trackers so operators can use whichever is
 // available on the airframe:
@@ -16,8 +16,8 @@ import QGroundControl
 //     selected the C12 (daggerCamera == 1) so we never spam UDP at a fixed IP
 //     the operator hasn't opted into.
 //
-// Drag on the video is reserved for gimbal pan/tilt (see FlyViewVideo.qml); this
-// overlay no longer draws a click-drag selection rectangle.
+// Ctrl+drag on the video emits a custom region while plain drag remains reserved
+// for gimbal pan/tilt (see FlyViewVideo.qml).
 Item {
     id: rootItem
 
@@ -25,11 +25,13 @@ Item {
     required property real videoWidth
     required property real videoHeight
 
-    // STRATUM: fixed 200x200-pixel selection box on the 1280x720 protocol frame.
-    // The Skydroid AI tracker uses 1280x720 coordinates internally, so a fixed
-    // pixel size gives a repeatable tracker footprint regardless of the on-screen
-    // video scaling.
-    readonly property int fixedBoxPx: 200
+    readonly property var _adminSettings: QGroundControl.settingsManager.adminSettings
+    readonly property int _fixedBoxPx: {
+        if (!_adminSettings) return 200
+        var raw = Number(_adminSettings.trackerBoxSizePx.rawValue)
+        if (!isFinite(raw)) return 200
+        return Math.max(32, Math.min(640, Math.round(raw)))
+    }
 
     readonly property bool _enabled: !!vehicle && videoWidth > 0 && videoHeight > 0
 
@@ -51,6 +53,12 @@ Item {
     readonly property real _marginH: (rootItem.width - videoWidth) / 2
     readonly property real _marginV: (rootItem.height - videoHeight) / 2
 
+    property bool _dragSelecting: false
+    property real _dragStartX: 0
+    property real _dragStartY: 0
+    property real _dragNowX: 0
+    property real _dragNowY: 0
+
     // --- Tracked target feed (from the companion via NEXAM_TARGET_TRACK) ---
     // status: 0=IDLE, 1=TRACKING, 2=LOST
     readonly property var  _track: vehicle ? vehicle.targetTrack : null
@@ -61,6 +69,16 @@ Item {
     function _normX(px) { return Math.max(0.0, Math.min(1.0, (px - _marginH) / videoWidth)) }
     function _normY(py) { return Math.max(0.0, Math.min(1.0, (py - _marginV) / videoHeight)) }
 
+    function _sendSelection(x0, y0, x1, y1) {
+        if (!_enabled) {
+            return
+        }
+        vehicle.sendTargetSelect(x0, y0, x1, y1, 1)
+        if (_c12Active) {
+            QGroundControl.videoManager.sendC12TrackRegion(x0, y0, x1, y1, _c12VideoSource)
+        }
+    }
+
     function mouseClicked(mouseX, mouseY) {
         if (!_enabled) {
             return
@@ -68,24 +86,65 @@ Item {
         // Fixed 200x200 protocol-frame box centred on the click.
         var cx = _normX(mouseX)
         var cy = _normY(mouseY)
-        var hw = (fixedBoxPx / 2) / 1280.0
-        var hh = (fixedBoxPx / 2) /  720.0
+        var hw = (_fixedBoxPx / 2) / 1280.0
+        var hh = (_fixedBoxPx / 2) /  720.0
         var x0 = Math.max(0.0, cx - hw)
         var y0 = Math.max(0.0, cy - hh)
         var x1 = Math.min(1.0, cx + hw)
         var y1 = Math.min(1.0, cy + hh)
-        vehicle.sendTargetSelect(x0, y0, x1, y1, 1)
-        if (_c12Active) {
-            QGroundControl.videoManager.sendC12TrackRegion(x0, y0, x1, y1, _c12VideoSource)
-        }
+        _sendSelection(x0, y0, x1, y1)
     }
 
-    // Kept as no-ops so existing FlyViewVideo MouseArea code that fans out drag
-    // events to this overlay still compiles. Region-from-drag has been retired
-    // (see file header) — drag on the video pans the gimbal instead.
-    function mouseDragStart(mouseX, mouseY) {}
-    function mouseDragPositionChanged(mouseX, mouseY) {}
-    function mouseDragEnd(mouseX, mouseY) {}
+    function mouseDragStart(mouseX, mouseY) {
+        if (!_enabled) {
+            return
+        }
+        _dragSelecting = true
+        _dragStartX = mouseX
+        _dragStartY = mouseY
+        _dragNowX = mouseX
+        _dragNowY = mouseY
+    }
+
+    function mouseDragPositionChanged(mouseX, mouseY) {
+        if (!_dragSelecting) {
+            return
+        }
+        _dragNowX = mouseX
+        _dragNowY = mouseY
+    }
+
+    function mouseDragEnd(mouseX, mouseY) {
+        if (!_dragSelecting) {
+            return
+        }
+        _dragNowX = mouseX
+        _dragNowY = mouseY
+        _dragSelecting = false
+
+        var x0 = _normX(Math.min(_dragStartX, _dragNowX))
+        var y0 = _normY(Math.min(_dragStartY, _dragNowY))
+        var x1 = _normX(Math.max(_dragStartX, _dragNowX))
+        var y1 = _normY(Math.max(_dragStartY, _dragNowY))
+
+        if ((x1 - x0) < 0.003 || (y1 - y0) < 0.003) {
+            mouseClicked(mouseX, mouseY)
+            return
+        }
+        _sendSelection(x0, y0, x1, y1)
+    }
+
+    Rectangle {
+        visible: rootItem._dragSelecting
+        color: Qt.rgba(1, 1, 1, 0.08)
+        border.color: "white"
+        border.width: 2
+        radius: 2
+        x: Math.min(rootItem._dragStartX, rootItem._dragNowX)
+        y: Math.min(rootItem._dragStartY, rootItem._dragNowY)
+        width: Math.abs(rootItem._dragNowX - rootItem._dragStartX)
+        height: Math.abs(rootItem._dragNowY - rootItem._dragStartY)
+    }
 
     // --- tracked target overlay (red box streamed back from the companion) ---
     Rectangle {

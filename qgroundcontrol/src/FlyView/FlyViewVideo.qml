@@ -119,6 +119,7 @@ Item {
         property real _pressX:      0
         property real _pressY:      0
         property bool _dragging:    false
+        property bool _ctrlTrackDrag: false
         readonly property real _dragThreshold: 10
 
         // STRATUM: current C12 pan/tilt speed derived from the live drag delta.
@@ -128,7 +129,14 @@ Item {
         property int _c12YawSpeed:   0
         property int _c12PitchSpeed: 0
         readonly property var  _vs:        QGroundControl.settingsManager.videoSettings
+        readonly property var  _admin:     QGroundControl.settingsManager.adminSettings
         readonly property bool _c12Active: _vs && _vs.daggerCamera.rawValue === 1
+        readonly property int _c12MaxSpeed: {
+            if (!_admin) return 100
+            var raw = Number(_admin.c12GimbalMaxSpeed.rawValue)
+            if (!isFinite(raw)) return 100
+            return Math.max(1, Math.min(127, Math.round(raw)))
+        }
 
         Timer {
             id:       c12GimbalDragTimer
@@ -149,9 +157,9 @@ Item {
             if (w <= 0 || h <= 0) return
             var dx = mouseX - _pressX
             var dy = mouseY - _pressY
-            // 200 = full-scale at half-screen drag; screen-down maps to pitch-down.
-            _c12YawSpeed   = Math.max(-100, Math.min(100, Math.round(dx / w * 200)))
-            _c12PitchSpeed = Math.max(-100, Math.min(100, Math.round(-dy / h * 200)))
+            var fullScale = _c12MaxSpeed * 2
+            _c12YawSpeed   = Math.max(-_c12MaxSpeed, Math.min(_c12MaxSpeed, Math.round(dx / w * fullScale)))
+            _c12PitchSpeed = Math.max(-_c12MaxSpeed, Math.min(_c12MaxSpeed, Math.round(-dy / h * fullScale)))
         }
 
         onDoubleClicked: QGroundControl.videoManager.fullScreen = !QGroundControl.videoManager.fullScreen
@@ -160,37 +168,50 @@ Item {
             _pressX = mouse.x
             _pressY = mouse.y
             _dragging = false
+            _ctrlTrackDrag = (mouse.modifiers & Qt.ControlModifier) !== 0
         }
 
         onPositionChanged: (mouse) => {
             if (!_dragging && (Math.abs(mouse.x - _pressX) >= _dragThreshold || Math.abs(mouse.y - _pressY) >= _dragThreshold)) {
                 _dragging = true
-                onScreenGimbalController.mouseDragStart(_pressX, _pressY)
-                cameraTrackingController.mouseDragStart(_pressX, _pressY)
-                if (_c12Active) {
-                    _c12YawSpeed = 0
-                    _c12PitchSpeed = 0
-                    c12GimbalDragTimer.start()
+                if (_ctrlTrackDrag) {
+                    targetTrackingOverlay.mouseDragStart(_pressX, _pressY)
+                } else {
+                    onScreenGimbalController.mouseDragStart(_pressX, _pressY)
+                    cameraTrackingController.mouseDragStart(_pressX, _pressY)
+                    if (_c12Active) {
+                        _c12YawSpeed = 0
+                        _c12PitchSpeed = 0
+                        c12GimbalDragTimer.start()
+                    }
                 }
             }
             if (_dragging) {
-                onScreenGimbalController.mouseDragPositionChanged(mouse.x, mouse.y)
-                cameraTrackingController.mouseDragPositionChanged(mouse.x, mouse.y)
-                if (_c12Active) {
-                    _updateC12DragSpeed(mouse.x, mouse.y)
+                if (_ctrlTrackDrag) {
+                    targetTrackingOverlay.mouseDragPositionChanged(mouse.x, mouse.y)
+                } else {
+                    onScreenGimbalController.mouseDragPositionChanged(mouse.x, mouse.y)
+                    cameraTrackingController.mouseDragPositionChanged(mouse.x, mouse.y)
+                    if (_c12Active) {
+                        _updateC12DragSpeed(mouse.x, mouse.y)
+                    }
                 }
             }
         }
 
         onReleased: (mouse) => {
             if (_dragging) {
-                onScreenGimbalController.mouseDragEnd()
-                cameraTrackingController.mouseDragEnd(mouse.x, mouse.y)
-                if (_c12Active) {
-                    c12GimbalDragTimer.stop()
-                    QGroundControl.videoManager.sendC12GimbalRate(0, 0)
-                    _c12YawSpeed = 0
-                    _c12PitchSpeed = 0
+                if (_ctrlTrackDrag) {
+                    targetTrackingOverlay.mouseDragEnd(mouse.x, mouse.y)
+                } else {
+                    onScreenGimbalController.mouseDragEnd()
+                    cameraTrackingController.mouseDragEnd(mouse.x, mouse.y)
+                    if (_c12Active) {
+                        c12GimbalDragTimer.stop()
+                        QGroundControl.videoManager.sendC12GimbalRate(0, 0)
+                        _c12YawSpeed = 0
+                        _c12PitchSpeed = 0
+                    }
                 }
             } else {
                 onScreenGimbalController.mouseClicked(mouse.x, mouse.y)
@@ -198,6 +219,7 @@ Item {
                 targetTrackingOverlay.mouseClicked(mouse.x, mouse.y)
             }
             _dragging = false
+            _ctrlTrackDrag = false
         }
 
         // STRATUM: scroll-wheel zoom for the C12. Each wheel notch fires a single

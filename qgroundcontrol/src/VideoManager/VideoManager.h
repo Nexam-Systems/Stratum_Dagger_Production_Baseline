@@ -50,6 +50,10 @@ class VideoManager : public QObject
     // FlyView Track button can be a one-source-of-truth toggle regardless of
     // whether the operator armed tracking from the button or from a video click.
     Q_PROPERTY(bool     c12TrackingActive       READ c12TrackingActive                          NOTIFY c12TrackingActiveChanged)
+    Q_PROPERTY(bool     c12AiEnabled            READ c12AiEnabled                               NOTIFY c12AiEnabledChanged)
+    Q_PROPERTY(double   c12YawDegrees           READ c12YawDegrees                              NOTIFY c12AttitudeChanged)
+    Q_PROPERTY(double   c12PitchDegrees         READ c12PitchDegrees                            NOTIFY c12AttitudeChanged)
+    Q_PROPERTY(double   c12RollDegrees          READ c12RollDegrees                             NOTIFY c12AttitudeChanged)
 
     friend class VideoManagerInitTest;
 
@@ -75,6 +79,7 @@ public:
     Q_INVOKABLE bool sendC12TrackRegion(qreal x0, qreal y0, qreal x1, qreal y1, int videoSource = 0);
     // STRATUM: stop C12 in-camera tracking (AI V1.2.0 release + disable).
     Q_INVOKABLE bool stopC12Track();
+    Q_INVOKABLE bool setC12AiEnabled(bool enabled);
     // STRATUM: C12 pan/tilt rate command (Skydroid TOP §3.2). yaw/pitch are signed
     // 8-bit speeds in units of 0.5°/s; positive yaw = right, positive pitch = up.
     // Both frames (GSY, GSP) are sent so a single call updates both axes.
@@ -105,6 +110,10 @@ public:
     bool isUvc() const;
     bool recording() const { return _recording; }
     bool c12TrackingActive() const { return _c12TrackActive; }
+    bool c12AiEnabled() const { return _c12AiEnabled; }
+    double c12YawDegrees() const { return _c12YawDeg; }
+    double c12PitchDegrees() const { return _c12PitchDeg; }
+    double c12RollDegrees() const { return _c12RollDeg; }
     bool streaming() const { return _streaming; }
     double aspectRatio() const;
     double hfov() const;
@@ -133,6 +142,8 @@ signals:
     void streamingChanged();
     void uvcVideoSourceIDChanged();
     void c12TrackingActiveChanged();
+    void c12AiEnabledChanged();
+    void c12AttitudeChanged();
     void videoSizeChanged();
 
 private slots:
@@ -197,6 +208,9 @@ private:
     bool _c12TrackActive = false;
     quint16 _c12AiSequence = 0;
     bool _c12AiEnabled = false;
+    double _c12YawDeg = 0.0;
+    double _c12PitchDeg = 0.0;
+    double _c12RollDeg = 0.0;
 
     InitState _initState = InitState::NotStarted;
     QFuture<bool> _gstInitFuture;

@@ -1,0 +1,34 @@
+{
+    "version": 1,
+    "fileType": "FactMetaData",
+    "QGC.MetaData.Facts": [
+        {
+            "name": "trackerBoxSizePx",
+            "shortDesc": "Default click tracker box size in pixels",
+            "longDesc": "When the operator single-clicks on the video, this fixed-size box is centered at the click point and sent to the trackers.",
+            "type": "uint32",
+            "default": 200,
+            "min": 32,
+            "max": 640,
+            "label": "Tracker click box size"
+        },
+        {
+            "name": "c12GimbalMaxSpeed",
+            "shortDesc": "Maximum C12 gimbal rate command",
+            "longDesc": "Upper bound for drag-derived C12 yaw/pitch speed commands. Units are protocol speed units (0.5 deg/s per unit).",
+            "type": "uint32",
+            "default": 100,
+            "min": 1,
+            "max": 127,
+            "label": "C12 max gimbal speed"
+        },
+        {
+            "name": "passwordHashOverride",
+            "shortDesc": "Runtime admin password hash override",
+            "longDesc": "SHA-256 hex of the admin password set at runtime from the hidden admin dialog. Empty means use the compile-time hash.",
+            "type": "string",
+            "default": "",
+            "label": "Password hash override"
+        }
+    ]
+}
