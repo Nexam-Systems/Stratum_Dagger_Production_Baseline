@@ -66,14 +66,12 @@ VideoManager::VideoManager(QObject *parent)
     , _videoSettings(SettingsManager::instance()->videoSettings())
 {
     qCDebug(VideoManagerLog) << this;
-        if (receiver->name() != QStringLiteral("videoContent")) {
-            continue;
-        }
     (void) qRegisterMetaType<VideoReceiver::STATUS>("STATUS");
 
 #ifdef QGC_GST_STREAMING
     _gstreamerDisabledForUnitTests = _shouldSkipGStreamerForUnitTests();
-        const QString videoFileName = videoFileNameTemplate.arg("");
+    if (_gstreamerDisabledForUnitTests) {
+        qCInfo(VideoManagerLog) << "Skipping GStreamer initialization for unit tests";
     }
 #endif
 }
@@ -81,9 +79,7 @@ VideoManager::VideoManager(QObject *parent)
 VideoManager::~VideoManager()
 {
     qCDebug(VideoManagerLog) << this;
-        if (receiver->name() != QStringLiteral("videoContent")) {
-            continue;
-        }
+}
 
 // STRATUM: current C12 gimbal IP. Reads videoSettings.daggerC12Host; falls back to the
 // factory default so a missing/empty setting doesn't silently break the camera.
