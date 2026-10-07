@@ -44,6 +44,7 @@
 #include <QtQuick/QQuickWindow>
 
 #include <atomic>
+#include <cmath>
 
 QGC_LOGGING_CATEGORY(VideoManagerLog, "Video.VideoManager")
 
@@ -98,6 +99,14 @@ bool VideoManager::sendCameraAction(const QString &action)
         payload = QByteArrayLiteral("#TPUD2wDZM0A65");
     } else if (normalizedAction == "zoom-out") {
         payload = QByteArrayLiteral("#TPUD2wDZM0B66");
+    } else if (normalizedAction == "zoom-1x") {
+        payload = QByteArrayLiteral("#TPUD2wDZM0155");
+    } else if (normalizedAction == "zoom-2x") {
+        payload = QByteArrayLiteral("#TPUD2wDZM0256");
+    } else if (normalizedAction == "zoom-3x") {
+        payload = QByteArrayLiteral("#TPUD2wDZM0357");
+    } else if (normalizedAction == "zoom-4x") {
+        payload = QByteArrayLiteral("#TPUD2wDZM0458");
     } else if (normalizedAction == "pan-up") {
         payload = QByteArrayLiteral("#TPUG2wGSP1E6C");
     } else if (normalizedAction == "pan-down") {
@@ -408,6 +417,7 @@ void VideoManager::_processC12Frame(const QByteArray &frame)
     _c12YawDeg = yawDeg;
     _c12PitchDeg = pitchDeg;
     _c12RollDeg = rollDeg;
+    _c12AttitudeTimestampMs = QDateTime::currentMSecsSinceEpoch();
     emit c12AttitudeChanged();
 
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
@@ -598,6 +608,45 @@ bool VideoManager::sendC12GimbalRate(int yaw, int pitch)
     const bool y = _c12Socket->writeDatagram(yawFrame,   host, kC12ControlPort) == yawFrame.size();
     const bool p = _c12Socket->writeDatagram(pitchFrame, host, kC12ControlPort) == pitchFrame.size();
     return y && p;
+}
+
+bool VideoManager::sendC12GimbalCombinedRate(int yaw, int pitch)
+{
+    _ensureC12Socket();
+    if (!_c12Socket) return false;
+    const QHostAddress host(_daggerC12Host());
+    if (host.isNull()) return false;
+
+    const int clampedYaw = qBound(-127, yaw, 127);
+    const int clampedPitch = qBound(-127, pitch, 127);
+    const QByteArray rates = QByteArray::number(uint8_t(clampedYaw) & 0xFF, 16).toUpper().rightJustified(2, '0')
+                             + QByteArray::number(uint8_t(clampedPitch) & 0xFF, 16).toUpper().rightJustified(2, '0');
+    const QByteArray frame = _c12BuildFrame("UG", '4', 'w', "GSM", rates);
+    return _c12Socket->writeDatagram(frame, host, kC12ControlPort) == frame.size();
+}
+
+bool VideoManager::setC12GimbalAngles(double yawDegrees, double pitchDegrees, int speed)
+{
+    if (!std::isfinite(yawDegrees) || !std::isfinite(pitchDegrees)) return false;
+    _ensureC12Socket();
+    if (!_c12Socket) return false;
+    const QHostAddress host(_daggerC12Host());
+    if (host.isNull()) return false;
+
+    const double boundedYaw = qBound(-90.0, yawDegrees, 90.0);
+    const double boundedPitch = qBound(-90.0, pitchDegrees, 90.0);
+    const int boundedSpeed = qBound(0, speed, 127);
+    const auto signedAngleHex = [](double degrees) {
+        const int angleHundredths = qBound(-9000, qRound(degrees * 100.0), 9000);
+        return QByteArray::number(static_cast<uint16_t>(static_cast<int16_t>(angleHundredths)), 16)
+            .toUpper().rightJustified(4, '0');
+    };
+    const QByteArray speedHex = QByteArray::number(boundedSpeed, 16).toUpper().rightJustified(2, '0');
+    const QByteArray yawFrame = _c12BuildFrame("UG", '6', 'w', "GAY", signedAngleHex(boundedYaw) + speedHex);
+    const QByteArray pitchFrame = _c12BuildFrame("UG", '6', 'w', "GAP", signedAngleHex(boundedPitch) + speedHex);
+    const bool yawSent = _c12Socket->writeDatagram(yawFrame, host, kC12ControlPort) == yawFrame.size();
+    const bool pitchSent = _c12Socket->writeDatagram(pitchFrame, host, kC12ControlPort) == pitchFrame.size();
+    return yawSent && pitchSent;
 }
 
 bool VideoManager::moveRecordedFile(const QUrl &fromPath, const QUrl &toPath)

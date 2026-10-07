@@ -54,6 +54,7 @@ class VideoManager : public QObject
     Q_PROPERTY(double   c12YawDegrees           READ c12YawDegrees                              NOTIFY c12AttitudeChanged)
     Q_PROPERTY(double   c12PitchDegrees         READ c12PitchDegrees                            NOTIFY c12AttitudeChanged)
     Q_PROPERTY(double   c12RollDegrees          READ c12RollDegrees                             NOTIFY c12AttitudeChanged)
+    Q_PROPERTY(qint64   c12AttitudeTimestampMs  READ c12AttitudeTimestampMs                     NOTIFY c12AttitudeChanged)
 
     friend class VideoManagerInitTest;
 
@@ -84,6 +85,8 @@ public:
     // 8-bit speeds in units of 0.5°/s; positive yaw = right, positive pitch = up.
     // Both frames (GSY, GSP) are sent so a single call updates both axes.
     Q_INVOKABLE bool sendC12GimbalRate(int yaw, int pitch);
+    Q_INVOKABLE bool sendC12GimbalCombinedRate(int yaw, int pitch);
+    Q_INVOKABLE bool setC12GimbalAngles(double yawDegrees, double pitchDegrees, int speed);
     // STRATUM: move a completed local recording (or any file) to a user-chosen
     // destination. Both arguments accept QUrl (file:// from QML FileDialog) or a
     // plain filesystem path string. Overwrites the destination if it exists.
@@ -114,6 +117,7 @@ public:
     double c12YawDegrees() const { return _c12YawDeg; }
     double c12PitchDegrees() const { return _c12PitchDeg; }
     double c12RollDegrees() const { return _c12RollDeg; }
+    qint64 c12AttitudeTimestampMs() const { return _c12AttitudeTimestampMs; }
     bool streaming() const { return _streaming; }
     double aspectRatio() const;
     double hfov() const;
@@ -211,6 +215,7 @@ private:
     double _c12YawDeg = 0.0;
     double _c12PitchDeg = 0.0;
     double _c12RollDeg = 0.0;
+    qint64 _c12AttitudeTimestampMs = 0;
 
     InitState _initState = InitState::NotStarted;
     QFuture<bool> _gstInitFuture;

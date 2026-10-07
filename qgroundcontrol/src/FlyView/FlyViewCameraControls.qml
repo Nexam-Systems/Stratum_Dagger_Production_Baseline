@@ -34,6 +34,7 @@ Item {
     signal statusMessage(string text)
 
     readonly property var _vs: QGroundControl.settingsManager.videoSettings
+    readonly property bool _c12Active: _vs && _vs.daggerCamera.rawValue === 1
     // Profile-scoped URL pair. Kept as readonly properties so QML change-tracking follows
     // the daggerMode flag automatically.
     readonly property string _tvUrl: daggerMode ? _vs.daggerC12TvRtspUrl.rawValue : _vs.tvRtspUrl.rawValue
@@ -53,6 +54,8 @@ Item {
     property string _pendingRecordFile: ""
     property bool _saveDialogOpen: false
     property bool _lookDownActive: false
+    property bool _gpsExpanded: false
+    property bool _absoluteAnglesExpanded: false
 
     readonly property var _admin: QGroundControl.settingsManager.adminSettings
     readonly property int _c12MaxSpeed: {
@@ -86,6 +89,18 @@ Item {
         if (!url) {
             root.statusMessage(qsTr("No %1 URL set — configure it in Application Settings ▸ Video").arg(feed))
             return
+        }
+        if (_vs.rtspUrl.rawValue !== url) {
+            const vehicle = QGroundControl.multiVehicleManager.activeVehicle
+            if (vehicle) {
+                vehicle.sendTargetSelect(0, 0, 0, 0, 0)
+                if (vehicle.targetTrack) {
+                    vehicle.targetTrack.clear()
+                }
+            }
+            if (root._c12Active) {
+                QGroundControl.videoManager.stopC12Track()
+            }
         }
         // Ensure the RTSP source is active, then point it at the chosen feed. Writing
         // rtspUrl restarts the stream (VideoManager listens on its rawValueChanged), so
@@ -293,6 +308,67 @@ Item {
                     .arg(root._fmtAngle(QGroundControl.videoManager.c12RollDegrees))
         }
 
+        QGCButton {
+            Layout.fillWidth: true
+            visible: root._c12Active
+            text: root._gpsExpanded ? qsTr("Hide Target GPS") : qsTr("Target GPS Estimate")
+            onClicked: root._gpsExpanded = !root._gpsExpanded
+        }
+
+        QGCButton {
+            Layout.fillWidth: true
+            visible: root._c12Active && !root.compact
+            text: root._absoluteAnglesExpanded ? qsTr("Hide Absolute Angles") : qsTr("Absolute Angles")
+            onClicked: root._absoluteAnglesExpanded = !root._absoluteAnglesExpanded
+        }
+
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 3
+            visible: root._c12Active && !root.compact && root._absoluteAnglesExpanded
+            QGCLabel { text: qsTr("Yaw °") }
+            QGCTextField {
+                id: absoluteYawField
+                Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 8
+                text: "0"
+                inputMethodHints: Qt.ImhFormattedNumbersOnly
+            }
+            QGCLabel { text: qsTr("−90 to +90") }
+            QGCLabel { text: qsTr("Pitch °") }
+            QGCTextField {
+                id: absolutePitchField
+                Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 8
+                text: "-45"
+                inputMethodHints: Qt.ImhFormattedNumbersOnly
+            }
+            QGCButton {
+                text: qsTr("Go")
+                onClicked: {
+                    var yaw = Number(absoluteYawField.text)
+                    var pitch = Number(absolutePitchField.text)
+                    if (!isFinite(yaw) || !isFinite(pitch) || yaw < -90 || yaw > 90 || pitch < -90 || pitch > 90) {
+                        root.statusMessage(qsTr("Yaw and pitch must be between −90° and +90°"))
+                        return
+                    }
+                    var sent = QGroundControl.videoManager.setC12GimbalAngles(yaw, pitch, root._c12MaxSpeed)
+                    root.statusMessage(sent ? qsTr("Absolute gimbal angles sent") : qsTr("Gimbal angle command failed"))
+                }
+            }
+        }
+
+        TargetGpsEstimate {
+            Layout.fillWidth: true
+            visible: root._c12Active && root._gpsExpanded
+            vehicle: QGroundControl.multiVehicleManager.activeVehicle
+            tracker: vehicle ? vehicle.targetTrack : null
+            gimbalYawDegrees: QGroundControl.videoManager.c12YawDegrees
+            gimbalPitchDegrees: QGroundControl.videoManager.c12PitchDegrees
+            gimbalTimestampMs: QGroundControl.videoManager.c12AttitudeTimestampMs
+            selectedCameraSource: tracker ? tracker.selectionVideoSource : -1
+            activeCameraSource: root._feedIrActive ? 1 : 0
+            selectionTimestampMs: tracker ? tracker.selectionTimestampMs : 0
+        }
+
         // ---- Zoom ----------------------------------------------------------
         RowLayout {
             Layout.fillWidth: true
@@ -315,6 +391,31 @@ Item {
                 implicitHeight: root._btnHeight
                 Layout.fillWidth: true
                 onClicked: { if (root._send("zoom-in")) root.statusMessage(qsTr("Zoom in")) }
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: root._spacing
+
+            QGCLabel {
+                text: qsTr("PRESET")
+                color: root._accentDim
+                font.pointSize: ScreenTools.smallFontPointSize
+            }
+            Repeater {
+                model: [1, 2, 3, 4]
+                QGCButton {
+                    required property int modelData
+                    text: qsTr("%1x").arg(modelData)
+                    implicitHeight: root._btnHeight
+                    Layout.fillWidth: true
+                    onClicked: {
+                        if (root._send("zoom-" + modelData + "x")) {
+                            root.statusMessage(qsTr("Zoom preset %1x").arg(modelData))
+                        }
+                    }
+                }
             }
         }
 

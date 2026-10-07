@@ -28,6 +28,9 @@ class VehicleTargetTrackFactGroup : public FactGroup
     Q_PROPERTY(Fact *botRightX  READ botRightX  CONSTANT)
     Q_PROPERTY(Fact *botRightY  READ botRightY  CONSTANT)
     Q_PROPERTY(Fact *confidence READ confidence CONSTANT)
+    Q_PROPERTY(qint64 lastUpdateMs READ lastUpdateMs NOTIFY lastUpdateChanged)
+    Q_PROPERTY(qint64 selectionTimestampMs READ selectionTimestampMs NOTIFY selectionChanged)
+    Q_PROPERTY(int selectionVideoSource READ selectionVideoSource NOTIFY selectionChanged)
 
 public:
     explicit VehicleTargetTrackFactGroup(QObject *parent = nullptr);
@@ -39,6 +42,12 @@ public:
     Fact *botRightX()  { return &_botRightXFact; }
     Fact *botRightY()  { return &_botRightYFact; }
     Fact *confidence() { return &_confidenceFact; }
+    qint64 lastUpdateMs() const { return _lastUpdateMs; }
+    qint64 selectionTimestampMs() const { return _selectionTimestampMs; }
+    int selectionVideoSource() const { return _selectionVideoSource; }
+
+    Q_INVOKABLE void registerSelection(int videoSource, qint64 timestampMs);
+    Q_INVOKABLE void clear();
 
     // Tracker status enum, mirroring the message field.
     enum TrackStatus {
@@ -49,6 +58,10 @@ public:
 
     // Overrides from FactGroup
     void handleMessage(Vehicle *vehicle, const mavlink_message_t &message) final;
+
+signals:
+    void lastUpdateChanged();
+    void selectionChanged();
 
 private slots:
     void _checkStale();
@@ -63,6 +76,9 @@ private:
     Fact _confidenceFact = Fact(0, QStringLiteral("confidence"), FactMetaData::valueTypeFloat);
 
     QTimer _staleTimer;
+    qint64 _lastUpdateMs = 0;
+    qint64 _selectionTimestampMs = 0;
+    int _selectionVideoSource = -1;
 
     // Tracker nominally streams at video frame rate (>=15 Hz). Treat the track as
     // stale after ~300 ms of silence so a brief hiccup does not flicker the box, but

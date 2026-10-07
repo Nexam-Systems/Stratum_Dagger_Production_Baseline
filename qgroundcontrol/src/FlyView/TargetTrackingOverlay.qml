@@ -73,6 +73,9 @@ Item {
         if (!_enabled) {
             return
         }
+        if (vehicle.targetTrack) {
+            vehicle.targetTrack.registerSelection(_c12VideoSource, Date.now())
+        }
         vehicle.sendTargetSelect(x0, y0, x1, y1, 1)
         if (_c12Active) {
             QGroundControl.videoManager.sendC12TrackRegion(x0, y0, x1, y1, _c12VideoSource)

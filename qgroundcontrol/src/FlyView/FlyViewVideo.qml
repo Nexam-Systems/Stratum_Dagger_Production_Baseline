@@ -144,7 +144,7 @@ Item {
             repeat:   true
             onTriggered: {
                 if (flyViewVideoMouseArea._c12Active) {
-                    QGroundControl.videoManager.sendC12GimbalRate(
+                    QGroundControl.videoManager.sendC12GimbalCombinedRate(
                         flyViewVideoMouseArea._c12YawSpeed,
                         flyViewVideoMouseArea._c12PitchSpeed)
                 }
@@ -208,7 +208,7 @@ Item {
                     cameraTrackingController.mouseDragEnd(mouse.x, mouse.y)
                     if (_c12Active) {
                         c12GimbalDragTimer.stop()
-                        QGroundControl.videoManager.sendC12GimbalRate(0, 0)
+                        QGroundControl.videoManager.sendC12GimbalCombinedRate(0, 0)
                         _c12YawSpeed = 0
                         _c12PitchSpeed = 0
                     }
