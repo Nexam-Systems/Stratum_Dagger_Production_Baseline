@@ -2313,6 +2313,15 @@ void Vehicle::setFirmwareVersion(int majorVersion, int minorVersion, int patchVe
     emit firmwareVersionChanged();
 }
 
+void Vehicle::setNxCapabilities(int schemaMajor, int schemaMinor, int capabilityFlags, bool markerValid)
+{
+    _nxVersionReceived = true;
+    _nxMarkerValid = markerValid;
+    _nxSchemaMajor = static_cast<uint8_t>(schemaMajor & 0xFF);
+    _nxSchemaMinor = static_cast<uint8_t>(schemaMinor & 0xFF);
+    _nxCapabilityFlags = static_cast<uint8_t>(capabilityFlags & 0xFF);
+}
+
 bool Vehicle::checkPx4VersionAgainstAdminFloor(const QString& context) const
 {
     AdminSettings* admin = SettingsManager::instance()->adminSettings();
@@ -2329,7 +2338,20 @@ bool Vehicle::checkPx4VersionAgainstAdminFloor(const QString& context) const
         return true;
     }
     if (_firmwareMajorVersion < 0) {
-        return true;
+        const QString reason = tr("Base firmware version was not reported by the autopilot");
+        qCWarning(VehicleLog).noquote() << "STRATUM base firmware version check:" << reason;
+        if (strict) {
+            const QString displayText = context.isEmpty() ? reason : tr("%1: %2").arg(context, reason);
+            if (m_statusTextHandler) {
+                m_statusTextHandler->handleHTMLEscapedTextMessage(
+                    MAV_COMP_ID_MISSIONPLANNER,
+                    MAV_SEVERITY_WARNING,
+                    displayText.toHtmlEscaped(),
+                    QString());
+            }
+            QGC::showAppMessage(displayText);
+        }
+        return false;
     }
 
     const bool belowRequiredVersion =
@@ -2340,10 +2362,10 @@ bool Vehicle::checkPx4VersionAgainstAdminFloor(const QString& context) const
         return true;
     }
 
-    const QString reason = tr("PX4 firmware %1.%2.%3 is older than the required %4.%5.%6")
+    const QString reason = tr("Base firmware %1.%2.%3 is older than the required %4.%5.%6")
         .arg(_firmwareMajorVersion).arg(_firmwareMinorVersion).arg(_firmwarePatchVersion)
         .arg(requiredMajor).arg(requiredMinor).arg(requiredPatch);
-    qCWarning(VehicleLog).noquote() << "STRATUM PX4 version floor:" << reason
+    qCWarning(VehicleLog).noquote() << "STRATUM base firmware version check:" << reason
                                     << (context.isEmpty() ? QString() : QStringLiteral("| context=") + context);
     if (!strict) {
         return false;
@@ -2358,6 +2380,45 @@ bool Vehicle::checkPx4VersionAgainstAdminFloor(const QString& context) const
             QString());
     }
     QGC::showAppMessage(displayText);
+    return false;
+}
+
+bool Vehicle::checkStratumCustomVersionAgainstAdminFloor(const QString& context) const
+{
+    AdminSettings* admin = SettingsManager::instance()->adminSettings();
+    if (!admin) {
+        return true;
+    }
+
+    const int requiredSchemaMajor = admin->requiredStratumSchemaMajor()->rawValue().toInt();
+    const int requiredNxMajor = admin->requiredStratumNxMajor()->rawValue().toInt();
+    const bool strict = admin->strictCompatibilityGate()->rawValue().toBool();
+    QString reason;
+
+    if (!_nxVersionReceived || !_nxMarkerValid) {
+        reason = tr("firmware is missing the STRATUM NX marker in AUTOPILOT_VERSION");
+    } else if (_nxSchemaMajor != requiredSchemaMajor) {
+        reason = tr("STRATUM schema major %1 does not match required %2")
+                     .arg(_nxSchemaMajor).arg(requiredSchemaMajor);
+    } else if (_firmwareCustomMajorVersion < requiredNxMajor) {
+        reason = tr("STRATUM NX major %1 is below required %2")
+                     .arg(_firmwareCustomMajorVersion).arg(requiredNxMajor);
+    } else {
+        return true;
+    }
+
+    qCWarning(VehicleLog).noquote() << "STRATUM custom version check:" << reason;
+    if (strict) {
+        const QString displayText = context.isEmpty() ? reason : tr("%1: %2").arg(context, reason);
+        if (m_statusTextHandler) {
+            m_statusTextHandler->handleHTMLEscapedTextMessage(
+                MAV_COMP_ID_MISSIONPLANNER,
+                MAV_SEVERITY_WARNING,
+                displayText.toHtmlEscaped(),
+                QString());
+        }
+        QGC::showAppMessage(displayText);
+    }
     return false;
 }
 

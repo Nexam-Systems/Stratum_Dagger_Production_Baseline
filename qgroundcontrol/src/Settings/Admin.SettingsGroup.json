@@ -4,41 +4,61 @@
     "QGC.MetaData.Facts": [
         {
             "name": "requiredPx4MajorVersion",
-            "shortDesc": "Required PX4 firmware major version",
-            "longDesc": "Minimum PX4 firmware major version compared with the value reported by AUTOPILOT_VERSION. Set all version fields to zero to disable this check.",
+            "shortDesc": "Required base firmware major version",
+            "longDesc": "Minimum base firmware major version reported by the autopilot. Set all version fields to zero to disable this check.",
             "type": "uint32",
             "default": 1,
             "min": 0,
             "max": 255,
-            "label": "Required PX4 major version"
+            "label": "Required base firmware major"
         },
         {
             "name": "requiredPx4MinorVersion",
-            "shortDesc": "Required PX4 firmware minor version",
-            "longDesc": "Minimum PX4 firmware minor version when the reported major version matches the required major version.",
+            "shortDesc": "Required base firmware minor version",
+            "longDesc": "Minimum base firmware minor version when the reported major version matches the required major version.",
             "type": "uint32",
             "default": 14,
             "min": 0,
             "max": 255,
-            "label": "Required PX4 minor version"
+            "label": "Required base firmware minor"
         },
         {
             "name": "requiredPx4PatchVersion",
-            "shortDesc": "Required PX4 firmware patch version",
-            "longDesc": "Minimum PX4 firmware patch version when the reported major and minor versions match the required values.",
+            "shortDesc": "Required base firmware patch version",
+            "longDesc": "Minimum base firmware patch version when the reported major and minor versions match the required values.",
             "type": "uint32",
             "default": 0,
             "min": 0,
             "max": 255,
-            "label": "Required PX4 patch version"
+            "label": "Required base firmware patch"
+        },
+        {
+            "name": "requiredStratumSchemaMajor",
+            "shortDesc": "Required STRATUM NX schema major version",
+            "longDesc": "The schema major reported in AUTOPILOT_VERSION custom_version must exactly match this value.",
+            "type": "uint32",
+            "default": 1,
+            "min": 0,
+            "max": 255,
+            "label": "Required STRATUM schema major"
+        },
+        {
+            "name": "requiredStratumNxMajor",
+            "shortDesc": "Required STRATUM NX firmware major version",
+            "longDesc": "The NX firmware major reported in AUTOPILOT_VERSION custom_version must be at least this value.",
+            "type": "uint32",
+            "default": 1,
+            "min": 0,
+            "max": 255,
+            "label": "Required STRATUM NX major"
         },
         {
             "name": "strictCompatibilityGate",
-            "shortDesc": "Show operator warning for PX4 version mismatch",
-            "longDesc": "When enabled, a PX4 version below the configured minimum produces an operator-visible warning at connection. When disabled, the mismatch is recorded in the log only.",
+            "shortDesc": "Show operator warning for firmware mismatch",
+            "longDesc": "Incompatible base/NX firmware is disconnected either way. When enabled, the mismatch also produces an operator-visible warning; when disabled, it is recorded in the log only.",
             "type": "bool",
             "default": true,
-            "label": "Show strict PX4 version warning"
+            "label": "Show strict firmware warning"
         },
         {
             "name": "trackerBoxSizePx",

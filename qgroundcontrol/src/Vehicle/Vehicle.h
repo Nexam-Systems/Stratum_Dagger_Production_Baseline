@@ -699,6 +699,8 @@ public:
     QString firmwareVersionTypeString() const;
     void setFirmwareVersion(int majorVersion, int minorVersion, int patchVersion, FIRMWARE_VERSION_TYPE versionType = FIRMWARE_VERSION_TYPE_OFFICIAL);
     bool checkPx4VersionAgainstAdminFloor(const QString& context = QString()) const;
+    void setNxCapabilities(int schemaMajor, int schemaMinor, int capabilityFlags, bool markerValid);
+    bool checkStratumCustomVersionAgainstAdminFloor(const QString& context = QString()) const;
     void setFirmwareCustomVersion(int majorVersion, int minorVersion, int patchVersion);
     // versionNotSetValue inherited from VehicleTypes
 
@@ -1053,6 +1055,11 @@ private:
     int _firmwareCustomMajorVersion = versionNotSetValue;
     int _firmwareCustomMinorVersion = versionNotSetValue;
     int _firmwareCustomPatchVersion = versionNotSetValue;
+    bool _nxVersionReceived = false;
+    bool _nxMarkerValid = false;
+    uint8_t _nxSchemaMajor = 0;
+    uint8_t _nxSchemaMinor = 0;
+    uint8_t _nxCapabilityFlags = 0;
     FIRMWARE_VERSION_TYPE _firmwareVersionType = FIRMWARE_VERSION_TYPE_OFFICIAL;
 
     // Vendor and Product as reported from the first autopilot version message
