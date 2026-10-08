@@ -698,6 +698,7 @@ public:
     int firmwareBoardProductId() const { return _firmwareBoardProductId; }
     QString firmwareVersionTypeString() const;
     void setFirmwareVersion(int majorVersion, int minorVersion, int patchVersion, FIRMWARE_VERSION_TYPE versionType = FIRMWARE_VERSION_TYPE_OFFICIAL);
+    bool checkPx4VersionAgainstAdminFloor(const QString& context = QString()) const;
     void setFirmwareCustomVersion(int majorVersion, int minorVersion, int patchVersion);
     // versionNotSetValue inherited from VehicleTypes
 

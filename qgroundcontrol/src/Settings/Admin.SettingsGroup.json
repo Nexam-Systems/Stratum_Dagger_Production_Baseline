@@ -3,6 +3,44 @@
     "fileType": "FactMetaData",
     "QGC.MetaData.Facts": [
         {
+            "name": "requiredPx4MajorVersion",
+            "shortDesc": "Required PX4 firmware major version",
+            "longDesc": "Minimum PX4 firmware major version compared with the value reported by AUTOPILOT_VERSION. Set all version fields to zero to disable this check.",
+            "type": "uint32",
+            "default": 1,
+            "min": 0,
+            "max": 255,
+            "label": "Required PX4 major version"
+        },
+        {
+            "name": "requiredPx4MinorVersion",
+            "shortDesc": "Required PX4 firmware minor version",
+            "longDesc": "Minimum PX4 firmware minor version when the reported major version matches the required major version.",
+            "type": "uint32",
+            "default": 14,
+            "min": 0,
+            "max": 255,
+            "label": "Required PX4 minor version"
+        },
+        {
+            "name": "requiredPx4PatchVersion",
+            "shortDesc": "Required PX4 firmware patch version",
+            "longDesc": "Minimum PX4 firmware patch version when the reported major and minor versions match the required values.",
+            "type": "uint32",
+            "default": 0,
+            "min": 0,
+            "max": 255,
+            "label": "Required PX4 patch version"
+        },
+        {
+            "name": "strictCompatibilityGate",
+            "shortDesc": "Show operator warning for PX4 version mismatch",
+            "longDesc": "When enabled, a PX4 version below the configured minimum produces an operator-visible warning at connection. When disabled, the mismatch is recorded in the log only.",
+            "type": "bool",
+            "default": true,
+            "label": "Show strict PX4 version warning"
+        },
+        {
             "name": "trackerBoxSizePx",
             "shortDesc": "Default click tracker box size in pixels",
             "longDesc": "When the operator single-clicks on the video, this fixed-size box is centered at the click point and sent to the trackers.",

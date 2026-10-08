@@ -5,6 +5,7 @@ import QtQuick.Dialogs
 
 import QGroundControl
 import QGroundControl.Controls
+import QGroundControl.FactControls
 
 QGCPopupDialog {
     id:         root
@@ -97,6 +98,47 @@ QGCPopupDialog {
                 columns:            3
                 columnSpacing:      ScreenTools.defaultFontPixelWidth
                 rowSpacing:         ScreenTools.defaultFontPixelHeight / 3
+
+                QGCLabel {
+                    Layout.columnSpan: 3
+                    text: qsTr("Required PX4 version from AUTOPILOT_VERSION")
+                    font.bold: true
+                }
+
+                QGCLabel { text: qsTr("Major") }
+                FactTextField {
+                    fact: _admin ? _admin.requiredPx4MajorVersion : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 10
+                }
+                Item { Layout.fillWidth: true }
+
+                QGCLabel { text: qsTr("Minor") }
+                FactTextField {
+                    fact: _admin ? _admin.requiredPx4MinorVersion : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 10
+                }
+                Item { Layout.fillWidth: true }
+
+                QGCLabel { text: qsTr("Patch") }
+                FactTextField {
+                    fact: _admin ? _admin.requiredPx4PatchVersion : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 10
+                }
+                Item { Layout.fillWidth: true }
+
+                QGCLabel { text: qsTr("Show mismatch warning") }
+                FactCheckBox {
+                    fact: _admin ? _admin.strictCompatibilityGate : null
+                    Layout.columnSpan: 2
+                }
+
+                QGCLabel {
+                    Layout.columnSpan: 3
+                    Layout.topMargin: ScreenTools.defaultFontPixelHeight / 3
+                    Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 58
+                    wrapMode: Text.WordWrap
+                    text: qsTr("A lower reported PX4 version produces a connection warning when enabled, or a log entry only when disabled. Set major, minor, and patch all to 0 to disable the comparison.")
+                }
 
                 QGCLabel { text: qsTr("Tracker click box") }
                 Slider {

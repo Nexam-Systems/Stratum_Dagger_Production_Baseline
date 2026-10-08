@@ -340,6 +340,9 @@ void InitialConnectStateMachine::_handleAutopilotVersionSuccess(const mavlink_me
         patchVersion = (autopilotVersion.flight_sw_version >> (8*1)) & 0xFF;
         versionType = (FIRMWARE_VERSION_TYPE)((autopilotVersion.flight_sw_version >> (8*0)) & 0xFF);
         vehicle()->setFirmwareVersion(majorVersion, minorVersion, patchVersion, versionType);
+        if (vehicle()->px4Firmware()) {
+            vehicle()->checkPx4VersionAgainstAdminFloor(tr("Vehicle connect"));
+        }
     }
 
     if (vehicle()->px4Firmware()) {

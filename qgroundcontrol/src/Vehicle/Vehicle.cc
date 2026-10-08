@@ -62,6 +62,7 @@
 #include "RemoteIDManager.h"
 #include "RequestMessageCoordinator.h"
 #include "SettingsManager.h"
+#include "AdminSettings.h"
 #include "AppSettings.h"
 #include "FlyViewSettings.h"
 #include "StandardModes.h"
@@ -2310,6 +2311,54 @@ void Vehicle::setFirmwareVersion(int majorVersion, int minorVersion, int patchVe
     _firmwarePatchVersion = patchVersion;
     _firmwareVersionType = versionType;
     emit firmwareVersionChanged();
+}
+
+bool Vehicle::checkPx4VersionAgainstAdminFloor(const QString& context) const
+{
+    AdminSettings* admin = SettingsManager::instance()->adminSettings();
+    if (!admin) {
+        return true;
+    }
+
+    const int requiredMajor = admin->requiredPx4MajorVersion()->rawValue().toInt();
+    const int requiredMinor = admin->requiredPx4MinorVersion()->rawValue().toInt();
+    const int requiredPatch = admin->requiredPx4PatchVersion()->rawValue().toInt();
+    const bool strict = admin->strictCompatibilityGate()->rawValue().toBool();
+
+    if (requiredMajor == 0 && requiredMinor == 0 && requiredPatch == 0) {
+        return true;
+    }
+    if (_firmwareMajorVersion < 0) {
+        return true;
+    }
+
+    const bool belowRequiredVersion =
+        _firmwareMajorVersion < requiredMajor ||
+        (_firmwareMajorVersion == requiredMajor && _firmwareMinorVersion < requiredMinor) ||
+        (_firmwareMajorVersion == requiredMajor && _firmwareMinorVersion == requiredMinor && _firmwarePatchVersion < requiredPatch);
+    if (!belowRequiredVersion) {
+        return true;
+    }
+
+    const QString reason = tr("PX4 firmware %1.%2.%3 is older than the required %4.%5.%6")
+        .arg(_firmwareMajorVersion).arg(_firmwareMinorVersion).arg(_firmwarePatchVersion)
+        .arg(requiredMajor).arg(requiredMinor).arg(requiredPatch);
+    qCWarning(VehicleLog).noquote() << "STRATUM PX4 version floor:" << reason
+                                    << (context.isEmpty() ? QString() : QStringLiteral("| context=") + context);
+    if (!strict) {
+        return false;
+    }
+
+    const QString displayText = context.isEmpty() ? reason : tr("%1: %2").arg(context, reason);
+    if (m_statusTextHandler) {
+        m_statusTextHandler->handleHTMLEscapedTextMessage(
+            MAV_COMP_ID_MISSIONPLANNER,
+            MAV_SEVERITY_WARNING,
+            displayText.toHtmlEscaped(),
+            QString());
+    }
+    QGC::showAppMessage(displayText);
+    return false;
 }
 
 void Vehicle::setFirmwareCustomVersion(int majorVersion, int minorVersion, int patchVersion)

@@ -17,6 +17,10 @@ public:
 
     DEFINE_SETTING_NAME_GROUP()
 
+    DEFINE_SETTINGFACT(requiredPx4MajorVersion)
+    DEFINE_SETTINGFACT(requiredPx4MinorVersion)
+    DEFINE_SETTINGFACT(requiredPx4PatchVersion)
+    DEFINE_SETTINGFACT(strictCompatibilityGate)
     DEFINE_SETTINGFACT(trackerBoxSizePx)
     DEFINE_SETTINGFACT(c12GimbalMaxSpeed)
     DEFINE_SETTINGFACT(passwordHashOverride)
