@@ -16,7 +16,9 @@ Item {
     required property int activeCameraSource
     required property double selectionTimestampMs
 
-    property string targetGroundAltitudeText: ""
+    // Target ground elevation is assumed equal to the take-off (home) point AMSL.
+    readonly property real targetGroundAltitudeAmsl: (vehicle && vehicle.homePosition && vehicle.homePosition.isValid)
+                                                     ? Number(vehicle.homePosition.altitude) : NaN
     property double _lastPositionMs: 0
     property double _lastHeadingMs: 0
     property double _lastAltitudeMs: 0
@@ -122,9 +124,9 @@ Item {
             return _invalid(qsTr("Target must be centered in the camera frame"), roi)
         }
 
-        var targetAltitudeAmsl = Number(targetGroundAltitudeText)
-        if (targetGroundAltitudeText.trim() === "" || !isFinite(targetAltitudeAmsl)) {
-            return _invalid(qsTr("Enter the target ground elevation in AMSL"), roi)
+        var targetAltitudeAmsl = targetGroundAltitudeAmsl
+        if (!isFinite(targetAltitudeAmsl)) {
+            return _invalid(qsTr("Home position AMSL altitude is unavailable"), roi)
         }
         var height = altitudeAmsl - targetAltitudeAmsl
         if (height <= 0) {
@@ -197,7 +199,7 @@ Item {
     onSelectedCameraSourceChanged: _refresh()
     onActiveCameraSourceChanged: _refresh()
     onSelectionTimestampMsChanged: _refresh()
-    onTargetGroundAltitudeTextChanged: _refresh()
+    onTargetGroundAltitudeAmslChanged: _refresh()
     onVehicleChanged: {
         _lastPositionMs = 0
         _lastHeadingMs = 0
@@ -243,19 +245,16 @@ Item {
         spacing: ScreenTools.defaultFontPixelHeight / 3
 
         QGCLabel {
-            text: qsTr("Target GPS estimate (AMSL ground elevation required)")
+            text: qsTr("Target GPS estimate")
             font.bold: true
         }
 
-        RowLayout {
+        QGCLabel {
             Layout.fillWidth: true
-            QGCLabel { text: qsTr("Target ground AMSL") }
-            QGCTextField {
-                Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 12
-                placeholderText: qsTr("meters")
-                inputMethodHints: Qt.ImhFormattedNumbersOnly
-                onTextChanged: root.targetGroundAltitudeText = text
-            }
+            wrapMode: Text.WordWrap
+            text: isFinite(root.targetGroundAltitudeAmsl)
+                  ? qsTr("Target ground AMSL (home): %1 m").arg(Number(root.targetGroundAltitudeAmsl).toFixed(1))
+                  : qsTr("Target ground AMSL (home): unavailable")
         }
 
         QGCLabel {

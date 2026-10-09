@@ -307,12 +307,13 @@ QString VideoManager::readC12CameraIp(int timeoutMs)
 // Socket:   persistent so the camera keeps our source port stable; the reply
 //           lands on the same port. Frames land in _onC12AttitudeDatagram().
 static constexpr int    kC12AttitudeRateHz            = 5;
-// STRATUM: attitude is pushed into the vehicle-messages drawer at the raw camera
-// rate so the operator sees a continuous stream of yaw/pitch/roll under the ARM
-// button. If this becomes too chatty in real flight, raise this to 500 ms.
-static constexpr int    kC12AttitudeReportIntervalMs  = 0;
+// STRATUM: attitude is shown in the camera-controls angles panel (QML), not in the
+// vehicle-messages drawer. The GAA enable is re-sent whenever no GAC frame has
+// arrived for kC12AttitudeStaleMs so the stream keeps flowing continuously
+// (the camera can drop the subscription, e.g. after tracking or a reboot).
+static constexpr int    kC12AttitudeKeepAliveMs       = 2000;
+static constexpr qint64 kC12AttitudeStaleMs           = 1000;
 static constexpr quint16 kC12ControlPort              = 5000;
-static constexpr int    kSeverityInfo                 = 6;  // MAV_SEVERITY_INFO
 static constexpr int    kSeverityWarning              = 4;  // MAV_SEVERITY_WARNING
 
 static QByteArray _c12BuildFrame(const char addr[2], char lenHex, char ctrl,
@@ -419,19 +420,6 @@ void VideoManager::_processC12Frame(const QByteArray &frame)
     _c12RollDeg = rollDeg;
     _c12AttitudeTimestampMs = QDateTime::currentMSecsSinceEpoch();
     emit c12AttitudeChanged();
-
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (now - _lastC12AttitudeReportMs < kC12AttitudeReportIntervalMs) return;
-    _lastC12AttitudeReportMs = now;
-
-    const QString line = QStringLiteral("C12 gimbal: yaw %1° pitch %2° roll %3°")
-                             .arg(yawDeg,   0, 'f', 2)
-                             .arg(pitchDeg, 0, 'f', 2)
-                             .arg(rollDeg,  0, 'f', 2);
-    qCDebug(VideoManagerLog) << line;
-    if (_activeVehicle) {
-        _activeVehicle->showStatusText(kSeverityInfo, line);
-    }
 }
 
 // STRATUM: Skydroid AI V1.2.0 binary tracking protocol (UDP :1030).
@@ -647,6 +635,22 @@ bool VideoManager::setC12GimbalAngles(double yawDegrees, double pitchDegrees, in
     const bool yawSent = _c12Socket->writeDatagram(yawFrame, host, kC12ControlPort) == yawFrame.size();
     const bool pitchSent = _c12Socket->writeDatagram(pitchFrame, host, kC12ControlPort) == pitchFrame.size();
     return yawSent && pitchSent;
+}
+
+bool VideoManager::setC12GimbalPitch(double pitchDegrees, int speed)
+{
+    if (!std::isfinite(pitchDegrees)) return false;
+    _ensureC12Socket();
+    if (!_c12Socket) return false;
+    const QHostAddress host(_daggerC12Host());
+    if (host.isNull()) return false;
+
+    const int angleHundredths = qBound(-9000, qRound(qBound(-90.0, pitchDegrees, 90.0) * 100.0), 9000);
+    const QByteArray angleHex = QByteArray::number(static_cast<uint16_t>(static_cast<int16_t>(angleHundredths)), 16)
+                                    .toUpper().rightJustified(4, '0');
+    const QByteArray speedHex = QByteArray::number(qBound(0, speed, 127), 16).toUpper().rightJustified(2, '0');
+    const QByteArray pitchFrame = _c12BuildFrame("UG", '6', 'w', "GAP", angleHex + speedHex);
+    return _c12Socket->writeDatagram(pitchFrame, host, kC12ControlPort) == pitchFrame.size();
 }
 
 bool VideoManager::moveRecordedFile(const QUrl &fromPath, const QUrl &toPath)
@@ -933,6 +937,16 @@ void VideoManager::init(QQuickWindow *mainWindow)
                    [this](const QVariant &value) {
                        _enableC12AttitudeStream(value.toInt() == 1);
                    });
+    QTimer *const c12AttitudeKeepAlive = new QTimer(this);
+    c12AttitudeKeepAlive->setInterval(kC12AttitudeKeepAliveMs);
+    (void) connect(c12AttitudeKeepAlive, &QTimer::timeout, this, [this]() {
+        if (_videoSettings->daggerCamera()->rawValue().toInt() != 1) return;
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if ((now - _c12AttitudeTimestampMs) > kC12AttitudeStaleMs) {
+            _enableC12AttitudeStream(true);
+        }
+    });
+    c12AttitudeKeepAlive->start();
 
 #ifdef QGC_GST_STREAMING
     if (_initState == InitState::NotStarted) {

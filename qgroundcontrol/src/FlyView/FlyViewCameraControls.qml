@@ -53,9 +53,11 @@ Item {
     // wherever the operator picks in the save dialog.
     property string _pendingRecordFile: ""
     property bool _saveDialogOpen: false
-    property bool _lookDownActive: false
-    property bool _gpsExpanded: false
     property bool _absoluteAnglesExpanded: false
+    property double _nowMs: Date.now()
+
+    readonly property var _vehicleFacts: QGroundControl.multiVehicleManager.activeVehicle
+                                         ? QGroundControl.multiVehicleManager.activeVehicle.vehicle : null
 
     readonly property var _admin: QGroundControl.settingsManager.adminSettings
     readonly property int _c12MaxSpeed: {
@@ -146,25 +148,24 @@ Item {
         return isFinite(v) ? Number(v).toFixed(1) : "--"
     }
 
-    function _stopLookDown() {
-        if (!root._lookDownActive) {
-            return
-        }
-        root._lookDownActive = false
-        lookDownTimer.stop()
-        QGroundControl.videoManager.sendC12GimbalRate(0, 0)
+    function _factAngle(fact) {
+        return fact ? _fmtAngle(Number(fact.rawValue)) : "--"
     }
 
-    function _toggleLookDown() {
-        if (root._lookDownActive) {
-            _stopLookDown()
-            root.statusMessage(qsTr("Look down stopped"))
-            return
+    function _gimbalStatusText() {
+        const ts = Number(QGroundControl.videoManager.c12AttitudeTimestampMs)
+        if (!isFinite(ts) || ts <= 0) {
+            return qsTr("Gimbal: waiting for attitude stream")
         }
-        root._lookDownActive = true
-        lookDownTimer.start()
-        QGroundControl.videoManager.sendC12GimbalRate(0, -root._c12MaxSpeed)
-        root.statusMessage(qsTr("Looking down"))
+        const ageMs = Math.max(0, root._nowMs - ts)
+        return ageMs < 1500 ? qsTr("Gimbal: live")
+                            : qsTr("Gimbal: stale (%1 s)").arg((ageMs / 1000).toFixed(1))
+    }
+
+    // Single click: absolute gimbal pitch to -90° (straight down), yaw unchanged.
+    function _lookDown() {
+        const sent = QGroundControl.videoManager.setC12GimbalPitch(-90, root._c12MaxSpeed)
+        root.statusMessage(sent ? qsTr("Gimbal pitch set to −90°") : qsTr("Look down command failed"))
     }
 
     // Remember the temp file VideoManager wrote so we can move it on stop.
@@ -200,16 +201,107 @@ Item {
         }
     }
 
+    // Icon-only button with a hover tooltip describing its function.
+    component IconButton : QGCButton {
+        property string tip: ""
+        implicitHeight: root._btnHeight
+        implicitWidth: root._btnHeight * 1.4
+        Layout.fillWidth: true
+        Layout.preferredHeight: root._btnHeight
+        ToolTip.visible: hovered && tip !== ""
+        ToolTip.text: tip
+        ToolTip.delay: 400
+    }
+
+    component SectionLabel : QGCLabel {
+        color: root._accentDim
+        font.pointSize: ScreenTools.smallFontPointSize
+        font.bold: true
+    }
+
+    // Non-modal, draggable floating panel shown above the fly view so it does not
+    // push the camera controls around. Body is loaded only while open.
+    component FloatingPanel : Popup {
+        id: panel
+        property string title: ""
+        property Component body: null
+        property bool _placed: false
+        modal: false
+        focus: false
+        closePolicy: Popup.CloseOnEscape
+        padding: ScreenTools.defaultFontPixelWidth
+        // Keeps the panel inside the window even when dragged or initially placed off-edge.
+        margins: ScreenTools.defaultFontPixelWidth
+        // Popups render in the window overlay layer; x/y are relative to the
+        // controls card. First open places the panel to the left of the card.
+        onOpened: {
+            if (!_placed) {
+                x = -(implicitWidth + ScreenTools.defaultFontPixelWidth * 2)
+                y = 0
+                _placed = true
+            }
+        }
+        background: Rectangle {
+            color: Qt.rgba(0.05, 0.06, 0.07, 0.94)
+            radius: ScreenTools.defaultBorderRadius
+            border.color: root._accent
+            border.width: 1
+        }
+        contentItem: ColumnLayout {
+            spacing: ScreenTools.defaultFontPixelHeight / 3
+
+            Item {
+                Layout.fillWidth: true
+                implicitWidth: panelHeaderRow.implicitWidth
+                implicitHeight: panelHeaderRow.implicitHeight
+
+                MouseArea {
+                    property point pressPos: Qt.point(0, 0)
+                    anchors.fill: parent
+                    cursorShape: Qt.SizeAllCursor
+                    onPressed: (mouse) => { pressPos = Qt.point(mouse.x, mouse.y) }
+                    onPositionChanged: (mouse) => {
+                        panel.x += mouse.x - pressPos.x
+                        panel.y += mouse.y - pressPos.y
+                    }
+                }
+
+                RowLayout {
+                    id: panelHeaderRow
+                    anchors.fill: parent
+                    QGCLabel {
+                        Layout.fillWidth: true
+                        text: panel.title
+                        font.bold: true
+                        color: root._accent
+                    }
+                    QGCButton {
+                        iconSource: "/InstrumentValueIcons/close.svg"
+                        implicitHeight: root._btnHeight * 0.8
+                        implicitWidth: root._btnHeight * 0.8
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Close")
+                        ToolTip.delay: 400
+                        onClicked: panel.close()
+                    }
+                }
+            }
+
+            Loader {
+                Layout.fillWidth: true
+                active: panel.visible
+                sourceComponent: panel.body
+            }
+        }
+    }
+
     // Hold-to-move gimbal button: repeats the pan/tilt command while held, sends
     // "stop" on release (matches web UI camStart / camStop, 200 ms interval).
-    component PtzButton : QGCButton {
+    component PtzButton : IconButton {
         id: ptzButton
         property string ptzAction
-        implicitHeight: root._btnHeight
-        Layout.fillWidth: true
         onPressedChanged: {
             if (pressed) {
-                root._stopLookDown()
                 root._send(ptzAction)
                 ptzHoldTimer.restart()
             } else {
@@ -226,10 +318,62 @@ Item {
     }
 
     Timer {
-        id: lookDownTimer
-        interval: 100
+        interval: 250
         repeat: true
-        onTriggered: QGroundControl.videoManager.sendC12GimbalRate(0, -root._c12MaxSpeed)
+        running: anglesPanel.visible
+        onTriggered: root._nowMs = Date.now()
+    }
+
+    FloatingPanel {
+        id: anglesPanel
+        title: qsTr("Gimbal / UAV angles")
+        body: Component {
+            GridLayout {
+                columns: 4
+                columnSpacing: ScreenTools.defaultFontPixelWidth * 2
+                rowSpacing: ScreenTools.defaultFontPixelHeight / 4
+
+                QGCLabel { text: "" }
+                QGCLabel { text: qsTr("Yaw°"); font.bold: true }
+                QGCLabel { text: qsTr("Pitch°"); font.bold: true }
+                QGCLabel { text: qsTr("Roll°"); font.bold: true }
+
+                QGCLabel { text: qsTr("Gimbal"); color: root._accent }
+                QGCLabel { font.family: ScreenTools.fixedFontFamily; text: root._fmtAngle(QGroundControl.videoManager.c12YawDegrees) }
+                QGCLabel { font.family: ScreenTools.fixedFontFamily; text: root._fmtAngle(QGroundControl.videoManager.c12PitchDegrees) }
+                QGCLabel { font.family: ScreenTools.fixedFontFamily; text: root._fmtAngle(QGroundControl.videoManager.c12RollDegrees) }
+
+                QGCLabel { text: qsTr("UAV"); color: root._accent }
+                QGCLabel { font.family: ScreenTools.fixedFontFamily; text: root._factAngle(root._vehicleFacts ? root._vehicleFacts.heading : null) }
+                QGCLabel { font.family: ScreenTools.fixedFontFamily; text: root._factAngle(root._vehicleFacts ? root._vehicleFacts.pitch : null) }
+                QGCLabel { font.family: ScreenTools.fixedFontFamily; text: root._factAngle(root._vehicleFacts ? root._vehicleFacts.roll : null) }
+
+                QGCLabel {
+                    Layout.columnSpan: 4
+                    color: root._accentDim
+                    font.pointSize: ScreenTools.smallFontPointSize
+                    text: root._gimbalStatusText() + "   " + (root._vehicleFacts ? qsTr("UAV yaw = heading (0–360°)") : qsTr("UAV: no vehicle"))
+                }
+            }
+        }
+    }
+
+    FloatingPanel {
+        id: targetGpsPanel
+        title: qsTr("Target GPS estimate")
+        body: Component {
+            TargetGpsEstimate {
+                implicitWidth: ScreenTools.defaultFontPixelWidth * 55
+                vehicle: QGroundControl.multiVehicleManager.activeVehicle
+                tracker: vehicle ? vehicle.targetTrack : null
+                gimbalYawDegrees: QGroundControl.videoManager.c12YawDegrees
+                gimbalPitchDegrees: QGroundControl.videoManager.c12PitchDegrees
+                gimbalTimestampMs: QGroundControl.videoManager.c12AttitudeTimestampMs
+                selectedCameraSource: tracker ? tracker.selectionVideoSource : -1
+                activeCameraSource: root._feedIrActive ? 1 : 0
+                selectionTimestampMs: tracker ? tracker.selectionTimestampMs : 0
+            }
+        }
     }
 
     Rectangle {
@@ -247,32 +391,30 @@ Item {
         anchors.margins: root._pad
         spacing: root._spacing
 
-        // ---- Feed select: TV / IR ------------------------------------------
+        // ---- Camera feed select: TV / IR -----------------------------------
+        SectionLabel { text: qsTr("CAMERA") }
+
         RowLayout {
             Layout.fillWidth: true
             spacing: root._spacing
 
-            QGCButton {
+            IconButton {
                 text: qsTr("TV")
-                implicitHeight: root._btnHeight
-                Layout.fillWidth: true
-                backRadius: ScreenTools.defaultBorderRadius
-                showBorder: true
+                tip: qsTr("Daylight (TV) video feed")
                 primary: !root._feedIrActive
                 onClicked: root._selectFeed("TV")
             }
-            QGCButton {
+            IconButton {
                 text: qsTr("IR")
-                implicitHeight: root._btnHeight
-                Layout.fillWidth: true
-                backRadius: ScreenTools.defaultBorderRadius
-                showBorder: true
+                tip: qsTr("Thermal (IR) video feed")
                 primary: root._feedIrActive
                 onClicked: root._selectFeed("IR")
             }
         }
 
-        // ---- Pan / Tilt cross (arrow glyphs, hold-to-move) -----------------
+        // ---- Gimbal: pan / tilt cross (hold-to-move) -----------------------
+        SectionLabel { text: qsTr("GIMBAL") }
+
         GridLayout {
             Layout.fillWidth: true
             columns: 3
@@ -280,21 +422,50 @@ Item {
             rowSpacing: root._spacing
 
             Item { Layout.fillWidth: true; Layout.preferredHeight: root._btnHeight }
-            PtzButton { text: qsTr("▲"); ptzAction: "pan-up" }
+            PtzButton { iconSource: "/InstrumentValueIcons/arrow-thick-up.svg"; tip: qsTr("Gimbal up (hold)"); ptzAction: "pan-up" }
             Item { Layout.fillWidth: true; Layout.preferredHeight: root._btnHeight }
 
-            PtzButton { text: qsTr("◄"); ptzAction: "tilt-left" }
-            QGCButton {
-                text: qsTr("⊙")
-                implicitHeight: root._btnHeight
-                Layout.fillWidth: true
+            PtzButton { iconSource: "/InstrumentValueIcons/arrow-thick-left.svg"; tip: qsTr("Gimbal left (hold)"); ptzAction: "tilt-left" }
+            IconButton {
+                iconSource: "/InstrumentValueIcons/location-current.svg"
+                tip: qsTr("Centre gimbal")
                 onClicked: { if (root._send("center")) root.statusMessage(qsTr("Gimbal centred")) }
             }
-            PtzButton { text: qsTr("►"); ptzAction: "tilt-right" }
+            PtzButton { iconSource: "/InstrumentValueIcons/arrow-thick-right.svg"; tip: qsTr("Gimbal right (hold)"); ptzAction: "tilt-right" }
 
             Item { Layout.fillWidth: true; Layout.preferredHeight: root._btnHeight }
-            PtzButton { text: qsTr("▼"); ptzAction: "pan-down" }
+            PtzButton { iconSource: "/InstrumentValueIcons/arrow-thick-down.svg"; tip: qsTr("Gimbal down (hold)"); ptzAction: "pan-down" }
             Item { Layout.fillWidth: true; Layout.preferredHeight: root._btnHeight }
+        }
+
+        // ---- Zoom: out / presets / in --------------------------------------
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: root._spacing
+
+            IconButton {
+                iconSource: "/InstrumentValueIcons/zoom-out.svg"
+                tip: qsTr("Zoom out")
+                onClicked: { if (root._send("zoom-out")) root.statusMessage(qsTr("Zoom out")) }
+            }
+            Repeater {
+                model: [1, 2, 3, 4]
+                IconButton {
+                    required property int modelData
+                    text: qsTr("%1x").arg(modelData)
+                    tip: qsTr("Zoom preset %1x").arg(modelData)
+                    onClicked: {
+                        if (root._send("zoom-" + modelData + "x")) {
+                            root.statusMessage(qsTr("Zoom preset %1x").arg(modelData))
+                        }
+                    }
+                }
+            }
+            IconButton {
+                iconSource: "/InstrumentValueIcons/zoom-in.svg"
+                tip: qsTr("Zoom in")
+                onClicked: { if (root._send("zoom-in")) root.statusMessage(qsTr("Zoom in")) }
+            }
         }
 
         QGCLabel {
@@ -308,18 +479,65 @@ Item {
                     .arg(root._fmtAngle(QGroundControl.videoManager.c12RollDegrees))
         }
 
-        QGCButton {
+        // ---- Tracking / media ----------------------------------------------
+        SectionLabel { text: qsTr("TRACKING") }
+
+        RowLayout {
             Layout.fillWidth: true
-            visible: root._c12Active
-            text: root._gpsExpanded ? qsTr("Hide Target GPS") : qsTr("Target GPS Estimate")
-            onClicked: root._gpsExpanded = !root._gpsExpanded
+            spacing: root._spacing
+
+            IconButton {
+                iconSource: root._trackActive ? "/InstrumentValueIcons/close-outline.svg" : "/InstrumentValueIcons/target.svg"
+                tip: root._trackActive ? qsTr("Stop tracking") : qsTr("Track target at frame centre")
+                primary: root._trackActive
+                onClicked: root._toggleTrack()
+            }
+            IconButton {
+                iconSource: "/InstrumentValueIcons/arrow-base-down.svg"
+                tip: qsTr("Look down — set gimbal pitch to −90°")
+                onClicked: root._lookDown()
+            }
+            IconButton {
+                iconSource: "/InstrumentValueIcons/camera.svg"
+                tip: qsTr("Capture photo (saved locally)")
+                onClicked: {
+                    QGroundControl.videoManager.grabImage()
+                    root.statusMessage(qsTr("📷 Photo saved locally"))
+                }
+            }
+            IconButton {
+                iconSource: root._recActive ? "/InstrumentValueIcons/pause-solid.svg" : "/InstrumentValueIcons/video-camera.svg"
+                tip: root._recActive ? qsTr("Stop recording and save") : qsTr("Start local video recording")
+                primary: root._recActive
+                onClicked: root._toggleRec()
+            }
         }
 
-        QGCButton {
+        // ---- Tools: angles panel / target GPS / absolute angles ------------
+        RowLayout {
             Layout.fillWidth: true
-            visible: root._c12Active && !root.compact
-            text: root._absoluteAnglesExpanded ? qsTr("Hide Absolute Angles") : qsTr("Absolute Angles")
-            onClicked: root._absoluteAnglesExpanded = !root._absoluteAnglesExpanded
+            spacing: root._spacing
+
+            IconButton {
+                iconSource: "/InstrumentValueIcons/dashboard.svg"
+                tip: qsTr("Show gimbal and UAV yaw / pitch / roll panel")
+                primary: anglesPanel.visible
+                onClicked: anglesPanel.visible ? anglesPanel.close() : anglesPanel.open()
+            }
+            IconButton {
+                visible: root._c12Active
+                iconSource: "/InstrumentValueIcons/location.svg"
+                tip: qsTr("Target GPS estimate")
+                primary: targetGpsPanel.visible
+                onClicked: targetGpsPanel.visible ? targetGpsPanel.close() : targetGpsPanel.open()
+            }
+            IconButton {
+                visible: root._c12Active && !root.compact
+                iconSource: "/InstrumentValueIcons/tuning.svg"
+                tip: qsTr("Set absolute gimbal yaw / pitch")
+                primary: root._absoluteAnglesExpanded
+                onClicked: root._absoluteAnglesExpanded = !root._absoluteAnglesExpanded
+            }
         }
 
         GridLayout {
@@ -356,120 +574,16 @@ Item {
             }
         }
 
-        TargetGpsEstimate {
-            Layout.fillWidth: true
-            visible: root._c12Active && root._gpsExpanded
-            vehicle: QGroundControl.multiVehicleManager.activeVehicle
-            tracker: vehicle ? vehicle.targetTrack : null
-            gimbalYawDegrees: QGroundControl.videoManager.c12YawDegrees
-            gimbalPitchDegrees: QGroundControl.videoManager.c12PitchDegrees
-            gimbalTimestampMs: QGroundControl.videoManager.c12AttitudeTimestampMs
-            selectedCameraSource: tracker ? tracker.selectionVideoSource : -1
-            activeCameraSource: root._feedIrActive ? 1 : 0
-            selectionTimestampMs: tracker ? tracker.selectionTimestampMs : 0
-        }
-
-        // ---- Zoom ----------------------------------------------------------
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: root._spacing
-
-            QGCLabel {
-                text: qsTr("ZOOM")
-                color: root._accentDim
-                font.pointSize: ScreenTools.smallFontPointSize
-                Layout.alignment: Qt.AlignVCenter
-            }
-            QGCButton {
-                text: qsTr("−")
-                implicitHeight: root._btnHeight
-                Layout.fillWidth: true
-                onClicked: { if (root._send("zoom-out")) root.statusMessage(qsTr("Zoom out")) }
-            }
-            QGCButton {
-                text: qsTr("+")
-                implicitHeight: root._btnHeight
-                Layout.fillWidth: true
-                onClicked: { if (root._send("zoom-in")) root.statusMessage(qsTr("Zoom in")) }
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: root._spacing
-
-            QGCLabel {
-                text: qsTr("PRESET")
-                color: root._accentDim
-                font.pointSize: ScreenTools.smallFontPointSize
-            }
-            Repeater {
-                model: [1, 2, 3, 4]
-                QGCButton {
-                    required property int modelData
-                    text: qsTr("%1x").arg(modelData)
-                    implicitHeight: root._btnHeight
-                    Layout.fillWidth: true
-                    onClicked: {
-                        if (root._send("zoom-" + modelData + "x")) {
-                            root.statusMessage(qsTr("Zoom preset %1x").arg(modelData))
-                        }
-                    }
-                }
-            }
-        }
-
-        // ---- Media: Capture / Record --------------------------------------
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: root._spacing
-
-            QGCButton {
-                text: qsTr("📷 Capture")
-                implicitHeight: root._btnHeight
-                Layout.fillWidth: true
-                onClicked: {
-                    QGroundControl.videoManager.grabImage()
-                    root.statusMessage(qsTr("📷 Photo saved locally"))
-                }
-            }
-            QGCButton {
-                text: root._recActive ? qsTr("■ Stop") : qsTr("● Rec")
-                implicitHeight: root._btnHeight
-                Layout.fillWidth: true
-                primary: root._recActive
-                onClicked: root._toggleRec()
-            }
-        }
-
-        // ---- Track / Look Down --------------------------------------------
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: root._spacing
-
-            QGCButton {
-                text: root._trackActive ? qsTr("✕ Stop Tracking") : qsTr("◎ Track")
-                implicitHeight: root._btnHeight
-                Layout.fillWidth: true
-                primary: root._trackActive
-                onClicked: root._toggleTrack()
-            }
-
-            QGCButton {
-                text: root._lookDownActive ? qsTr("■ Stop Down") : qsTr("↓ Look Down")
-                implicitHeight: root._btnHeight
-                Layout.fillWidth: true
-                primary: root._lookDownActive
-                onClicked: root._toggleLookDown()
-            }
-        }
-
+        // ---- AI ------------------------------------------------------------
         RowLayout {
             Layout.fillWidth: true
             spacing: root._spacing
 
             Switch {
                 text: qsTr("AI")
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Enable / disable on-camera AI detection")
+                ToolTip.delay: 400
                 checked: QGroundControl.videoManager.c12AiEnabled
                 onClicked: {
                     var enabled = !QGroundControl.videoManager.c12AiEnabled
@@ -481,10 +595,9 @@ Item {
                 }
             }
 
-            QGCButton {
-                text: qsTr("Disable AI")
-                implicitHeight: root._btnHeight
-                Layout.fillWidth: true
+            IconButton {
+                iconSource: "/InstrumentValueIcons/block.svg"
+                tip: qsTr("Force AI off (resend disable command)")
                 onClicked: {
                     var sent = QGroundControl.videoManager.setC12AiEnabled(false)
                     root.statusMessage(sent ? qsTr("AI disable command sent") : qsTr("AI command failed"))
@@ -497,11 +610,19 @@ Item {
             Layout.fillWidth: true
             spacing: root._spacing
 
-            QGCLabel {
-                text: qsTr("PALETTE")
+            QGCColoredImage {
+                source: "/InstrumentValueIcons/color-palette.svg"
                 color: root._accentDim
-                font.pointSize: ScreenTools.smallFontPointSize
+                Layout.preferredHeight: root._btnHeight * 0.6
+                Layout.preferredWidth: root._btnHeight * 0.6
+                sourceSize.height: root._btnHeight * 0.6
+                fillMode: Image.PreserveAspectFit
                 Layout.alignment: Qt.AlignVCenter
+
+                HoverHandler { id: paletteIconHover }
+                ToolTip.visible: paletteIconHover.hovered
+                ToolTip.text: qsTr("Thermal false-colour palette")
+                ToolTip.delay: 400
             }
             QGCComboBox {
                 id: paletteCombo
