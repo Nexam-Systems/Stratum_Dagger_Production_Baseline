@@ -18,9 +18,8 @@ Item {
     required property double selectionTimestampMs
     property bool c12TrackingActive: false
 
-    // Target ground elevation is assumed equal to the take-off (home) point AMSL.
-    readonly property real targetGroundAltitudeAmsl: (vehicle && vehicle.homePosition && vehicle.homePosition.isValid)
-                                                     ? Number(vehicle.homePosition.altitude) : NaN
+    // Target ground is assumed level with the take-off point, so height above it is the relative altitude.
+    readonly property real heightAboveTakeoff: (vehicle && vehicle.vehicle) ? Number(vehicle.vehicle.altitudeRelative.rawValue) : NaN
     property double _lastPositionMs: 0
     property double _lastHeadingMs: 0
     property double _lastAltitudeMs: 0
@@ -87,13 +86,9 @@ Item {
 
         var latitude = Number(vehicle.coordinate.latitude)
         var longitude = Number(vehicle.coordinate.longitude)
-        var altitudeAmsl = _number(vehicle.vehicle ? vehicle.vehicle.altitudeAMSL : null)
         var headingDegrees = _number(vehicle.vehicle ? vehicle.vehicle.heading : null)
         if (!isFinite(latitude) || !isFinite(longitude)) {
             return _invalid(qsTr("Vehicle latitude or longitude is invalid"), roi)
-        }
-        if (!isFinite(altitudeAmsl)) {
-            return _invalid(qsTr("Vehicle AMSL altitude is unavailable"), roi)
         }
         if (!isFinite(headingDegrees)) {
             return _invalid(qsTr("Vehicle heading is unavailable"), roi)
@@ -130,13 +125,12 @@ Item {
             trackSource = "NEXAM_TARGET_TRACK"
         }
 
-        var targetAltitudeAmsl = targetGroundAltitudeAmsl
-        if (!isFinite(targetAltitudeAmsl)) {
-            return _invalid(qsTr("Home position AMSL altitude is unavailable"), roi)
+        var height = heightAboveTakeoff
+        if (!isFinite(height)) {
+            return _invalid(qsTr("Vehicle altitude above take-off is unavailable"), roi)
         }
-        var height = altitudeAmsl - targetAltitudeAmsl
         if (height <= 0) {
-            return _invalid(qsTr("Vehicle AMSL altitude must be above target ground elevation"), roi)
+            return _invalid(qsTr("Vehicle must be above the take-off elevation"), roi)
         }
         if (gimbalPitchDegrees >= 0) {
             return _invalid(qsTr("C12 camera must be pitched downward to estimate ground target coordinates"), roi)
@@ -207,7 +201,7 @@ Item {
     onActiveCameraSourceChanged: _refresh()
     onSelectionTimestampMsChanged: _refresh()
     onC12TrackingActiveChanged: _refresh()
-    onTargetGroundAltitudeAmslChanged: _refresh()
+    onHeightAboveTakeoffChanged: _refresh()
     onVehicleChanged: {
         _lastPositionMs = 0
         _lastHeadingMs = 0
@@ -255,9 +249,9 @@ Item {
         QGCLabel {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: isFinite(root.targetGroundAltitudeAmsl)
-                  ? qsTr("Target ground AMSL (home): %1 m").arg(Number(root.targetGroundAltitudeAmsl).toFixed(1))
-                  : qsTr("Target ground AMSL (home): unavailable")
+            text: isFinite(root.heightAboveTakeoff)
+                  ? qsTr("Height above take-off (target ground): %1 m").arg(Number(root.heightAboveTakeoff).toFixed(1))
+                  : qsTr("Height above take-off (target ground): unavailable")
         }
 
         QGCLabel {
