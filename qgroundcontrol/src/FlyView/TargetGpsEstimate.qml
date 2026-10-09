@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 
 import QGroundControl
@@ -74,8 +75,9 @@ Item {
         if (!vehicle || !vehicle.coordinate || !vehicle.coordinate.isValid) {
             return _invalid(qsTr("Vehicle position is invalid"), roi)
         }
-        if (_lastPositionMs <= 0 || now - _lastPositionMs > _gpsFreshnessMs) {
-            return _invalid(qsTr("Vehicle position is stale"), roi)
+        // Facts only signal on value change, so a steady heading/altitude is not stale while the link is alive.
+        if (!vehicle.vehicleLinkManager || vehicle.vehicleLinkManager.communicationLost) {
+            return _invalid(qsTr("Vehicle telemetry lost"), roi)
         }
         if (!vehicle.gps || _number(vehicle.gps.lock) < 3) {
             return _invalid(qsTr("GPS fix is not 3D or better"), roi)
@@ -88,30 +90,24 @@ Item {
         if (!isFinite(latitude) || !isFinite(longitude)) {
             return _invalid(qsTr("Vehicle latitude or longitude is invalid"), roi)
         }
-        if (!isFinite(altitudeAmsl) || _lastAltitudeMs <= 0 || now - _lastAltitudeMs > _gpsFreshnessMs) {
-            return _invalid(qsTr("Vehicle AMSL altitude is unavailable or stale"), roi)
+        if (!isFinite(altitudeAmsl)) {
+            return _invalid(qsTr("Vehicle AMSL altitude is unavailable"), roi)
         }
-        if (!isFinite(headingDegrees) || _lastHeadingMs <= 0 || now - _lastHeadingMs > _gpsFreshnessMs) {
-            return _invalid(qsTr("Vehicle heading is unavailable or stale"), roi)
+        if (!isFinite(headingDegrees)) {
+            return _invalid(qsTr("Vehicle heading is unavailable"), roi)
         }
         if (!isFinite(gimbalYawDegrees) || !isFinite(gimbalPitchDegrees) ||
                 gimbalTimestampMs <= 0 || now - gimbalTimestampMs > _attitudeFreshnessMs) {
             return _invalid(qsTr("C12 gimbal attitude is unavailable or stale"), roi)
         }
         var trackTimestamp = Number(tracker ? tracker.lastUpdateMs : 0)
-        var sampleTimes = [_lastPositionMs, _lastHeadingMs, _lastAltitudeMs, gimbalTimestampMs, trackTimestamp]
-        var earliestSample = Math.min.apply(Math, sampleTimes)
-        var latestSample = Math.max.apply(Math, sampleTimes)
-        if (latestSample - earliestSample > _maxInputSkewMs) {
-            return _invalid(qsTr("Telemetry, attitude, and tracker timestamps are not aligned"), roi)
+        if (!tracker || !tracker.telemetryAvailable || Number(tracker.status.rawValue) !== 1) {
+            return _invalid(qsTr("Tracker has no active target (Ctrl+drag on the video to select one)"), roi)
         }
         if (selectedCameraSource < 0 || selectedCameraSource !== activeCameraSource) {
             return _invalid(qsTr("Tracker source does not match the active camera feed"), roi)
         }
-        if (!tracker || !tracker.telemetryAvailable || Number(tracker.status.rawValue) !== 1) {
-            return _invalid(qsTr("Tracker has no active target"), roi)
-        }
-        if (!isFinite(Number(tracker.lastUpdateMs)) || now - Number(tracker.lastUpdateMs) > _trackerFreshnessMs ||
+        if (!isFinite(trackTimestamp) || now - trackTimestamp > _trackerFreshnessMs ||
                 trackTimestamp < selectionTimestampMs) {
             return _invalid(qsTr("Tracker result is stale or predates the current selection"), roi)
         }
@@ -245,11 +241,6 @@ Item {
         spacing: ScreenTools.defaultFontPixelHeight / 3
 
         QGCLabel {
-            text: qsTr("Target GPS estimate")
-            font.bold: true
-        }
-
-        QGCLabel {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: isFinite(root.targetGroundAltitudeAmsl)
@@ -268,18 +259,24 @@ Item {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             color: qgcPal.warningText
+            font.pointSize: ScreenTools.smallFontPointSize
             text: qsTr("Displayed ROI is received from NEXAM_TARGET_TRACK. The supplied spec does not define a C12 AI CW2 result packet, so no C12 SDK ROI is claimed.")
         }
 
-        TextArea {
+        ScrollView {
             Layout.fillWidth: true
-            Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 9
-            readOnly: true
-            selectByMouse: true
-            wrapMode: TextEdit.WrapAnywhere
-            text: root._jsonOutput()
-            font.family: "Consolas"
-            font.pixelSize: ScreenTools.smallFontPixelSize
+            Layout.preferredHeight: Math.min(jsonArea.implicitHeight, ScreenTools.defaultFontPixelHeight * 24)
+            clip: true
+
+            TextArea {
+                id: jsonArea
+                readOnly: true
+                selectByMouse: true
+                wrapMode: TextEdit.WrapAnywhere
+                text: root._jsonOutput()
+                font.family: "Consolas"
+                font.pixelSize: ScreenTools.smallFontPixelSize
+            }
         }
     }
 

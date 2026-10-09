@@ -89,6 +89,7 @@ public:
     Q_INVOKABLE bool setC12GimbalAngles(double yawDegrees, double pitchDegrees, int speed);
     // STRATUM: absolute pitch only (GAP) — yaw is left untouched. Used by Look Down.
     Q_INVOKABLE bool setC12GimbalPitch(double pitchDegrees, int speed);
+    Q_INVOKABLE bool setC12ZoomPreset(int level);
     // STRATUM: move a completed local recording (or any file) to a user-chosen
     // destination. Both arguments accept QUrl (file:// from QML FileDialog) or a
     // plain filesystem path string. Overwrites the destination if it exists.
@@ -189,6 +190,8 @@ private:
     void _ensureC12Socket();
     void _enableC12AttitudeStream(bool enabled);
     void _processC12Frame(const QByteArray &frame);
+    void _requestC12ZoomReadback();
+    void _handleC12ZoomReadback(const QByteArray &data);
 
     void _ensureC12AiSocket();
     bool _sendC12AiPacket(quint8 control, const QByteArray &payload);
@@ -204,6 +207,8 @@ private:
     // whichever source port sent the enable, so we keep this socket alive for
     // the life of the app. Rate-limited push to the vehicle-messages drawer.
     QUdpSocket *_c12Socket = nullptr;
+    int _c12ZoomTarget = 0;
+    int _c12ZoomCorrections = 0;
     bool _c12AttitudeStreamEnabled = false;
 
     // STRATUM: persistent UDP socket for the Skydroid AI V1.2.0 binary tracking

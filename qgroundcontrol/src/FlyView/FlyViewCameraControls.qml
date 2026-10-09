@@ -70,7 +70,8 @@ Item {
     readonly property color _accent:    "#3DFFA6"
     readonly property color _accentDim:  "#1FB97D"
     readonly property real  _btnHeight:  ScreenTools.defaultFontPixelHeight * (compact ? 1.9 : 2.3)
-    readonly property real  _spacing:    ScreenTools.defaultFontPixelWidth * 0.4
+    readonly property real  _iconSize:   Math.round(_btnHeight * 0.45)
+    readonly property real  _spacing:    ScreenTools.defaultFontPixelWidth * 0.7
     // Inner padding — only in overlay mode (the bordered card over the video).
     readonly property real  _pad:        overlayMode ? ScreenTools.defaultFontPixelWidth * 0.75 : 0
 
@@ -201,16 +202,59 @@ Item {
         }
     }
 
-    // Icon-only button with a hover tooltip describing its function.
-    component IconButton : QGCButton {
+    QGCPalette { id: btnPal; colorGroupEnabled: true }
+
+    // Icon (or short text) button with the content centred and a hover tooltip.
+    component IconButton : Button {
+        id: iconBtn
         property string tip: ""
+        property string iconSource: ""
+        property bool primary: false
+        readonly property bool _highlight: enabled && (pressed || checked)
+        readonly property color _fg: _highlight ? btnPal.buttonHighlightText
+                                                : (primary ? btnPal.primaryButtonText : btnPal.buttonText)
+        hoverEnabled: !ScreenTools.isMobile
+        focusPolicy: Qt.ClickFocus
+        padding: 0
         implicitHeight: root._btnHeight
-        implicitWidth: root._btnHeight * 1.4
+        implicitWidth: root._btnHeight
         Layout.fillWidth: true
         Layout.preferredHeight: root._btnHeight
         ToolTip.visible: hovered && tip !== ""
         ToolTip.text: tip
         ToolTip.delay: 400
+
+        background: Rectangle {
+            radius: ScreenTools.defaultBorderRadius
+            border.width: 1
+            border.color: btnPal.buttonBorder
+            color: iconBtn.primary ? btnPal.primaryButton : btnPal.button
+            Rectangle {
+                anchors.fill: parent
+                radius: parent.radius
+                color: btnPal.buttonHighlight
+                opacity: iconBtn._highlight ? 1 : (iconBtn.enabled && iconBtn.hovered ? 0.4 : 0)
+            }
+        }
+
+        contentItem: Item {
+            QGCColoredImage {
+                anchors.centerIn: parent
+                visible: iconBtn.iconSource !== ""
+                source: iconBtn.iconSource
+                width: root._iconSize
+                height: root._iconSize
+                sourceSize.height: root._iconSize
+                fillMode: Image.PreserveAspectFit
+                color: iconBtn._fg
+            }
+            QGCLabel {
+                anchors.centerIn: parent
+                visible: iconBtn.iconSource === "" && iconBtn.text !== ""
+                text: iconBtn.text
+                color: iconBtn._fg
+            }
+        }
     }
 
     component SectionLabel : QGCLabel {
@@ -275,13 +319,12 @@ Item {
                         font.bold: true
                         color: root._accent
                     }
-                    QGCButton {
+                    IconButton {
+                        Layout.fillWidth: false
+                        Layout.preferredWidth: root._btnHeight * 0.8
+                        Layout.preferredHeight: root._btnHeight * 0.8
                         iconSource: "/InstrumentValueIcons/close.svg"
-                        implicitHeight: root._btnHeight * 0.8
-                        implicitWidth: root._btnHeight * 0.8
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Close")
-                        ToolTip.delay: 400
+                        tip: qsTr("Close")
                         onClicked: panel.close()
                     }
                 }
@@ -427,8 +470,8 @@ Item {
 
             PtzButton { iconSource: "/InstrumentValueIcons/arrow-thick-left.svg"; tip: qsTr("Gimbal left (hold)"); ptzAction: "tilt-left" }
             IconButton {
-                iconSource: "/InstrumentValueIcons/location-current.svg"
-                tip: qsTr("Centre gimbal")
+                iconSource: "/InstrumentValueIcons/home.svg"
+                tip: qsTr("Centre gimbal (return to home position)")
                 onClicked: { if (root._send("center")) root.statusMessage(qsTr("Gimbal centred")) }
             }
             PtzButton { iconSource: "/InstrumentValueIcons/arrow-thick-right.svg"; tip: qsTr("Gimbal right (hold)"); ptzAction: "tilt-right" }
@@ -438,7 +481,7 @@ Item {
             Item { Layout.fillWidth: true; Layout.preferredHeight: root._btnHeight }
         }
 
-        // ---- Zoom: out / presets / in --------------------------------------
+        // ---- Zoom: out / in, then presets ----------------------------------
         RowLayout {
             Layout.fillWidth: true
             spacing: root._spacing
@@ -448,6 +491,17 @@ Item {
                 tip: qsTr("Zoom out")
                 onClicked: { if (root._send("zoom-out")) root.statusMessage(qsTr("Zoom out")) }
             }
+            IconButton {
+                iconSource: "/InstrumentValueIcons/zoom-in.svg"
+                tip: qsTr("Zoom in")
+                onClicked: { if (root._send("zoom-in")) root.statusMessage(qsTr("Zoom in")) }
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: root._spacing
+
             Repeater {
                 model: [1, 2, 3, 4]
                 IconButton {
@@ -455,16 +509,10 @@ Item {
                     text: qsTr("%1x").arg(modelData)
                     tip: qsTr("Zoom preset %1x").arg(modelData)
                     onClicked: {
-                        if (root._send("zoom-" + modelData + "x")) {
-                            root.statusMessage(qsTr("Zoom preset %1x").arg(modelData))
-                        }
+                        const sent = QGroundControl.videoManager.setC12ZoomPreset(modelData)
+                        root.statusMessage(sent ? qsTr("Zoom preset %1x").arg(modelData) : qsTr("Zoom preset command failed"))
                     }
                 }
-            }
-            IconButton {
-                iconSource: "/InstrumentValueIcons/zoom-in.svg"
-                tip: qsTr("Zoom in")
-                onClicked: { if (root._send("zoom-in")) root.statusMessage(qsTr("Zoom in")) }
             }
         }
 
@@ -613,9 +661,9 @@ Item {
             QGCColoredImage {
                 source: "/InstrumentValueIcons/color-palette.svg"
                 color: root._accentDim
-                Layout.preferredHeight: root._btnHeight * 0.6
-                Layout.preferredWidth: root._btnHeight * 0.6
-                sourceSize.height: root._btnHeight * 0.6
+                Layout.preferredHeight: root._iconSize
+                Layout.preferredWidth: root._iconSize
+                sourceSize.height: root._iconSize
                 fillMode: Image.PreserveAspectFit
                 Layout.alignment: Qt.AlignVCenter
 
