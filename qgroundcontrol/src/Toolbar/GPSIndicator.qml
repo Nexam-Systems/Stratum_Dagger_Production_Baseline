@@ -55,7 +55,7 @@ Item {
                 fillMode:           Image.PreserveAspectFit
                 sourceSize.height:  height
                 opacity:            (_activeVehicle && _activeVehicle.gps.count.value >= 0) ? 1 : 0.5
-                color:              "#000000"
+                color:              qgcPal.text
             }
         }
 
@@ -69,36 +69,36 @@ Item {
 
             QGCLabel {
                 text:               qsTr("HAcc")
-                color:              "#000000"
+                color:              qgcPal.text
                 font.pointSize:     ScreenTools.smallFontPointSize
             }
             QGCLabel {
                 text:               _hAccText
-                color:              "#000000"
+                color:              qgcPal.text
                 font.pointSize:     ScreenTools.smallFontPointSize
                 Layout.alignment:   Qt.AlignRight
             }
 
             QGCLabel {
                 text:               qsTr("VAcc")
-                color:              "#000000"
+                color:              qgcPal.text
                 font.pointSize:     ScreenTools.smallFontPointSize
             }
             QGCLabel {
                 text:               _vAccText
-                color:              "#000000"
+                color:              qgcPal.text
                 font.pointSize:     ScreenTools.smallFontPointSize
                 Layout.alignment:   Qt.AlignRight
             }
 
             QGCLabel {
                 text:               qsTr("Nsat")
-                color:              "#000000"
+                color:              qgcPal.text
                 font.pointSize:     ScreenTools.smallFontPointSize
             }
             QGCLabel {
                 text:               _nSatText
-                color:              "#000000"
+                color:              qgcPal.text
                 font.pointSize:     ScreenTools.smallFontPointSize
                 Layout.alignment:   Qt.AlignRight
             }

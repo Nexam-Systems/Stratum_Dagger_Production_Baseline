@@ -79,6 +79,10 @@ ToolStripActionList {
             enabled:     !!QGroundControl.multiVehicleManager.activeVehicle
             onTriggered: _root._commandFlightMode(qsTr("Hold"))
         },
+        // STRATUM: Flight-mode picker (replaces the top-ribbon dropdown, which is
+        // now a read-only mode display). Opens a drop panel listing the whitelisted
+        // modes; each entry confirms then writes Vehicle.flightMode.
+        FlyViewFlightModeAction { },
         // Dagger: Abort flight mode (DO_SET_MODE sub=22), hold-to-confirm.
         GuidedActionAbort {
             visible: _root._stratumIsDagger

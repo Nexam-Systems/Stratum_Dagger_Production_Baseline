@@ -21,6 +21,7 @@
 
 #include <QtCore/QApplicationStatic>
 #include <QtCore/QTimer>
+#include <utility>
 
 QGC_LOGGING_CATEGORY(MultiVehicleManagerLog, "Vehicle.MultiVehicleManager")
 
@@ -96,12 +97,17 @@ void MultiVehicleManager::_vehicleHeartbeatInfo(LinkInterface* link, int vehicle
         break;
     }
 
-    if ((_vehicles->count() > 0) && !QGCCorePlugin::instance()->options()->multiVehicleEnabled()) {
+    if ((_vehicles->count() > 0 || !_pendingVehicles.isEmpty()) && !QGCCorePlugin::instance()->options()->multiVehicleEnabled()) {
         return;
     }
 
     if (_ignoreVehicleIds.contains(vehicleId) || getVehicleById(vehicleId) || (vehicleId == 0)) {
         return;
+    }
+    for (Vehicle *pendingVehicle : std::as_const(_pendingVehicles)) {
+        if (pendingVehicle->id() == vehicleId) {
+            return;
+        }
     }
 
     qCDebug(MultiVehicleManagerLog) << "Adding new vehicle link:vehicleId:componentId:vehicleFirmwareType:vehicleType "
@@ -119,12 +125,26 @@ void MultiVehicleManager::_vehicleHeartbeatInfo(LinkInterface* link, int vehicle
     (void) connect(vehicle->vehicleLinkManager(), &VehicleLinkManager::allLinksRemoved, this, &MultiVehicleManager::_deleteVehiclePhase1);
     (void) connect(vehicle->parameterManager(), &ParameterManager::parametersReadyChanged, this, &MultiVehicleManager::_vehicleParametersReadyChanged);
 
-    _vehicles->append(vehicle);
-
     // Send QGC heartbeat ASAP, this allows PX4 to start accepting commands
     _sendGCSHeartbeat();
 
-    SettingsManager::instance()->firmwareUpgradeSettings()->defaultFirmwareType()->setRawValue(vehicleFirmwareType);
+    if (vehicle->firmwareConnectionAccepted()) {
+        _publishVehicle(vehicle);
+    } else {
+        _pendingVehicles.append(vehicle);
+        connect(vehicle, &Vehicle::firmwareConnectionAcceptedChanged, this, [this, vehicle]() {
+            if (_pendingVehicles.removeOne(vehicle)) {
+                _publishVehicle(vehicle);
+            }
+        });
+    }
+}
+
+void MultiVehicleManager::_publishVehicle(Vehicle *vehicle)
+{
+    _vehicles->append(vehicle);
+    const int vehicleId = vehicle->id();
+    SettingsManager::instance()->firmwareUpgradeSettings()->defaultFirmwareType()->setRawValue(vehicle->firmwareType());
 
     emit vehicleAdded(vehicle);
 
@@ -149,6 +169,11 @@ void MultiVehicleManager::_vehicleHeartbeatInfo(LinkInterface* link, int vehicle
 void MultiVehicleManager::_deleteVehiclePhase1(Vehicle *vehicle)
 {
     qCDebug(MultiVehicleManagerLog) << Q_FUNC_INFO << vehicle;
+
+    if (_pendingVehicles.removeOne(vehicle)) {
+        vehicle->deleteLater();
+        return;
+    }
 
     bool found = false;
     for (int i = 0; i < _vehicles->count(); i++) {

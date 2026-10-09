@@ -28,19 +28,23 @@
 
 #include <QtConcurrent/QtConcurrent>
 #include <QtCore/QApplicationStatic>
+#include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QEventLoop>
+#include <QtCore/QFile>
 #include <QtCore/QFutureWatcher>
 #include <QtCore/QPointer>
 #include <QtCore/QRunnable>
 #include <QtCore/QTimer>
+#include <QtCore/QUrl>
 #include <QtNetwork/QUdpSocket>
 #include <QtQml/QQmlEngine>
 #include <QtQuick/QQuickItem>
 #include <QtQuick/QQuickWindow>
 
 #include <atomic>
+#include <cmath>
 
 QGC_LOGGING_CATEGORY(VideoManagerLog, "Video.VideoManager")
 
@@ -63,7 +67,6 @@ VideoManager::VideoManager(QObject *parent)
     , _videoSettings(SettingsManager::instance()->videoSettings())
 {
     qCDebug(VideoManagerLog) << this;
-
     (void) qRegisterMetaType<VideoReceiver::STATUS>("STATUS");
 
 #ifdef QGC_GST_STREAMING
@@ -96,6 +99,14 @@ bool VideoManager::sendCameraAction(const QString &action)
         payload = QByteArrayLiteral("#TPUD2wDZM0A65");
     } else if (normalizedAction == "zoom-out") {
         payload = QByteArrayLiteral("#TPUD2wDZM0B66");
+    } else if (normalizedAction == "zoom-1x") {
+        payload = QByteArrayLiteral("#TPUD2wDZM0155");
+    } else if (normalizedAction == "zoom-2x") {
+        payload = QByteArrayLiteral("#TPUD2wDZM0256");
+    } else if (normalizedAction == "zoom-3x") {
+        payload = QByteArrayLiteral("#TPUD2wDZM0357");
+    } else if (normalizedAction == "zoom-4x") {
+        payload = QByteArrayLiteral("#TPUD2wDZM0458");
     } else if (normalizedAction == "pan-up") {
         payload = QByteArrayLiteral("#TPUG2wGSP1E6C");
     } else if (normalizedAction == "pan-down") {
@@ -115,11 +126,17 @@ bool VideoManager::sendCameraAction(const QString &action)
     } else if (normalizedAction == "rec-stop") {
         payload = QByteArrayLiteral("#TPUD2wREC0043");
     } else if (normalizedAction == "track-center") {
-        payload = QByteArrayLiteral("#TPUG8wGOT0280016895");
+        // STRATUM: previously sent #TPUG8wGOT + #TPUG2wSUM01 on :5000. Field
+        // testing (and the Skydroid reference PC app) confirmed those never
+        // actually engage the C12's on-camera tracker. The working path is the
+        // AI V1.2.0 binary protocol on :1030 with a SET_REGION rectangle,
+        // preceded by TRACK_CONTROL/enable_ai. Do that here with a small centre
+        // region so the pre-existing "track-center" button still works.
+        return sendC12TrackRegion(0.42, 0.36, 0.58, 0.64, 0);
     } else if (normalizedAction == "track-stop") {
-        payload = QByteArrayLiteral("#TPUG2wSUM0061");
+        return stopC12Track();
     } else if (normalizedAction == "track-ack") {
-        payload = QByteArrayLiteral("#TPUG2wSUM0162");
+        return setC12AiEnabled(true);
     } else if (normalizedAction == "palette-off") {
         payload = QByteArrayLiteral("#TPUD2wIMG0046");
     } else if (normalizedAction == "palette-01") {
@@ -159,30 +176,15 @@ bool VideoManager::sendCameraAction(const QString &action)
 
 bool VideoManager::sendCameraTrackPoint(int x, int y)
 {
-    const int clampedX = qBound(0, x, 1280);
-    const int clampedY = qBound(0, y, 720);
-    const QString xHex = QString::number(clampedX, 16).toUpper().rightJustified(4, '0');
-    const QString yHex = QString::number(clampedY, 16).toUpper().rightJustified(4, '0');
-    const QByteArray base = QByteArrayLiteral("#TPUG8wGOT") + xHex.toUtf8() + yHex.toUtf8();
-
-    int sum = 0;
-    for (int i = 0; i < base.size(); ++i) {
-        sum += static_cast<unsigned char>(base.at(i));
-    }
-
-    const QByteArray payload = base + QByteArray::number(sum & 0xFF, 16).toUpper().rightJustified(2, '0');
-    QUdpSocket socket;
-    const QHostAddress host(_daggerC12Host());
-    if (host.isNull()) {
-        qCWarning(VideoManagerLog) << "sendCameraTrackPoint: invalid C12 host" << _daggerC12Host();
-        return false;
-    }
-    // C12 protocol §3.3.4→§3.3.5: SUM 01 arms the tracker, then GOT feeds the target.
-    const QByteArray sumAck = QByteArrayLiteral("#TPUG2wSUM0162");
-    if (socket.writeDatagram(sumAck, host, 5000) != sumAck.size()) {
-        return false;
-    }
-    return socket.writeDatagram(payload, host, 5000) == payload.size();
+    // STRATUM: back this compatibility shim with the AI protocol (Python's main.py
+    // proves SUM 01 + GOT on :5000 do NOT engage the C12 tracker). Convert the
+    // 1280x720 pixel point into a 160x160 normalized region and delegate.
+    const qreal cx = qBound(0.0, qreal(x) / 1280.0, 1.0);
+    const qreal cy = qBound(0.0, qreal(y) / 720.0, 1.0);
+    const qreal hw = 80.0 / 1280.0;
+    const qreal hh = 80.0 / 720.0;
+    return sendC12TrackRegion(qMax(0.0, cx - hw), qMax(0.0, cy - hh),
+                              qMin(1.0, cx + hw), qMin(1.0, cy + hh), 0);
 }
 
 // STRATUM: Reprogram the C12 gimbal's IP. Skydroid "IPV" set command:
@@ -294,6 +296,384 @@ QString VideoManager::readC12CameraIp(int timeoutMs)
     }
     qCInfo(VideoManagerLog) << "readC12CameraIp: no reply from" << currentHost << "within" << timeoutMs << "ms";
     return QString();
+}
+
+// STRATUM: C12 gimbal-attitude support (Skydroid TOP protocol V1.1.6 §3.3.2).
+//
+// Enabling: send #TPUG2wGAA<rateHex>  (rate 01..64 hex = 1..100 Hz, 00 = off).
+// Stream:   #TP<addr><C><r>GAC Y0Y1Y2Y3 P0P1P2P3 R0R1R2R3 CC
+//           Each 4-char group is signed int16 in 0.01° units, high byte first
+//           (e.g. 'EC78' = 0xEC78 = -5000 = -50.00°). CC = (sum & 0xFF) as 2-hex.
+// Socket:   persistent so the camera keeps our source port stable; the reply
+//           lands on the same port. Frames land in _onC12AttitudeDatagram().
+static constexpr int    kC12AttitudeRateHz            = 5;
+// STRATUM: attitude is pushed into the vehicle-messages drawer at the raw camera
+// rate so the operator sees a continuous stream of yaw/pitch/roll under the ARM
+// button. If this becomes too chatty in real flight, raise this to 500 ms.
+static constexpr int    kC12AttitudeReportIntervalMs  = 0;
+static constexpr quint16 kC12ControlPort              = 5000;
+static constexpr int    kSeverityInfo                 = 6;  // MAV_SEVERITY_INFO
+static constexpr int    kSeverityWarning              = 4;  // MAV_SEVERITY_WARNING
+
+static QByteArray _c12BuildFrame(const char addr[2], char lenHex, char ctrl,
+                                 const char flag[3], const QByteArray &data)
+{
+    QByteArray base;
+    base.reserve(3 + 2 + 1 + 1 + 3 + data.size() + 2);
+    base.append('#'); base.append('T'); base.append('P');
+    base.append(addr, 2);
+    base.append(lenHex);
+    base.append(ctrl);
+    base.append(flag, 3);
+    base.append(data);
+    int sum = 0;
+    for (int i = 0; i < base.size(); ++i) sum += static_cast<unsigned char>(base.at(i));
+    base += QByteArray::number(sum & 0xFF, 16).toUpper().rightJustified(2, '0');
+    return base;
+}
+
+void VideoManager::_ensureC12Socket()
+{
+    if (_c12Socket) return;
+    _c12Socket = new QUdpSocket(this);
+    if (!_c12Socket->bind(QHostAddress::AnyIPv4, 0, QUdpSocket::DontShareAddress)) {
+        qCWarning(VideoManagerLog) << "C12 attitude socket bind failed:"
+                                   << _c12Socket->errorString();
+    }
+    (void) connect(_c12Socket, &QUdpSocket::readyRead,
+                   this, &VideoManager::_onC12AttitudeDatagram);
+}
+
+void VideoManager::_enableC12AttitudeStream(bool enabled)
+{
+    _ensureC12Socket();
+    if (!_c12Socket) return;
+    const QHostAddress host(_daggerC12Host());
+    if (host.isNull()) {
+        qCWarning(VideoManagerLog) << "_enableC12AttitudeStream: invalid host"
+                                   << _daggerC12Host();
+        return;
+    }
+    const QByteArray rateHex = QByteArray::number(enabled ? kC12AttitudeRateHz : 0, 16)
+                                   .toUpper().rightJustified(2, '0');
+    const QByteArray frame = _c12BuildFrame("UG", '2', 'w', "GAA", rateHex);
+    if (_c12Socket->writeDatagram(frame, host, kC12ControlPort) != frame.size()) {
+        qCWarning(VideoManagerLog) << "GAA enable send failed to" << host.toString();
+        return;
+    }
+    _c12AttitudeStreamEnabled = enabled;
+    qCInfo(VideoManagerLog) << "C12 attitude stream"
+                            << (enabled ? "enabled" : "disabled")
+                            << "rate" << (enabled ? kC12AttitudeRateHz : 0) << "Hz";
+}
+
+void VideoManager::_onC12AttitudeDatagram()
+{
+    if (!_c12Socket) return;
+    while (_c12Socket->hasPendingDatagrams()) {
+        QByteArray buf(int(_c12Socket->pendingDatagramSize()), Qt::Uninitialized);
+        _c12Socket->readDatagram(buf.data(), buf.size());
+        _processC12Frame(buf);
+    }
+}
+
+void VideoManager::_processC12Frame(const QByteArray &frame)
+{
+    // Full GAC frame: 3 hdr + 2 addr + 1 len + 1 ctrl + 3 flag + 12 data + 2 chk = 24.
+    if (frame.size() < 12) return;
+    if (frame.at(0) != '#'
+        || (frame.at(1) != 'T' && frame.at(1) != 't')
+        || (frame.at(2) != 'P' && frame.at(2) != 'p')) return;
+
+    bool lenOk = false;
+    const int len = QByteArray(1, frame.at(5)).toInt(&lenOk, 16);
+    if (!lenOk) return;
+    // C12 TOP §2.2.3: length field counts data characters (=wire bytes), so the
+    // data window is [dataStart, dataStart+len) and the 2-char checksum sits after.
+    const int dataStart = 10;
+    const int dataEnd   = dataStart + len;
+    if (frame.size() < dataEnd + 2) return;
+
+    int sum = 0;
+    for (int i = 0; i < dataEnd; ++i) sum += static_cast<unsigned char>(frame.at(i));
+    bool chkOk = false;
+    const int recvChk = QByteArray(frame.constData() + dataEnd, 2).toInt(&chkOk, 16);
+    if (!chkOk || (sum & 0xFF) != recvChk) {
+        qCDebug(VideoManagerLog) << "C12 checksum mismatch, dropping" << frame;
+        return;
+    }
+
+    if (frame.mid(7, 3) != "GAC" || len != 0xC) return;
+
+    auto decode = [&](int offset) {
+        bool ok = false;
+        const uint16_t raw = frame.mid(dataStart + offset, 4).toUShort(&ok, 16);
+        return ok ? static_cast<double>(static_cast<int16_t>(raw)) * 0.01 : 0.0;
+    };
+    const double yawDeg   = decode(0);
+    const double pitchDeg = decode(4);
+    const double rollDeg  = decode(8);
+
+    _c12YawDeg = yawDeg;
+    _c12PitchDeg = pitchDeg;
+    _c12RollDeg = rollDeg;
+    _c12AttitudeTimestampMs = QDateTime::currentMSecsSinceEpoch();
+    emit c12AttitudeChanged();
+
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (now - _lastC12AttitudeReportMs < kC12AttitudeReportIntervalMs) return;
+    _lastC12AttitudeReportMs = now;
+
+    const QString line = QStringLiteral("C12 gimbal: yaw %1° pitch %2° roll %3°")
+                             .arg(yawDeg,   0, 'f', 2)
+                             .arg(pitchDeg, 0, 'f', 2)
+                             .arg(rollDeg,  0, 'f', 2);
+    qCDebug(VideoManagerLog) << line;
+    if (_activeVehicle) {
+        _activeVehicle->showStatusText(kSeverityInfo, line);
+    }
+}
+
+// STRATUM: Skydroid AI V1.2.0 binary tracking protocol (UDP :1030).
+//
+// This is the protocol the Skydroid reference PC app uses to drive the C12's
+// on-camera visual tracker. The gimbal-side ASCII #TPUG.SUM/GOT frames on :5000
+// documented in the TOP protocol are *not* the tracker start path — field
+// testing (and the reference app's source) confirmed only this AI binary path
+// actually engages the tracker.
+//
+// Frame layout (little-endian multi-byte fields):
+//   [0..1]   HEADER  = 0xAA, 0xA5
+//   [2..3]   LEN     = payload length (u16 LE)
+//   [4..5]   SEQ     = monotonic per-process counter (u16 LE)
+//   [6]      CTRL    = 1 SET_REGION, 2 TRACK_CONTROL
+//   [7..]    PAYLOAD
+//   [tail-2] CRC16   = CRC-16/XMODEM over HEADER..end-of-PAYLOAD (u16 LE)
+//   [tail]   TAIL    = 0xCD
+//
+// Payloads used here:
+//   TRACK_CONTROL (10 bytes):  { u8 cmd, u8 video, u16 x0, u16 y0, u16 x1, u16 y1 }
+//                              cmd 0 = release, 1 = enable, 3 = disable
+//   SET_REGION    (9 bytes):   { u8 video, u16 x0, u16 y0, u16 x1, u16 y1 }
+//                              coordinates on the 1280x720 original frame.
+static constexpr quint16 kC12AiPort = 1030;
+
+static uint16_t _c12AiCrc16(const uint8_t *data, int length)
+{
+    uint16_t crc = 0;
+    for (int i = 0; i < length; ++i) {
+        crc ^= uint16_t(data[i]) << 8;
+        for (int b = 0; b < 8; ++b) {
+            crc = (crc & 0x8000) ? uint16_t((crc << 1) ^ 0x1021) : uint16_t(crc << 1);
+        }
+    }
+    return crc;
+}
+
+void VideoManager::_ensureC12AiSocket()
+{
+    if (_c12AiSocket) return;
+    _c12AiSocket = new QUdpSocket(this);
+    // Bind to :1030 so the camera's AI-result frames come back on the port
+    // Python's reference app uses. If :1030 is unavailable (another instance,
+    // another local app) fall back to an ephemeral port — send-only will still
+    // work; only inbound AI-result parsing would be affected.
+    if (!_c12AiSocket->bind(QHostAddress::AnyIPv4, kC12AiPort,
+                            QAbstractSocket::ShareAddress | QAbstractSocket::ReuseAddressHint)) {
+        qCInfo(VideoManagerLog) << "C12 AI socket: :1030 busy, using ephemeral port —"
+                                << _c12AiSocket->errorString();
+        (void) _c12AiSocket->bind(QHostAddress::AnyIPv4, 0);
+    }
+}
+
+bool VideoManager::_sendC12AiPacket(quint8 control, const QByteArray &payload)
+{
+    _ensureC12AiSocket();
+    if (!_c12AiSocket) return false;
+    const QHostAddress host(_daggerC12Host());
+    if (host.isNull()) {
+        qCWarning(VideoManagerLog) << "_sendC12AiPacket: invalid C12 host" << _daggerC12Host();
+        return false;
+    }
+    QByteArray frame;
+    frame.reserve(2 + 2 + 2 + 1 + payload.size() + 2 + 1);
+    frame.append(char(0xAA)); frame.append(char(0xA5));
+    const quint16 len = quint16(payload.size());
+    frame.append(char(len & 0xFF)); frame.append(char((len >> 8) & 0xFF));
+    const quint16 seq = _c12AiSequence++;
+    frame.append(char(seq & 0xFF)); frame.append(char((seq >> 8) & 0xFF));
+    frame.append(char(control));
+    frame.append(payload);
+    const uint16_t crc = _c12AiCrc16(reinterpret_cast<const uint8_t *>(frame.constData()), frame.size());
+    frame.append(char(crc & 0xFF)); frame.append(char((crc >> 8) & 0xFF));
+    frame.append(char(0xCD));
+    return _c12AiSocket->writeDatagram(frame, host, kC12AiPort) == frame.size();
+}
+
+bool VideoManager::sendC12TrackRegion(qreal x0, qreal y0, qreal x1, qreal y1, int videoSource)
+{
+    // Sort + clamp to the 1280x720 frame the C12 tracker expects.
+    if (x0 > x1) qSwap(x0, x1);
+    if (y0 > y1) qSwap(y0, y1);
+    const int px0 = qBound(0, int(qRound(qBound(0.0, x0, 1.0) * 1279.0)), 1279);
+    const int py0 = qBound(0, int(qRound(qBound(0.0, y0, 1.0) *  719.0)),  719);
+    const int px1 = qBound(0, int(qRound(qBound(0.0, x1, 1.0) * 1279.0)), 1279);
+    const int py1 = qBound(0, int(qRound(qBound(0.0, y1, 1.0) *  719.0)),  719);
+    if (px1 - px0 < 8 || py1 - py0 < 8) {
+        qCInfo(VideoManagerLog) << "sendC12TrackRegion: rejecting degenerate box"
+                                << px0 << py0 << px1 << py1;
+        return false;
+    }
+    const quint8 vid = (videoSource == 1) ? 1 : 0;
+
+    // Enable the AI subsystem once per session — matches Python main.py's
+    // start_region_track path (enable_ai then set_region).
+    if (!_c12AiEnabled) {
+        if (!setC12AiEnabled(true)) {
+            qCWarning(VideoManagerLog) << "sendC12TrackRegion: enable_ai failed";
+            return false;
+        }
+    }
+
+    QByteArray regionPayload; regionPayload.reserve(9);
+    regionPayload.append(char(vid));
+    auto pushU16 = [&](int v) {
+        regionPayload.append(char(v & 0xFF));
+        regionPayload.append(char((v >> 8) & 0xFF));
+    };
+    pushU16(px0); pushU16(py0); pushU16(px1); pushU16(py1);
+    const bool ok = _sendC12AiPacket(1 /*SET_REGION*/, regionPayload);
+    qCInfo(VideoManagerLog).nospace()
+        << "C12 track region video=" << vid
+        << " (" << px0 << "," << py0 << ")->(" << px1 << "," << py1 << ") "
+        << (ok ? "sent" : "FAILED");
+    if (ok && !_c12TrackActive) {
+        _c12TrackActive = true;
+        emit c12TrackingActiveChanged();
+    }
+    return ok;
+}
+
+bool VideoManager::stopC12Track()
+{
+    return setC12AiEnabled(false);
+}
+
+bool VideoManager::setC12AiEnabled(bool enabled)
+{
+    bool releaseSent = true;
+    if (!enabled) {
+        const QByteArray releasePayload(10, char(0));
+        releaseSent = _sendC12AiPacket(2, releasePayload);
+        if (releaseSent && _c12TrackActive) {
+            _c12TrackActive = false;
+            emit c12TrackingActiveChanged();
+        }
+    }
+
+    QByteArray controlPayload(10, char(0));
+    controlPayload[0] = enabled ? char(1) : char(3);
+    const bool controlSent = _sendC12AiPacket(2, controlPayload);
+    if (!controlSent) {
+        return false;
+    }
+    if (_c12AiEnabled != enabled) {
+        _c12AiEnabled = enabled;
+        emit c12AiEnabledChanged();
+    }
+    if (!enabled && _c12TrackActive) {
+        _c12TrackActive = false;
+        emit c12TrackingActiveChanged();
+    }
+    qCInfo(VideoManagerLog) << "C12 AI" << (enabled ? "enable" : "disable")
+                           << "sent; release sent:" << releaseSent;
+    return releaseSent && controlSent;
+}
+
+bool VideoManager::sendC12GimbalRate(int yaw, int pitch)
+{
+    _ensureC12Socket();
+    if (!_c12Socket) return false;
+    const QHostAddress host(_daggerC12Host());
+    if (host.isNull()) {
+        qCWarning(VideoManagerLog) << "sendC12GimbalRate: invalid C12 host" << _daggerC12Host();
+        return false;
+    }
+    const int cy = qBound(-127, yaw,   127);
+    const int cp = qBound(-127, pitch, 127);
+    const QByteArray yawHex   = QByteArray::number(uint8_t(cy) & 0xFF, 16).toUpper().rightJustified(2, '0');
+    const QByteArray pitchHex = QByteArray::number(uint8_t(cp) & 0xFF, 16).toUpper().rightJustified(2, '0');
+    const QByteArray yawFrame   = _c12BuildFrame("UG", '2', 'w', "GSY", yawHex);
+    const QByteArray pitchFrame = _c12BuildFrame("UG", '2', 'w', "GSP", pitchHex);
+    const bool y = _c12Socket->writeDatagram(yawFrame,   host, kC12ControlPort) == yawFrame.size();
+    const bool p = _c12Socket->writeDatagram(pitchFrame, host, kC12ControlPort) == pitchFrame.size();
+    return y && p;
+}
+
+bool VideoManager::sendC12GimbalCombinedRate(int yaw, int pitch)
+{
+    _ensureC12Socket();
+    if (!_c12Socket) return false;
+    const QHostAddress host(_daggerC12Host());
+    if (host.isNull()) return false;
+
+    const int clampedYaw = qBound(-127, yaw, 127);
+    const int clampedPitch = qBound(-127, pitch, 127);
+    const QByteArray rates = QByteArray::number(uint8_t(clampedYaw) & 0xFF, 16).toUpper().rightJustified(2, '0')
+                             + QByteArray::number(uint8_t(clampedPitch) & 0xFF, 16).toUpper().rightJustified(2, '0');
+    const QByteArray frame = _c12BuildFrame("UG", '4', 'w', "GSM", rates);
+    return _c12Socket->writeDatagram(frame, host, kC12ControlPort) == frame.size();
+}
+
+bool VideoManager::setC12GimbalAngles(double yawDegrees, double pitchDegrees, int speed)
+{
+    if (!std::isfinite(yawDegrees) || !std::isfinite(pitchDegrees)) return false;
+    _ensureC12Socket();
+    if (!_c12Socket) return false;
+    const QHostAddress host(_daggerC12Host());
+    if (host.isNull()) return false;
+
+    const double boundedYaw = qBound(-90.0, yawDegrees, 90.0);
+    const double boundedPitch = qBound(-90.0, pitchDegrees, 90.0);
+    const int boundedSpeed = qBound(0, speed, 127);
+    const auto signedAngleHex = [](double degrees) {
+        const int angleHundredths = qBound(-9000, qRound(degrees * 100.0), 9000);
+        return QByteArray::number(static_cast<uint16_t>(static_cast<int16_t>(angleHundredths)), 16)
+            .toUpper().rightJustified(4, '0');
+    };
+    const QByteArray speedHex = QByteArray::number(boundedSpeed, 16).toUpper().rightJustified(2, '0');
+    const QByteArray yawFrame = _c12BuildFrame("UG", '6', 'w', "GAY", signedAngleHex(boundedYaw) + speedHex);
+    const QByteArray pitchFrame = _c12BuildFrame("UG", '6', 'w', "GAP", signedAngleHex(boundedPitch) + speedHex);
+    const bool yawSent = _c12Socket->writeDatagram(yawFrame, host, kC12ControlPort) == yawFrame.size();
+    const bool pitchSent = _c12Socket->writeDatagram(pitchFrame, host, kC12ControlPort) == pitchFrame.size();
+    return yawSent && pitchSent;
+}
+
+bool VideoManager::moveRecordedFile(const QUrl &fromPath, const QUrl &toPath)
+{
+    const QString from = fromPath.isLocalFile() ? fromPath.toLocalFile() : fromPath.toString();
+    const QString to   = toPath.isLocalFile()   ? toPath.toLocalFile()   : toPath.toString();
+    if (from.isEmpty() || to.isEmpty()) {
+        qCWarning(VideoManagerLog) << "moveRecordedFile: empty path" << from << "->" << to;
+        return false;
+    }
+    if (!QFile::exists(from)) {
+        qCWarning(VideoManagerLog) << "moveRecordedFile: source missing" << from;
+        return false;
+    }
+    if (QFile::exists(to)) {
+        (void) QFile::remove(to);
+    }
+    if (!QFile::rename(from, to)) {
+        // Cross-volume rename fails on Windows; fall back to copy+remove.
+        if (!QFile::copy(from, to)) {
+            qCWarning(VideoManagerLog) << "moveRecordedFile: rename+copy failed" << from << "->" << to;
+            return false;
+        }
+        (void) QFile::remove(from);
+    }
+    qCInfo(VideoManagerLog) << "moveRecordedFile:" << from << "->" << to;
+    return true;
 }
 
 // STRATUM: SIYI A2 mini SDK v3 packet builder + UDP sender.
@@ -541,6 +921,19 @@ void VideoManager::init(QQuickWindow *mainWindow)
 
     (void) connect(this, &VideoManager::autoStreamConfiguredChanged, this, &VideoManager::_videoSourceChanged);
 
+    // STRATUM: bind the C12 attitude socket up front and enable the GAA stream
+    // whenever the operator has selected the C12 (daggerCamera == 1). We also
+    // re-send GAA on daggerCamera changes so the camera resumes streaming after
+    // a mode swap or camera reboot.
+    _ensureC12Socket();
+    if (_videoSettings->daggerCamera()->rawValue().toInt() == 1) {
+        _enableC12AttitudeStream(true);
+    }
+    (void) connect(_videoSettings->daggerCamera(), &Fact::rawValueChanged, this,
+                   [this](const QVariant &value) {
+                       _enableC12AttitudeStream(value.toInt() == 1);
+                   });
+
 #ifdef QGC_GST_STREAMING
     if (_initState == InitState::NotStarted) {
         startGStreamerInit();
@@ -707,12 +1100,14 @@ void VideoManager::startRecording(const QString &videoFile)
     const QString videoFileNameTemplate = savePath + "/" + videoFileUrl + ".%1" + ext;
 
     for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
+        if (receiver->name() != QStringLiteral("videoContent")) {
+            continue;
+        }
         if (!receiver->started()) {
             qCDebug(VideoManagerLog) << "Video receiver is not ready.";
             continue;
         }
-        const QString streamName = (receiver->name() == QStringLiteral("videoContent")) ? "" : (receiver->name() + ".");
-        const QString videoFileName = videoFileNameTemplate.arg(streamName);
+        const QString videoFileName = videoFileNameTemplate.arg("");
         receiver->startRecording(videoFileName, fileFormat);
     }
 }
@@ -720,6 +1115,9 @@ void VideoManager::startRecording(const QString &videoFile)
 void VideoManager::stopRecording()
 {
     for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
+        if (receiver->name() != QStringLiteral("videoContent")) {
+            continue;
+        }
         receiver->stopRecording();
     }
 }
@@ -1296,7 +1694,7 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
 
     (void) connect(receiver, &VideoReceiver::recordingChanged, this, [this, receiver](bool active) {
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "recording changed, active:" << (active ? "yes" : "no");
-        if (!receiver->isThermal()) {
+        if (receiver->name() == QStringLiteral("videoContent")) {
             _recording = active;
             if (!active) {
                 _subtitleWriter->stopCapturingTelemetry();
@@ -1307,8 +1705,11 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
 
     (void) connect(receiver, &VideoReceiver::recordingStarted, this, [this, receiver](const QString &filename) {
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "recording started";
-        if (!receiver->isThermal()) {
+        if (receiver->name() == QStringLiteral("videoContent")) {
             _subtitleWriter->startCapturingTelemetry(filename, videoSize());
+            // STRATUM: re-emit so QML (FlyView REC button) can remember the temp
+            // filename and, on stop, prompt the operator for a save-as destination.
+            emit recordingStarted(filename);
         }
     });
 

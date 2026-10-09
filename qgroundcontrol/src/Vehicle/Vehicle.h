@@ -698,6 +698,11 @@ public:
     int firmwareBoardProductId() const { return _firmwareBoardProductId; }
     QString firmwareVersionTypeString() const;
     void setFirmwareVersion(int majorVersion, int minorVersion, int patchVersion, FIRMWARE_VERSION_TYPE versionType = FIRMWARE_VERSION_TYPE_OFFICIAL);
+    bool checkPx4VersionAgainstAdminFloor(const QString& context = QString()) const;
+    bool firmwareConnectionAccepted() const { return !px4Firmware() || _firmwareConnectionAccepted; }
+    void acceptFirmwareConnection();
+    void setNxCapabilities(int schemaMajor, int schemaMinor, int capabilityFlags, bool markerValid);
+    bool checkStratumCustomVersionAgainstAdminFloor(const QString& context = QString()) const;
     void setFirmwareCustomVersion(int majorVersion, int minorVersion, int patchVersion);
     // versionNotSetValue inherited from VehicleTypes
 
@@ -819,6 +824,7 @@ signals:
     void hasGripperChanged              ();
 
     void firmwareVersionChanged         ();
+    void firmwareConnectionAcceptedChanged();
     void firmwareCustomVersionChanged   ();
     void gitHashChanged                 (QString hash);
     void vehicleUIDChanged              ();
@@ -1052,6 +1058,12 @@ private:
     int _firmwareCustomMajorVersion = versionNotSetValue;
     int _firmwareCustomMinorVersion = versionNotSetValue;
     int _firmwareCustomPatchVersion = versionNotSetValue;
+    bool _nxVersionReceived = false;
+    bool _firmwareConnectionAccepted = false;
+    bool _nxMarkerValid = false;
+    uint8_t _nxSchemaMajor = 0;
+    uint8_t _nxSchemaMinor = 0;
+    uint8_t _nxCapabilityFlags = 0;
     FIRMWARE_VERSION_TYPE _firmwareVersionType = FIRMWARE_VERSION_TYPE_OFFICIAL;
 
     // Vendor and Product as reported from the first autopilot version message
@@ -1264,6 +1276,8 @@ public:
     Q_INVOKABLE void resetAllMessages();
     Q_INVOKABLE void resetErrorLevelMessages();
     Q_INVOKABLE void clearMessages();
+    // STRATUM: push a text line into the vehicle-messages drawer (the box below ARM).
+    Q_INVOKABLE void showStatusText(int severity, const QString &text);
 
     bool messageTypeNone() const;
     bool messageTypeNormal() const;

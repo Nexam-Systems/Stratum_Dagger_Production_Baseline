@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 import QGroundControl
@@ -33,6 +34,7 @@ Item {
     signal statusMessage(string text)
 
     readonly property var _vs: QGroundControl.settingsManager.videoSettings
+    readonly property bool _c12Active: _vs && _vs.daggerCamera.rawValue === 1
     // Profile-scoped URL pair. Kept as readonly properties so QML change-tracking follows
     // the daggerMode flag automatically.
     readonly property string _tvUrl: daggerMode ? _vs.daggerC12TvRtspUrl.rawValue : _vs.tvRtspUrl.rawValue
@@ -40,8 +42,28 @@ Item {
     // Active feed is derived from which stored URL the live rtspUrl currently matches,
     // so the dropper panel and the video overlay always show the same TV/IR state.
     readonly property bool _feedIrActive: _irUrl !== "" && _vs.rtspUrl.rawValue === _irUrl
-    property bool _recActive:    false
-    property bool _trackActive:  false
+    // STRATUM: derive REC/Track state directly from VideoManager so the button
+    // labels stay in sync whether recording/tracking was toggled from this
+    // control or somewhere else (e.g. tracking started by a video click).
+    readonly property bool _recActive:   QGroundControl.videoManager.recording
+    readonly property bool _trackActive: QGroundControl.videoManager.c12TrackingActive
+
+    // Local recording bookkeeping — the filename VideoManager gave us on the
+    // most recent recordingStarted signal. Used to move the completed file to
+    // wherever the operator picks in the save dialog.
+    property string _pendingRecordFile: ""
+    property bool _saveDialogOpen: false
+    property bool _lookDownActive: false
+    property bool _gpsExpanded: false
+    property bool _absoluteAnglesExpanded: false
+
+    readonly property var _admin: QGroundControl.settingsManager.adminSettings
+    readonly property int _c12MaxSpeed: {
+        if (!_admin) return 100
+        var raw = Number(_admin.c12GimbalMaxSpeed.rawValue)
+        if (!isFinite(raw)) return 100
+        return Math.max(1, Math.min(127, Math.round(raw)))
+    }
 
     readonly property color _accent:    "#3DFFA6"
     readonly property color _accentDim:  "#1FB97D"
@@ -68,6 +90,18 @@ Item {
             root.statusMessage(qsTr("No %1 URL set — configure it in Application Settings ▸ Video").arg(feed))
             return
         }
+        if (_vs.rtspUrl.rawValue !== url) {
+            const vehicle = QGroundControl.multiVehicleManager.activeVehicle
+            if (vehicle) {
+                vehicle.sendTargetSelect(0, 0, 0, 0, 0)
+                if (vehicle.targetTrack) {
+                    vehicle.targetTrack.clear()
+                }
+            }
+            if (root._c12Active) {
+                QGroundControl.videoManager.stopC12Track()
+            }
+        }
         // Ensure the RTSP source is active, then point it at the chosen feed. Writing
         // rtspUrl restarts the stream (VideoManager listens on its rawValueChanged), so
         // the video swaps between the TV and IR URLs — matching the web UI TV/IR buttons.
@@ -78,45 +112,91 @@ Item {
         root.statusMessage(qsTr("%1 feed selected").arg(feed))
     }
 
+    // STRATUM: record the RTSP stream locally via VideoManager instead of asking
+    // the C12 to record to its SD card. On stop we open a save-as dialog and move
+    // the temp file to the operator-chosen path.
     function _toggleRec() {
-        _recActive = !_recActive
-        if (_send(_recActive ? "rec-start" : "rec-stop")) {
-            root.statusMessage(_recActive ? qsTr("● Recording started") : qsTr("■ Recording stopped"))
-        }
-    }
-
-    // Timer used by _toggleTrack to gap SUM 01 (arm tracker) and GOT (feed target).
-    // Some C12 firmware drops GOT when it arrives back-to-back with SUM 01.
-    Timer {
-        id: _trackFeedTimer
-        interval: 120
-        repeat: false
-        onTriggered: {
-            if (!root._send("track-center")) {
-                root._trackActive = false
-                root.statusMessage(qsTr("Tracking start failed (GOT)"))
-                return
-            }
-            root.statusMessage(qsTr("◎ Tracker armed → target 640,360"))
+        if (QGroundControl.videoManager.recording) {
+            QGroundControl.videoManager.stopRecording()
+            root.statusMessage(qsTr("■ Recording stopped — pick a save location"))
+        } else {
+            _pendingRecordFile = ""
+            QGroundControl.videoManager.startRecording()
+            root.statusMessage(qsTr("● Recording started (local)"))
         }
     }
 
     function _toggleTrack() {
-        _trackActive = !_trackActive
-        if (_trackActive) {
-            // C12 protocol §3.3.4→§3.3.5 order: SUM 01 arms tracker mode ("Tracking
-            // acknowledged"), then GOT feeds the target pixel on the 1280×720 frame.
-            if (!_send("track-ack")) {
-                _trackActive = false
+        if (QGroundControl.videoManager.c12TrackingActive) {
+            if (!QGroundControl.videoManager.sendCameraAction("track-stop")) {
+                root.statusMessage(qsTr("Tracking stop failed"))
                 return
             }
-            _trackFeedTimer.restart()
+            root.statusMessage(qsTr("✕ Tracking off"))
         } else {
-            if (_send("track-stop")) {
-                root.statusMessage(qsTr("✕ Tracking off"))
-            } else {
-                _trackActive = true
+            if (!QGroundControl.videoManager.sendCameraAction("track-center")) {
+                root.statusMessage(qsTr("Tracking start failed"))
+                return
             }
+            root.statusMessage(qsTr("◎ Tracker locked on centre region"))
+        }
+    }
+
+    function _fmtAngle(v) {
+        return isFinite(v) ? Number(v).toFixed(1) : "--"
+    }
+
+    function _stopLookDown() {
+        if (!root._lookDownActive) {
+            return
+        }
+        root._lookDownActive = false
+        lookDownTimer.stop()
+        QGroundControl.videoManager.sendC12GimbalRate(0, 0)
+    }
+
+    function _toggleLookDown() {
+        if (root._lookDownActive) {
+            _stopLookDown()
+            root.statusMessage(qsTr("Look down stopped"))
+            return
+        }
+        root._lookDownActive = true
+        lookDownTimer.start()
+        QGroundControl.videoManager.sendC12GimbalRate(0, -root._c12MaxSpeed)
+        root.statusMessage(qsTr("Looking down"))
+    }
+
+    // Remember the temp file VideoManager wrote so we can move it on stop.
+    Connections {
+        target: QGroundControl.videoManager
+        function onRecordingStarted(filename) { root._pendingRecordFile = filename }
+        function onRecordingChanged(active) {
+            if (!active && root._pendingRecordFile !== "" && !root._saveDialogOpen) {
+                root._saveDialogOpen = true
+                saveRecordingDialog.currentFile = "file:///" + root._pendingRecordFile
+                saveRecordingDialog.selectedFile = "file:///" + root._pendingRecordFile
+                saveRecordingDialog.open()
+            }
+        }
+    }
+
+    FileDialog {
+        id: saveRecordingDialog
+        title: qsTr("Save recording as…")
+        fileMode: FileDialog.SaveFile
+        nameFilters: ["Video files (*.mkv *.mp4)", "All files (*)"]
+        onAccepted: {
+            var ok = QGroundControl.videoManager.moveRecordedFile(
+                "file:///" + root._pendingRecordFile, saveRecordingDialog.selectedFile)
+            root.statusMessage(ok ? qsTr("💾 Saved") : qsTr("Save failed — recording kept at temp path"))
+            root._saveDialogOpen = false
+            root._pendingRecordFile = ""
+        }
+        onRejected: {
+            root.statusMessage(qsTr("Recording kept at: %1").arg(root._pendingRecordFile))
+            root._saveDialogOpen = false
+            root._pendingRecordFile = ""
         }
     }
 
@@ -129,6 +209,7 @@ Item {
         Layout.fillWidth: true
         onPressedChanged: {
             if (pressed) {
+                root._stopLookDown()
                 root._send(ptzAction)
                 ptzHoldTimer.restart()
             } else {
@@ -142,6 +223,13 @@ Item {
             repeat: true
             onTriggered: root._send(ptzButton.ptzAction)
         }
+    }
+
+    Timer {
+        id: lookDownTimer
+        interval: 100
+        repeat: true
+        onTriggered: QGroundControl.videoManager.sendC12GimbalRate(0, -root._c12MaxSpeed)
     }
 
     Rectangle {
@@ -209,6 +297,78 @@ Item {
             Item { Layout.fillWidth: true; Layout.preferredHeight: root._btnHeight }
         }
 
+        QGCLabel {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            color: root._accentDim
+            font.pointSize: ScreenTools.smallFontPointSize
+            text: qsTr("Yaw %1°   Pitch %2°   Roll %3°")
+                    .arg(root._fmtAngle(QGroundControl.videoManager.c12YawDegrees))
+                    .arg(root._fmtAngle(QGroundControl.videoManager.c12PitchDegrees))
+                    .arg(root._fmtAngle(QGroundControl.videoManager.c12RollDegrees))
+        }
+
+        QGCButton {
+            Layout.fillWidth: true
+            visible: root._c12Active
+            text: root._gpsExpanded ? qsTr("Hide Target GPS") : qsTr("Target GPS Estimate")
+            onClicked: root._gpsExpanded = !root._gpsExpanded
+        }
+
+        QGCButton {
+            Layout.fillWidth: true
+            visible: root._c12Active && !root.compact
+            text: root._absoluteAnglesExpanded ? qsTr("Hide Absolute Angles") : qsTr("Absolute Angles")
+            onClicked: root._absoluteAnglesExpanded = !root._absoluteAnglesExpanded
+        }
+
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 3
+            visible: root._c12Active && !root.compact && root._absoluteAnglesExpanded
+            QGCLabel { text: qsTr("Yaw °") }
+            QGCTextField {
+                id: absoluteYawField
+                Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 8
+                text: "0"
+                inputMethodHints: Qt.ImhFormattedNumbersOnly
+            }
+            QGCLabel { text: qsTr("−90 to +90") }
+            QGCLabel { text: qsTr("Pitch °") }
+            QGCTextField {
+                id: absolutePitchField
+                Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 8
+                text: "-45"
+                inputMethodHints: Qt.ImhFormattedNumbersOnly
+            }
+            QGCButton {
+                text: qsTr("Go")
+                onClicked: {
+                    var yaw = Number(absoluteYawField.text)
+                    var pitch = Number(absolutePitchField.text)
+                    if (!isFinite(yaw) || !isFinite(pitch) || yaw < -90 || yaw > 90 || pitch < -90 || pitch > 90) {
+                        root.statusMessage(qsTr("Yaw and pitch must be between −90° and +90°"))
+                        return
+                    }
+                    var sent = QGroundControl.videoManager.setC12GimbalAngles(yaw, pitch, root._c12MaxSpeed)
+                    root.statusMessage(sent ? qsTr("Absolute gimbal angles sent") : qsTr("Gimbal angle command failed"))
+                }
+            }
+        }
+
+        TargetGpsEstimate {
+            Layout.fillWidth: true
+            visible: root._c12Active && root._gpsExpanded
+            vehicle: QGroundControl.multiVehicleManager.activeVehicle
+            tracker: vehicle ? vehicle.targetTrack : null
+            gimbalYawDegrees: QGroundControl.videoManager.c12YawDegrees
+            gimbalPitchDegrees: QGroundControl.videoManager.c12PitchDegrees
+            gimbalTimestampMs: QGroundControl.videoManager.c12AttitudeTimestampMs
+            selectedCameraSource: tracker ? tracker.selectionVideoSource : -1
+            activeCameraSource: root._feedIrActive ? 1 : 0
+            selectionTimestampMs: tracker ? tracker.selectionTimestampMs : 0
+        }
+
         // ---- Zoom ----------------------------------------------------------
         RowLayout {
             Layout.fillWidth: true
@@ -234,6 +394,31 @@ Item {
             }
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: root._spacing
+
+            QGCLabel {
+                text: qsTr("PRESET")
+                color: root._accentDim
+                font.pointSize: ScreenTools.smallFontPointSize
+            }
+            Repeater {
+                model: [1, 2, 3, 4]
+                QGCButton {
+                    required property int modelData
+                    text: qsTr("%1x").arg(modelData)
+                    implicitHeight: root._btnHeight
+                    Layout.fillWidth: true
+                    onClicked: {
+                        if (root._send("zoom-" + modelData + "x")) {
+                            root.statusMessage(qsTr("Zoom preset %1x").arg(modelData))
+                        }
+                    }
+                }
+            }
+        }
+
         // ---- Media: Capture / Record --------------------------------------
         RowLayout {
             Layout.fillWidth: true
@@ -243,7 +428,10 @@ Item {
                 text: qsTr("📷 Capture")
                 implicitHeight: root._btnHeight
                 Layout.fillWidth: true
-                onClicked: { if (root._send("capture")) root.statusMessage(qsTr("📷 Photo captured")) }
+                onClicked: {
+                    QGroundControl.videoManager.grabImage()
+                    root.statusMessage(qsTr("📷 Photo saved locally"))
+                }
             }
             QGCButton {
                 text: root._recActive ? qsTr("■ Stop") : qsTr("● Rec")
@@ -254,13 +442,54 @@ Item {
             }
         }
 
-        // ---- Track ---------------------------------------------------------
-        QGCButton {
-            text: root._trackActive ? qsTr("✕ Stop Track") : qsTr("◎ Track")
-            implicitHeight: root._btnHeight
+        // ---- Track / Look Down --------------------------------------------
+        RowLayout {
             Layout.fillWidth: true
-            primary: root._trackActive
-            onClicked: root._toggleTrack()
+            spacing: root._spacing
+
+            QGCButton {
+                text: root._trackActive ? qsTr("✕ Stop Tracking") : qsTr("◎ Track")
+                implicitHeight: root._btnHeight
+                Layout.fillWidth: true
+                primary: root._trackActive
+                onClicked: root._toggleTrack()
+            }
+
+            QGCButton {
+                text: root._lookDownActive ? qsTr("■ Stop Down") : qsTr("↓ Look Down")
+                implicitHeight: root._btnHeight
+                Layout.fillWidth: true
+                primary: root._lookDownActive
+                onClicked: root._toggleLookDown()
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: root._spacing
+
+            Switch {
+                text: qsTr("AI")
+                checked: QGroundControl.videoManager.c12AiEnabled
+                onClicked: {
+                    var enabled = !QGroundControl.videoManager.c12AiEnabled
+                    var sent = QGroundControl.videoManager.setC12AiEnabled(enabled)
+                    checked = Qt.binding(function() { return QGroundControl.videoManager.c12AiEnabled })
+                    root.statusMessage(sent
+                        ? (enabled ? qsTr("AI enable command sent") : qsTr("AI disable command sent"))
+                        : qsTr("AI command failed"))
+                }
+            }
+
+            QGCButton {
+                text: qsTr("Disable AI")
+                implicitHeight: root._btnHeight
+                Layout.fillWidth: true
+                onClicked: {
+                    var sent = QGroundControl.videoManager.setC12AiEnabled(false)
+                    root.statusMessage(sent ? qsTr("AI disable command sent") : qsTr("AI command failed"))
+                }
+            }
         }
 
         // ---- False-colour palette -----------------------------------------

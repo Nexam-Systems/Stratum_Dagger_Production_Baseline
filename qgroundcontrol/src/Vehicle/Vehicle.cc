@@ -62,6 +62,7 @@
 #include "RemoteIDManager.h"
 #include "RequestMessageCoordinator.h"
 #include "SettingsManager.h"
+#include "AdminSettings.h"
 #include "AppSettings.h"
 #include "FlyViewSettings.h"
 #include "StandardModes.h"
@@ -1740,6 +1741,9 @@ void Vehicle::virtualTabletJoystickValue(double roll, double pitch, double yaw, 
 
 void Vehicle::_say(const QString& text)
 {
+    if (!firmwareConnectionAccepted()) {
+        return;
+    }
     AudioOutput::instance()->say(text.toLower());
 }
 
@@ -2310,6 +2314,128 @@ void Vehicle::setFirmwareVersion(int majorVersion, int minorVersion, int patchVe
     _firmwarePatchVersion = patchVersion;
     _firmwareVersionType = versionType;
     emit firmwareVersionChanged();
+}
+
+void Vehicle::setNxCapabilities(int schemaMajor, int schemaMinor, int capabilityFlags, bool markerValid)
+{
+    _nxVersionReceived = true;
+    _nxMarkerValid = markerValid;
+    _nxSchemaMajor = static_cast<uint8_t>(schemaMajor & 0xFF);
+    _nxSchemaMinor = static_cast<uint8_t>(schemaMinor & 0xFF);
+    _nxCapabilityFlags = static_cast<uint8_t>(capabilityFlags & 0xFF);
+}
+
+void Vehicle::acceptFirmwareConnection()
+{
+    if (!_firmwareConnectionAccepted) {
+        _firmwareConnectionAccepted = true;
+        emit firmwareConnectionAcceptedChanged();
+    }
+}
+
+bool Vehicle::checkPx4VersionAgainstAdminFloor(const QString& context) const
+{
+    AdminSettings* admin = SettingsManager::instance()->adminSettings();
+    if (!admin) {
+        return true;
+    }
+
+    const int requiredMajor = admin->requiredPx4MajorVersion()->rawValue().toInt();
+    const int requiredMinor = admin->requiredPx4MinorVersion()->rawValue().toInt();
+    const int requiredPatch = admin->requiredPx4PatchVersion()->rawValue().toInt();
+    const bool strict = admin->strictCompatibilityGate()->rawValue().toBool();
+
+    if (requiredMajor == 0 && requiredMinor == 0 && requiredPatch == 0) {
+        return true;
+    }
+    if (_firmwareMajorVersion < 0) {
+        const QString reason = tr("Base firmware version not compatible");
+        qCWarning(VehicleLog).noquote() << "STRATUM base firmware version check:" << reason;
+        if (strict) {
+            const QString displayText = reason;
+            if (m_statusTextHandler) {
+                m_statusTextHandler->handleHTMLEscapedTextMessage(
+                    MAV_COMP_ID_MISSIONPLANNER,
+                    MAV_SEVERITY_WARNING,
+                    displayText.toHtmlEscaped(),
+                    QString());
+            }
+            QGC::showAppMessage(displayText);
+        }
+        return false;
+    }
+
+    const bool exactVersionMatch =
+        _firmwareMajorVersion == requiredMajor &&
+        _firmwareMinorVersion == requiredMinor &&
+        _firmwarePatchVersion == requiredPatch;
+    if (exactVersionMatch) {
+        return true;
+    }
+
+    const QString reason = tr("Base firmware version not compatible");
+    qCWarning(VehicleLog).noquote() << "STRATUM base firmware version check:" << reason
+                                    << "reported:" << _firmwareMajorVersion << _firmwareMinorVersion << _firmwarePatchVersion
+                                    << "required:" << requiredMajor << requiredMinor << requiredPatch
+                                    << (context.isEmpty() ? QString() : QStringLiteral("| context=") + context);
+    if (!strict) {
+        return false;
+    }
+
+    const QString displayText = reason;
+    if (m_statusTextHandler) {
+        m_statusTextHandler->handleHTMLEscapedTextMessage(
+            MAV_COMP_ID_MISSIONPLANNER,
+            MAV_SEVERITY_WARNING,
+            displayText.toHtmlEscaped(),
+            QString());
+    }
+    QGC::showAppMessage(displayText);
+    return false;
+}
+
+bool Vehicle::checkStratumCustomVersionAgainstAdminFloor(const QString& context) const
+{
+    AdminSettings* admin = SettingsManager::instance()->adminSettings();
+    if (!admin) {
+        return true;
+    }
+
+    const int requiredSchemaMajor = admin->requiredStratumSchemaMajor()->rawValue().toInt();
+    const int requiredNxMajor = admin->requiredStratumNxMajor()->rawValue().toInt();
+    const int requiredNxMinor = admin->requiredStratumNxMinor()->rawValue().toInt();
+    const int requiredNxPatch = admin->requiredStratumNxPatch()->rawValue().toInt();
+    const bool strict = admin->strictCompatibilityGate()->rawValue().toBool();
+    QString reason;
+
+    if (!_nxVersionReceived || !_nxMarkerValid) {
+        reason = tr("firmware is missing the STRATUM NX marker in AUTOPILOT_VERSION");
+    } else if (_nxSchemaMajor != requiredSchemaMajor) {
+        reason = tr("STRATUM schema major %1 does not match required %2")
+                     .arg(_nxSchemaMajor).arg(requiredSchemaMajor);
+    } else if (_firmwareCustomMajorVersion != requiredNxMajor ||
+               _firmwareCustomMinorVersion != requiredNxMinor ||
+               _firmwareCustomPatchVersion != requiredNxPatch) {
+        reason = QStringLiteral("NX firmware %1.%2.%3 does not match required %4.%5.%6")
+                     .arg(_firmwareCustomMajorVersion).arg(_firmwareCustomMinorVersion).arg(_firmwareCustomPatchVersion)
+                     .arg(requiredNxMajor).arg(requiredNxMinor).arg(requiredNxPatch);
+    } else {
+        return true;
+    }
+
+    qCWarning(VehicleLog).noquote() << "STRATUM custom version check:" << reason;
+    if (strict) {
+        const QString displayText = tr("NX firmware version not compatible");
+        if (m_statusTextHandler) {
+            m_statusTextHandler->handleHTMLEscapedTextMessage(
+                MAV_COMP_ID_MISSIONPLANNER,
+                MAV_SEVERITY_WARNING,
+                displayText.toHtmlEscaped(),
+                QString());
+        }
+        QGC::showAppMessage(displayText);
+    }
+    return false;
 }
 
 void Vehicle::setFirmwareCustomVersion(int majorVersion, int minorVersion, int patchVersion)
@@ -3570,6 +3696,14 @@ bool Vehicle::messageTypeWarning() const { return m_statusTextHandler->messageTy
 bool Vehicle::messageTypeError() const { return m_statusTextHandler->messageTypeError(); }
 int Vehicle::messageCount() const { return m_statusTextHandler->messageCount(); }
 QString Vehicle::formattedMessages() const { return m_statusTextHandler->formattedMessages(); }
+
+void Vehicle::showStatusText(int severity, const QString &text)
+{
+    if (!m_statusTextHandler) return;
+    m_statusTextHandler->handleHTMLEscapedTextMessage(MAV_COMP_ID_MISSIONPLANNER,
+                                                       static_cast<MAV_SEVERITY>(severity),
+                                                       text.toHtmlEscaped(), QString());
+}
 
 void Vehicle::_createStatusTextHandler()
 {

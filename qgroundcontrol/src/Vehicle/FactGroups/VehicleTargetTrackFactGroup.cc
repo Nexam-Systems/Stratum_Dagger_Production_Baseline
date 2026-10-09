@@ -1,6 +1,8 @@
 #include "VehicleTargetTrackFactGroup.h"
 #include "Vehicle.h"
 
+#include <QtCore/QDateTime>
+
 VehicleTargetTrackFactGroup::VehicleTargetTrackFactGroup(QObject *parent)
     : FactGroup(200, QStringLiteral(":/json/Vehicle/TargetTrackFact.json"), parent)
 {
@@ -47,14 +49,37 @@ void VehicleTargetTrackFactGroup::handleMessage(Vehicle *vehicle, const mavlink_
     botRightY()->setRawValue(track.bot_right_y);
     confidence()->setRawValue(track.confidence);
 
+    _lastUpdateMs = QDateTime::currentMSecsSinceEpoch();
+    emit lastUpdateChanged();
     _setTelemetryAvailable(true);
     _staleTimer.start();
+}
+
+void VehicleTargetTrackFactGroup::registerSelection(int videoSource, qint64 timestampMs)
+{
+    _selectionVideoSource = (videoSource == 1) ? 1 : 0;
+    _selectionTimestampMs = timestampMs;
+    emit selectionChanged();
+}
+
+void VehicleTargetTrackFactGroup::clear()
+{
+    _staleTimer.stop();
+    _statusFact.setRawValue(StatusIdle);
+    _targetIdFact.setRawValue(0);
+    _topLeftXFact.setRawValue(qQNaN());
+    _topLeftYFact.setRawValue(qQNaN());
+    _botRightXFact.setRawValue(qQNaN());
+    _botRightYFact.setRawValue(qQNaN());
+    _confidenceFact.setRawValue(qQNaN());
+    _lastUpdateMs = 0;
+    emit lastUpdateChanged();
+    _setTelemetryAvailable(false);
 }
 
 void VehicleTargetTrackFactGroup::_checkStale()
 {
     // Stream stopped or tracker went quiet. Drop to IDLE so the overlay hides the
     // box instead of leaving a stale rectangle pinned to the last position.
-    _statusFact.setRawValue(StatusIdle);
-    _setTelemetryAvailable(false);
+    clear();
 }

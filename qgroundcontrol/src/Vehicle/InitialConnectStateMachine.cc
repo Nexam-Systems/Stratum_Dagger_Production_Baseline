@@ -15,6 +15,7 @@
 #include "SettingsManager.h"
 #include "MavlinkSettings.h"
 
+#include <QtCore/QTimer>
 #include <cstring>
 
 QGC_LOGGING_CATEGORY(InitialConnectStateMachineLog, "Vehicle.InitialConnectStateMachine")
@@ -355,12 +356,40 @@ void InitialConnectStateMachine::_handleAutopilotVersionSuccess(const mavlink_me
         for (int i = 7; i >= 0; i--) {
             vehicle()->_gitHash.append(QString("%1").arg(autopilotVersion.flight_custom_version[i], 2, 16, QChar('0')));
         }
+
+        const uint8_t* customVersion = autopilotVersion.flight_custom_version;
+        const bool nxMarkerValid = customVersion[3] == 'N' && customVersion[4] == 'X';
+        const uint8_t schemaMajor = nxMarkerValid ? customVersion[5] : 0;
+        const uint8_t schemaMinor = nxMarkerValid ? customVersion[6] : 0;
+        const uint8_t capabilityFlags = nxMarkerValid ? customVersion[7] : 0;
+        vehicle()->setNxCapabilities(schemaMajor, schemaMinor, capabilityFlags, nxMarkerValid);
+
+        qCInfo(InitialConnectStateMachineLog).noquote()
+            << "STRATUM custom version:" << (nxMarkerValid ? "NX marker valid" : "NX marker missing")
+            << "NX=" << majorVersion << "." << minorVersion << "." << patchVersion
+            << "schema=" << schemaMajor << "." << schemaMinor
+            << "caps=0x" << QString::number(capabilityFlags, 16);
     } else {
         // APM Firmware stores the first 8 characters of the git hash as an ASCII character string
         char nullStr[9];
         strncpy(nullStr, (char*)autopilotVersion.flight_custom_version, 8);
         nullStr[8] = 0;
         vehicle()->_gitHash = nullStr;
+    }
+
+    if (vehicle()->px4Firmware()) {
+        const bool px4VersionAccepted = vehicle()->checkPx4VersionAgainstAdminFloor(tr("Vehicle connect"));
+        const bool customVersionAccepted = vehicle()->checkStratumCustomVersionAgainstAdminFloor(tr("Vehicle connect"));
+        if (!px4VersionAccepted || !customVersionAccepted) {
+            Vehicle* incompatibleVehicle = vehicle();
+            qCWarning(InitialConnectStateMachineLog)
+                << "Disconnecting vehicle with incompatible STRATUM firmware:" << incompatibleVehicle->id();
+            QTimer::singleShot(0, incompatibleVehicle, [incompatibleVehicle]() {
+                incompatibleVehicle->closeVehicle();
+            });
+            return;
+        }
+        vehicle()->acceptFirmwareConnection();
     }
 
     if (QGCCorePlugin::instance()->options()->checkFirmwareVersion() && !vehicle()->_checkLatestStableFWDone) {
@@ -375,6 +404,15 @@ void InitialConnectStateMachine::_handleAutopilotVersionSuccess(const mavlink_me
 void InitialConnectStateMachine::_handleAutopilotVersionFailure()
 {
     qCDebug(InitialConnectStateMachineLog) << "AUTOPILOT_VERSION request failed, setting assumed capabilities";
+
+    if (vehicle()->px4Firmware()) {
+        vehicle()->checkStratumCustomVersionAgainstAdminFloor(tr("Vehicle connect"));
+        Vehicle* incompatibleVehicle = vehicle();
+        QTimer::singleShot(0, incompatibleVehicle, [incompatibleVehicle]() {
+            incompatibleVehicle->closeVehicle();
+        });
+        return;
+    }
 
     uint64_t assumedCapabilities = MAV_PROTOCOL_CAPABILITY_MAVLINK2;
     if (vehicle()->px4Firmware() || vehicle()->apmFirmware()) {
