@@ -699,6 +699,8 @@ public:
     QString firmwareVersionTypeString() const;
     void setFirmwareVersion(int majorVersion, int minorVersion, int patchVersion, FIRMWARE_VERSION_TYPE versionType = FIRMWARE_VERSION_TYPE_OFFICIAL);
     bool checkPx4VersionAgainstAdminFloor(const QString& context = QString()) const;
+    bool firmwareConnectionAccepted() const { return !px4Firmware() || _firmwareConnectionAccepted; }
+    void acceptFirmwareConnection();
     void setNxCapabilities(int schemaMajor, int schemaMinor, int capabilityFlags, bool markerValid);
     bool checkStratumCustomVersionAgainstAdminFloor(const QString& context = QString()) const;
     void setFirmwareCustomVersion(int majorVersion, int minorVersion, int patchVersion);
@@ -822,6 +824,7 @@ signals:
     void hasGripperChanged              ();
 
     void firmwareVersionChanged         ();
+    void firmwareConnectionAcceptedChanged();
     void firmwareCustomVersionChanged   ();
     void gitHashChanged                 (QString hash);
     void vehicleUIDChanged              ();
@@ -1056,6 +1059,7 @@ private:
     int _firmwareCustomMinorVersion = versionNotSetValue;
     int _firmwareCustomPatchVersion = versionNotSetValue;
     bool _nxVersionReceived = false;
+    bool _firmwareConnectionAccepted = false;
     bool _nxMarkerValid = false;
     uint8_t _nxSchemaMajor = 0;
     uint8_t _nxSchemaMinor = 0;

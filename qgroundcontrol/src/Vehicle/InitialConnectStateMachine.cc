@@ -389,6 +389,7 @@ void InitialConnectStateMachine::_handleAutopilotVersionSuccess(const mavlink_me
             });
             return;
         }
+        vehicle()->acceptFirmwareConnection();
     }
 
     if (QGCCorePlugin::instance()->options()->checkFirmwareVersion() && !vehicle()->_checkLatestStableFWDone) {
@@ -403,6 +404,15 @@ void InitialConnectStateMachine::_handleAutopilotVersionSuccess(const mavlink_me
 void InitialConnectStateMachine::_handleAutopilotVersionFailure()
 {
     qCDebug(InitialConnectStateMachineLog) << "AUTOPILOT_VERSION request failed, setting assumed capabilities";
+
+    if (vehicle()->px4Firmware()) {
+        vehicle()->checkStratumCustomVersionAgainstAdminFloor(tr("Vehicle connect"));
+        Vehicle* incompatibleVehicle = vehicle();
+        QTimer::singleShot(0, incompatibleVehicle, [incompatibleVehicle]() {
+            incompatibleVehicle->closeVehicle();
+        });
+        return;
+    }
 
     uint64_t assumedCapabilities = MAV_PROTOCOL_CAPABILITY_MAVLINK2;
     if (vehicle()->px4Firmware() || vehicle()->apmFirmware()) {

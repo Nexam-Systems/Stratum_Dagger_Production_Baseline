@@ -101,7 +101,7 @@ QGCPopupDialog {
 
                 QGCLabel {
                     Layout.columnSpan: 3
-                    text: qsTr("Required autopilot firmware versions")
+                    text: qsTr("Base firmware")
                     font.bold: true
                 }
 
@@ -126,16 +126,29 @@ QGCPopupDialog {
                 }
                 Item { Layout.fillWidth: true }
 
-                QGCLabel { text: qsTr("STRATUM schema major") }
+                QGCLabel {
+                    Layout.columnSpan: 3
+                    text: qsTr("NX custom firmware")
+                    font.bold: true
+                }
+
+                QGCLabel { text: qsTr("Major") }
                 FactTextField {
-                    fact: _admin ? _admin.requiredStratumSchemaMajor : null
+                    fact: _admin ? _admin.requiredStratumNxMajor : null
                     Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 10
                 }
                 Item { Layout.fillWidth: true }
 
-                QGCLabel { text: qsTr("STRATUM NX major minimum") }
+                QGCLabel { text: qsTr("Minor") }
                 FactTextField {
-                    fact: _admin ? _admin.requiredStratumNxMajor : null
+                    fact: _admin ? _admin.requiredStratumNxMinor : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 10
+                }
+                Item { Layout.fillWidth: true }
+
+                QGCLabel { text: qsTr("Patch") }
+                FactTextField {
+                    fact: _admin ? _admin.requiredStratumNxPatch : null
                     Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 10
                 }
                 Item { Layout.fillWidth: true }
@@ -151,7 +164,7 @@ QGCPopupDialog {
                     Layout.topMargin: ScreenTools.defaultFontPixelHeight / 3
                     Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 58
                     wrapMode: Text.WordWrap
-                    text: qsTr("Incompatible firmware, a missing NX marker, a schema mismatch, or an NX version below minimum disconnects the vehicle. The strict option controls whether a warning is shown. Set base firmware major, minor, and patch all to 0 to disable that version comparison.")
+                    text: qsTr("Both version triplets are minimum requirements. Incompatible vehicles are rejected before connection. Set base firmware major, minor, and patch all to 0 to disable only that comparison.")
                 }
 
                 QGCLabel { text: qsTr("Tracker click box") }

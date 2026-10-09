@@ -1741,6 +1741,9 @@ void Vehicle::virtualTabletJoystickValue(double roll, double pitch, double yaw, 
 
 void Vehicle::_say(const QString& text)
 {
+    if (!firmwareConnectionAccepted()) {
+        return;
+    }
     AudioOutput::instance()->say(text.toLower());
 }
 
@@ -2322,6 +2325,14 @@ void Vehicle::setNxCapabilities(int schemaMajor, int schemaMinor, int capability
     _nxCapabilityFlags = static_cast<uint8_t>(capabilityFlags & 0xFF);
 }
 
+void Vehicle::acceptFirmwareConnection()
+{
+    if (!_firmwareConnectionAccepted) {
+        _firmwareConnectionAccepted = true;
+        emit firmwareConnectionAcceptedChanged();
+    }
+}
+
 bool Vehicle::checkPx4VersionAgainstAdminFloor(const QString& context) const
 {
     AdminSettings* admin = SettingsManager::instance()->adminSettings();
@@ -2338,10 +2349,10 @@ bool Vehicle::checkPx4VersionAgainstAdminFloor(const QString& context) const
         return true;
     }
     if (_firmwareMajorVersion < 0) {
-        const QString reason = tr("Base firmware version was not reported by the autopilot");
+        const QString reason = tr("Base firmware version not compatible");
         qCWarning(VehicleLog).noquote() << "STRATUM base firmware version check:" << reason;
         if (strict) {
-            const QString displayText = context.isEmpty() ? reason : tr("%1: %2").arg(context, reason);
+            const QString displayText = reason;
             if (m_statusTextHandler) {
                 m_statusTextHandler->handleHTMLEscapedTextMessage(
                     MAV_COMP_ID_MISSIONPLANNER,
@@ -2362,16 +2373,16 @@ bool Vehicle::checkPx4VersionAgainstAdminFloor(const QString& context) const
         return true;
     }
 
-    const QString reason = tr("Base firmware %1.%2.%3 is older than the required %4.%5.%6")
-        .arg(_firmwareMajorVersion).arg(_firmwareMinorVersion).arg(_firmwarePatchVersion)
-        .arg(requiredMajor).arg(requiredMinor).arg(requiredPatch);
+    const QString reason = tr("Base firmware version not compatible");
     qCWarning(VehicleLog).noquote() << "STRATUM base firmware version check:" << reason
+                                    << "reported:" << _firmwareMajorVersion << _firmwareMinorVersion << _firmwarePatchVersion
+                                    << "required:" << requiredMajor << requiredMinor << requiredPatch
                                     << (context.isEmpty() ? QString() : QStringLiteral("| context=") + context);
     if (!strict) {
         return false;
     }
 
-    const QString displayText = context.isEmpty() ? reason : tr("%1: %2").arg(context, reason);
+    const QString displayText = reason;
     if (m_statusTextHandler) {
         m_statusTextHandler->handleHTMLEscapedTextMessage(
             MAV_COMP_ID_MISSIONPLANNER,
@@ -2392,6 +2403,8 @@ bool Vehicle::checkStratumCustomVersionAgainstAdminFloor(const QString& context)
 
     const int requiredSchemaMajor = admin->requiredStratumSchemaMajor()->rawValue().toInt();
     const int requiredNxMajor = admin->requiredStratumNxMajor()->rawValue().toInt();
+    const int requiredNxMinor = admin->requiredStratumNxMinor()->rawValue().toInt();
+    const int requiredNxPatch = admin->requiredStratumNxPatch()->rawValue().toInt();
     const bool strict = admin->strictCompatibilityGate()->rawValue().toBool();
     QString reason;
 
@@ -2400,16 +2413,17 @@ bool Vehicle::checkStratumCustomVersionAgainstAdminFloor(const QString& context)
     } else if (_nxSchemaMajor != requiredSchemaMajor) {
         reason = tr("STRATUM schema major %1 does not match required %2")
                      .arg(_nxSchemaMajor).arg(requiredSchemaMajor);
-    } else if (_firmwareCustomMajorVersion < requiredNxMajor) {
-        reason = tr("STRATUM NX major %1 is below required %2")
-                     .arg(_firmwareCustomMajorVersion).arg(requiredNxMajor);
+    } else if (_firmwareCustomMajorVersion < requiredNxMajor ||
+               (_firmwareCustomMajorVersion == requiredNxMajor && _firmwareCustomMinorVersion < requiredNxMinor) ||
+               (_firmwareCustomMajorVersion == requiredNxMajor && _firmwareCustomMinorVersion == requiredNxMinor && _firmwareCustomPatchVersion < requiredNxPatch)) {
+        reason = QStringLiteral("NX firmware below minimum %1.%2.%3").arg(requiredNxMajor).arg(requiredNxMinor).arg(requiredNxPatch);
     } else {
         return true;
     }
 
     qCWarning(VehicleLog).noquote() << "STRATUM custom version check:" << reason;
     if (strict) {
-        const QString displayText = context.isEmpty() ? reason : tr("%1: %2").arg(context, reason);
+        const QString displayText = tr("NX firmware version not compatible");
         if (m_statusTextHandler) {
             m_statusTextHandler->handleHTMLEscapedTextMessage(
                 MAV_COMP_ID_MISSIONPLANNER,

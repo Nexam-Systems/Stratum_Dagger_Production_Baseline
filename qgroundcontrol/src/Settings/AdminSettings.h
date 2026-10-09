@@ -22,6 +22,8 @@ public:
     DEFINE_SETTINGFACT(requiredPx4PatchVersion)
     DEFINE_SETTINGFACT(requiredStratumSchemaMajor)
     DEFINE_SETTINGFACT(requiredStratumNxMajor)
+    DEFINE_SETTINGFACT(requiredStratumNxMinor)
+    DEFINE_SETTINGFACT(requiredStratumNxPatch)
     DEFINE_SETTINGFACT(strictCompatibilityGate)
     DEFINE_SETTINGFACT(trackerBoxSizePx)
     DEFINE_SETTINGFACT(c12GimbalMaxSpeed)

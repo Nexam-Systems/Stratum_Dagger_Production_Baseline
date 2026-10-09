@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QObject>
+#include <QtCore/QList>
 #include <QtQmlIntegration/QtQmlIntegration>
 
 class LinkInterface;
@@ -58,6 +59,7 @@ private slots:
     void _vehicleHeartbeatInfo(LinkInterface *link, int vehicleId, int componentId, int vehicleFirmwareType, int vehicleType);
 
 private:
+    void _publishVehicle(Vehicle *vehicle);
     bool _vehicleExists(int vehicleId);
     bool _vehicleSelected(int vehicleId);
     void _setActiveVehicle(Vehicle *vehicle);
@@ -66,6 +68,7 @@ private:
 
     QTimer *_gcsHeartbeatTimer = nullptr;           ///< Timer to emit heartbeats
     QmlObjectListModel *_vehicles = nullptr;
+    QList<Vehicle*> _pendingVehicles;
     QmlObjectListModel *_selectedVehicles = nullptr;
     Vehicle *_offlineEditingVehicle = nullptr;      ///< Disconnected vechicle used for offline editing
     bool _activeVehicleAvailable = false;           ///< true: An active vehicle is available

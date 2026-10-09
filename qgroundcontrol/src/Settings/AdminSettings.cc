@@ -40,6 +40,8 @@ DECLARE_SETTINGSFACT(AdminSettings, requiredPx4MinorVersion)
 DECLARE_SETTINGSFACT(AdminSettings, requiredPx4PatchVersion)
 DECLARE_SETTINGSFACT(AdminSettings, requiredStratumSchemaMajor)
 DECLARE_SETTINGSFACT(AdminSettings, requiredStratumNxMajor)
+DECLARE_SETTINGSFACT(AdminSettings, requiredStratumNxMinor)
+DECLARE_SETTINGSFACT(AdminSettings, requiredStratumNxPatch)
 DECLARE_SETTINGSFACT(AdminSettings, strictCompatibilityGate)
 
 bool AdminSettings::verifyPassword(const QString& plaintext)

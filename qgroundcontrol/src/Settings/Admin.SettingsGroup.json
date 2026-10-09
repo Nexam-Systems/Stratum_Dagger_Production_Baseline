@@ -53,6 +53,24 @@
             "label": "Required STRATUM NX major"
         },
         {
+            "name": "requiredStratumNxMinor",
+            "shortDesc": "Required NX custom firmware minor version",
+            "type": "uint32",
+            "default": 0,
+            "min": 0,
+            "max": 255,
+            "label": "Required NX custom firmware minor"
+        },
+        {
+            "name": "requiredStratumNxPatch",
+            "shortDesc": "Required NX custom firmware patch version",
+            "type": "uint32",
+            "default": 0,
+            "min": 0,
+            "max": 255,
+            "label": "Required NX custom firmware patch"
+        },
+        {
             "name": "strictCompatibilityGate",
             "shortDesc": "Show operator warning for firmware mismatch",
             "longDesc": "Incompatible base/NX firmware is disconnected either way. When enabled, the mismatch also produces an operator-visible warning; when disabled, it is recorded in the log only.",
