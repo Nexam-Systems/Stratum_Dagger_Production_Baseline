@@ -5,7 +5,7 @@
         {
             "name": "requiredPx4MajorVersion",
             "shortDesc": "Required base firmware major version",
-            "longDesc": "Minimum base firmware major version reported by the autopilot. Set all version fields to zero to disable this check.",
+            "longDesc": "Base firmware major version the autopilot must report exactly. Set all version fields to zero to disable this check.",
             "type": "uint32",
             "default": 1,
             "min": 0,
@@ -15,7 +15,7 @@
         {
             "name": "requiredPx4MinorVersion",
             "shortDesc": "Required base firmware minor version",
-            "longDesc": "Minimum base firmware minor version when the reported major version matches the required major version.",
+            "longDesc": "Base firmware minor version the autopilot must report exactly.",
             "type": "uint32",
             "default": 14,
             "min": 0,
@@ -25,7 +25,7 @@
         {
             "name": "requiredPx4PatchVersion",
             "shortDesc": "Required base firmware patch version",
-            "longDesc": "Minimum base firmware patch version when the reported major and minor versions match the required values.",
+            "longDesc": "Base firmware patch version the autopilot must report exactly.",
             "type": "uint32",
             "default": 0,
             "min": 0,
@@ -45,7 +45,7 @@
         {
             "name": "requiredStratumNxMajor",
             "shortDesc": "Required STRATUM NX firmware major version",
-            "longDesc": "The NX firmware major reported in AUTOPILOT_VERSION custom_version must be at least this value.",
+            "longDesc": "The NX firmware major reported in AUTOPILOT_VERSION custom_version must exactly match this value.",
             "type": "uint32",
             "default": 1,
             "min": 0,

@@ -2365,11 +2365,11 @@ bool Vehicle::checkPx4VersionAgainstAdminFloor(const QString& context) const
         return false;
     }
 
-    const bool belowRequiredVersion =
-        _firmwareMajorVersion < requiredMajor ||
-        (_firmwareMajorVersion == requiredMajor && _firmwareMinorVersion < requiredMinor) ||
-        (_firmwareMajorVersion == requiredMajor && _firmwareMinorVersion == requiredMinor && _firmwarePatchVersion < requiredPatch);
-    if (!belowRequiredVersion) {
+    const bool exactVersionMatch =
+        _firmwareMajorVersion == requiredMajor &&
+        _firmwareMinorVersion == requiredMinor &&
+        _firmwarePatchVersion == requiredPatch;
+    if (exactVersionMatch) {
         return true;
     }
 
@@ -2413,10 +2413,12 @@ bool Vehicle::checkStratumCustomVersionAgainstAdminFloor(const QString& context)
     } else if (_nxSchemaMajor != requiredSchemaMajor) {
         reason = tr("STRATUM schema major %1 does not match required %2")
                      .arg(_nxSchemaMajor).arg(requiredSchemaMajor);
-    } else if (_firmwareCustomMajorVersion < requiredNxMajor ||
-               (_firmwareCustomMajorVersion == requiredNxMajor && _firmwareCustomMinorVersion < requiredNxMinor) ||
-               (_firmwareCustomMajorVersion == requiredNxMajor && _firmwareCustomMinorVersion == requiredNxMinor && _firmwareCustomPatchVersion < requiredNxPatch)) {
-        reason = QStringLiteral("NX firmware below minimum %1.%2.%3").arg(requiredNxMajor).arg(requiredNxMinor).arg(requiredNxPatch);
+    } else if (_firmwareCustomMajorVersion != requiredNxMajor ||
+               _firmwareCustomMinorVersion != requiredNxMinor ||
+               _firmwareCustomPatchVersion != requiredNxPatch) {
+        reason = QStringLiteral("NX firmware %1.%2.%3 does not match required %4.%5.%6")
+                     .arg(_firmwareCustomMajorVersion).arg(_firmwareCustomMinorVersion).arg(_firmwareCustomPatchVersion)
+                     .arg(requiredNxMajor).arg(requiredNxMinor).arg(requiredNxPatch);
     } else {
         return true;
     }

@@ -164,7 +164,7 @@ QGCPopupDialog {
                     Layout.topMargin: ScreenTools.defaultFontPixelHeight / 3
                     Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 58
                     wrapMode: Text.WordWrap
-                    text: qsTr("Both version triplets are minimum requirements. Incompatible vehicles are rejected before connection. Set base firmware major, minor, and patch all to 0 to disable only that comparison.")
+                    text: qsTr("Both version triplets must match exactly. Incompatible vehicles are rejected before connection. Set base firmware major, minor, and patch all to 0 to disable only that comparison.")
                 }
 
                 QGCLabel { text: qsTr("Tracker click box") }
