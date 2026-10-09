@@ -313,8 +313,6 @@ static constexpr int    kC12AttitudeRateHz            = 5;
 // (the camera can drop the subscription, e.g. after tracking or a reboot).
 static constexpr int    kC12AttitudeKeepAliveMs       = 2000;
 static constexpr qint64 kC12AttitudeStaleMs           = 1000;
-static constexpr int    kC12ZoomReadbackDelayMs       = 250;
-static constexpr int    kC12ZoomMaxCorrections        = 6;
 static constexpr quint16 kC12ControlPort              = 5000;
 static constexpr int    kSeverityWarning              = 4;  // MAV_SEVERITY_WARNING
 
@@ -403,11 +401,6 @@ void VideoManager::_processC12Frame(const QByteArray &frame)
     const int recvChk = QByteArray(frame.constData() + dataEnd, 2).toInt(&chkOk, 16);
     if (!chkOk || (sum & 0xFF) != recvChk) {
         qCDebug(VideoManagerLog) << "C12 checksum mismatch, dropping" << frame;
-        return;
-    }
-
-    if (frame.mid(7, 3) == "DZM" && frame.at(6) == 'r' && len == 2) {
-        _handleC12ZoomReadback(frame.mid(dataStart, 2));
         return;
     }
 
@@ -658,51 +651,6 @@ bool VideoManager::setC12GimbalPitch(double pitchDegrees, int speed)
     const QByteArray speedHex = QByteArray::number(qBound(0, speed, 127), 16).toUpper().rightJustified(2, '0');
     const QByteArray pitchFrame = _c12BuildFrame("UG", '6', 'w', "GAP", angleHex + speedHex);
     return _c12Socket->writeDatagram(pitchFrame, host, kC12ControlPort) == pitchFrame.size();
-}
-
-// Absolute DZM 01..04 is sent first; the DZM readback then steps with Zoom+/Zoom-
-// until the camera reports the requested level (some C12 firmware ignores 01..04).
-bool VideoManager::setC12ZoomPreset(int level)
-{
-    if (level < 1 || level > 4) return false;
-    _ensureC12Socket();
-    if (!_c12Socket) return false;
-    const QHostAddress host(_daggerC12Host());
-    if (host.isNull()) return false;
-
-    const QByteArray frame = _c12BuildFrame("UD", '2', 'w', "DZM", QByteArray::number(level, 16).toUpper().rightJustified(2, '0'));
-    if (_c12Socket->writeDatagram(frame, host, kC12ControlPort) != frame.size()) return false;
-    _c12ZoomTarget = level;
-    _c12ZoomCorrections = 0;
-    QTimer::singleShot(kC12ZoomReadbackDelayMs, this, &VideoManager::_requestC12ZoomReadback);
-    return true;
-}
-
-void VideoManager::_requestC12ZoomReadback()
-{
-    if (_c12ZoomTarget == 0 || !_c12Socket) return;
-    const QHostAddress host(_daggerC12Host());
-    if (host.isNull()) return;
-    const QByteArray frame = _c12BuildFrame("UD", '2', 'r', "DZM", QByteArrayLiteral("00"));
-    (void) _c12Socket->writeDatagram(frame, host, kC12ControlPort);
-}
-
-void VideoManager::_handleC12ZoomReadback(const QByteArray &data)
-{
-    bool ok = false;
-    const int level = data.toInt(&ok, 16);
-    qCDebug(VideoManagerLog) << "C12 digital zoom readback" << level << "target" << _c12ZoomTarget;
-    if (!ok || _c12ZoomTarget == 0) return;
-    if (level == _c12ZoomTarget || level < 1 || level > 4 || _c12ZoomCorrections >= kC12ZoomMaxCorrections) {
-        _c12ZoomTarget = 0;
-        return;
-    }
-    const QHostAddress host(_daggerC12Host());
-    if (host.isNull() || !_c12Socket) return;
-    ++_c12ZoomCorrections;
-    const QByteArray step = _c12BuildFrame("UD", '2', 'w', "DZM", level < _c12ZoomTarget ? QByteArrayLiteral("0A") : QByteArrayLiteral("0B"));
-    (void) _c12Socket->writeDatagram(step, host, kC12ControlPort);
-    QTimer::singleShot(kC12ZoomReadbackDelayMs, this, &VideoManager::_requestC12ZoomReadback);
 }
 
 bool VideoManager::moveRecordedFile(const QUrl &fromPath, const QUrl &toPath)

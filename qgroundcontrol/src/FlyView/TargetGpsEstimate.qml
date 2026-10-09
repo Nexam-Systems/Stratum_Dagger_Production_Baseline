@@ -16,6 +16,7 @@ Item {
     required property int selectedCameraSource
     required property int activeCameraSource
     required property double selectionTimestampMs
+    property bool c12TrackingActive: false
 
     // Target ground elevation is assumed equal to the take-off (home) point AMSL.
     readonly property real targetGroundAltitudeAmsl: (vehicle && vehicle.homePosition && vehicle.homePosition.isValid)
@@ -41,6 +42,7 @@ Item {
         return {
             status: "INVALID",
             reason: reason,
+            trackSource: null,
             latitude: null,
             longitude: null,
             horizontalRange: null,
@@ -100,24 +102,32 @@ Item {
                 gimbalTimestampMs <= 0 || now - gimbalTimestampMs > _attitudeFreshnessMs) {
             return _invalid(qsTr("C12 gimbal attitude is unavailable or stale"), roi)
         }
-        var trackTimestamp = Number(tracker ? tracker.lastUpdateMs : 0)
-        if (!tracker || !tracker.telemetryAvailable || Number(tracker.status.rawValue) !== 1) {
-            return _invalid(qsTr("Tracker has no active target (Ctrl+drag on the video to select one)"), roi)
-        }
-        if (selectedCameraSource < 0 || selectedCameraSource !== activeCameraSource) {
-            return _invalid(qsTr("Tracker source does not match the active camera feed"), roi)
-        }
-        if (!isFinite(trackTimestamp) || now - trackTimestamp > _trackerFreshnessMs ||
-                trackTimestamp < selectionTimestampMs) {
-            return _invalid(qsTr("Tracker result is stale or predates the current selection"), roi)
-        }
-        if (!roi || !isFinite(roi.x0) || !isFinite(roi.y0) || !isFinite(roi.x1) || !isFinite(roi.y1)) {
-            return _invalid(qsTr("Tracker ROI is invalid"), roi)
-        }
-        var centerX = (roi.x0 + roi.x1) / 2
-        var centerY = (roi.y0 + roi.y1) / 2
-        if (Math.abs(centerX - 0.5) > _centerTolerance || Math.abs(centerY - 0.5) > _centerTolerance) {
-            return _invalid(qsTr("Target must be centered in the camera frame"), roi)
+        var trackSource = ""
+        if (c12TrackingActive) {
+            // C12 on-camera tracker steers the gimbal onto the target, so the gimbal
+            // line of sight is the target bearing; it reports no ROI back to the GCS.
+            trackSource = "C12_ONBOARD_TRACKER"
+        } else {
+            var trackTimestamp = Number(tracker ? tracker.lastUpdateMs : 0)
+            if (!tracker || !tracker.telemetryAvailable || Number(tracker.status.rawValue) !== 1) {
+                return _invalid(qsTr("No active tracker (start C12 tracking or select a target)"), roi)
+            }
+            if (selectedCameraSource < 0 || selectedCameraSource !== activeCameraSource) {
+                return _invalid(qsTr("Tracker source does not match the active camera feed"), roi)
+            }
+            if (!isFinite(trackTimestamp) || now - trackTimestamp > _trackerFreshnessMs ||
+                    trackTimestamp < selectionTimestampMs) {
+                return _invalid(qsTr("Tracker result is stale or predates the current selection"), roi)
+            }
+            if (!roi || !isFinite(roi.x0) || !isFinite(roi.y0) || !isFinite(roi.x1) || !isFinite(roi.y1)) {
+                return _invalid(qsTr("Tracker ROI is invalid"), roi)
+            }
+            var centerX = (roi.x0 + roi.x1) / 2
+            var centerY = (roi.y0 + roi.y1) / 2
+            if (Math.abs(centerX - 0.5) > _centerTolerance || Math.abs(centerY - 0.5) > _centerTolerance) {
+                return _invalid(qsTr("Target must be centered in the camera frame"), roi)
+            }
+            trackSource = "NEXAM_TARGET_TRACK"
         }
 
         var targetAltitudeAmsl = targetGroundAltitudeAmsl
@@ -157,6 +167,7 @@ Item {
         return {
             status: "VALID",
             reason: "",
+            trackSource: trackSource,
             latitude: targetLatitude,
             longitude: targetLongitude,
             horizontalRange: horizontalRange,
@@ -195,6 +206,7 @@ Item {
     onSelectedCameraSourceChanged: _refresh()
     onActiveCameraSourceChanged: _refresh()
     onSelectionTimestampMsChanged: _refresh()
+    onC12TrackingActiveChanged: _refresh()
     onTargetGroundAltitudeAmslChanged: _refresh()
     onVehicleChanged: {
         _lastPositionMs = 0
@@ -260,7 +272,9 @@ Item {
             wrapMode: Text.WordWrap
             color: qgcPal.warningText
             font.pointSize: ScreenTools.smallFontPointSize
-            text: qsTr("Displayed ROI is received from NEXAM_TARGET_TRACK. The supplied spec does not define a C12 AI CW2 result packet, so no C12 SDK ROI is claimed.")
+            text: root.c12TrackingActive
+                  ? qsTr("Source: C12 on-camera tracker. Target bearing is taken from the gimbal line of sight (tracker keeps the target centred).")
+                  : qsTr("Source: NEXAM_TARGET_TRACK. The C12 does not report its tracker ROI to the GCS.")
         }
 
         ScrollView {

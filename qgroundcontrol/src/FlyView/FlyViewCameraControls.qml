@@ -415,6 +415,7 @@ Item {
                 selectedCameraSource: tracker ? tracker.selectionVideoSource : -1
                 activeCameraSource: root._feedIrActive ? 1 : 0
                 selectionTimestampMs: tracker ? tracker.selectionTimestampMs : 0
+                c12TrackingActive: QGroundControl.videoManager.c12TrackingActive
             }
         }
     }
@@ -481,7 +482,7 @@ Item {
             Item { Layout.fillWidth: true; Layout.preferredHeight: root._btnHeight }
         }
 
-        // ---- Zoom: out / in, then presets ----------------------------------
+        // ---- Zoom: out / in ------------------------------------------------
         RowLayout {
             Layout.fillWidth: true
             spacing: root._spacing
@@ -495,24 +496,6 @@ Item {
                 iconSource: "/InstrumentValueIcons/zoom-in.svg"
                 tip: qsTr("Zoom in")
                 onClicked: { if (root._send("zoom-in")) root.statusMessage(qsTr("Zoom in")) }
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: root._spacing
-
-            Repeater {
-                model: [1, 2, 3, 4]
-                IconButton {
-                    required property int modelData
-                    text: qsTr("%1x").arg(modelData)
-                    tip: qsTr("Zoom preset %1x").arg(modelData)
-                    onClicked: {
-                        const sent = QGroundControl.videoManager.setC12ZoomPreset(modelData)
-                        root.statusMessage(sent ? qsTr("Zoom preset %1x").arg(modelData) : qsTr("Zoom preset command failed"))
-                    }
-                }
             }
         }
 
