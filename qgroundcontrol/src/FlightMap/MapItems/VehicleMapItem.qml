@@ -47,6 +47,14 @@ MapQuickItem {
         height:     vehicleIcon.height
         opacity:    _adsbVehicle || vehicle === _activeVehicle ? 1.0 : 0.5
 
+        CameraFovIndicator {
+            anchors.centerIn: parent
+            z: -1
+            vehicle: _root.vehicle
+            map: _root.map
+            iconSize: _root.size
+        }
+
         MultiEffect {
             source: vehicleIcon
             shadowEnabled: vehicleIcon.visible && _adsbVehicle

@@ -263,6 +263,7 @@ void GimbalController::_handleGimbalDeviceAttitudeStatus(const mavlink_message_t
     }
 
     gimbal->_receivedGimbalDeviceAttitudeStatus = true;
+    gimbal->markAttitudeReceived(yaw_in_vehicle_frame);
 
     _checkComplete(*gimbal, pairId);
 }

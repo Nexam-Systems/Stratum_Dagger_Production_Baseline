@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 
 import QGroundControl
@@ -15,8 +16,10 @@ Item {
     required property int selectedCameraSource
     required property int activeCameraSource
     required property double selectionTimestampMs
+    property bool c12TrackingActive: false
 
-    property string targetGroundAltitudeText: ""
+    // Target ground is assumed level with the take-off point, so height above it is the relative altitude.
+    readonly property real heightAboveTakeoff: (vehicle && vehicle.vehicle) ? Number(vehicle.vehicle.altitudeRelative.rawValue) : NaN
     property double _lastPositionMs: 0
     property double _lastHeadingMs: 0
     property double _lastAltitudeMs: 0
@@ -38,6 +41,7 @@ Item {
         return {
             status: "INVALID",
             reason: reason,
+            trackSource: null,
             latitude: null,
             longitude: null,
             horizontalRange: null,
@@ -72,8 +76,9 @@ Item {
         if (!vehicle || !vehicle.coordinate || !vehicle.coordinate.isValid) {
             return _invalid(qsTr("Vehicle position is invalid"), roi)
         }
-        if (_lastPositionMs <= 0 || now - _lastPositionMs > _gpsFreshnessMs) {
-            return _invalid(qsTr("Vehicle position is stale"), roi)
+        // Facts only signal on value change, so a steady heading/altitude is not stale while the link is alive.
+        if (!vehicle.vehicleLinkManager || vehicle.vehicleLinkManager.communicationLost) {
+            return _invalid(qsTr("Vehicle telemetry lost"), roi)
         }
         if (!vehicle.gps || _number(vehicle.gps.lock) < 3) {
             return _invalid(qsTr("GPS fix is not 3D or better"), roi)
@@ -81,54 +86,51 @@ Item {
 
         var latitude = Number(vehicle.coordinate.latitude)
         var longitude = Number(vehicle.coordinate.longitude)
-        var altitudeAmsl = _number(vehicle.vehicle ? vehicle.vehicle.altitudeAMSL : null)
         var headingDegrees = _number(vehicle.vehicle ? vehicle.vehicle.heading : null)
         if (!isFinite(latitude) || !isFinite(longitude)) {
             return _invalid(qsTr("Vehicle latitude or longitude is invalid"), roi)
         }
-        if (!isFinite(altitudeAmsl) || _lastAltitudeMs <= 0 || now - _lastAltitudeMs > _gpsFreshnessMs) {
-            return _invalid(qsTr("Vehicle AMSL altitude is unavailable or stale"), roi)
-        }
-        if (!isFinite(headingDegrees) || _lastHeadingMs <= 0 || now - _lastHeadingMs > _gpsFreshnessMs) {
-            return _invalid(qsTr("Vehicle heading is unavailable or stale"), roi)
+        if (!isFinite(headingDegrees)) {
+            return _invalid(qsTr("Vehicle heading is unavailable"), roi)
         }
         if (!isFinite(gimbalYawDegrees) || !isFinite(gimbalPitchDegrees) ||
                 gimbalTimestampMs <= 0 || now - gimbalTimestampMs > _attitudeFreshnessMs) {
             return _invalid(qsTr("C12 gimbal attitude is unavailable or stale"), roi)
         }
-        var trackTimestamp = Number(tracker ? tracker.lastUpdateMs : 0)
-        var sampleTimes = [_lastPositionMs, _lastHeadingMs, _lastAltitudeMs, gimbalTimestampMs, trackTimestamp]
-        var earliestSample = Math.min.apply(Math, sampleTimes)
-        var latestSample = Math.max.apply(Math, sampleTimes)
-        if (latestSample - earliestSample > _maxInputSkewMs) {
-            return _invalid(qsTr("Telemetry, attitude, and tracker timestamps are not aligned"), roi)
-        }
-        if (selectedCameraSource < 0 || selectedCameraSource !== activeCameraSource) {
-            return _invalid(qsTr("Tracker source does not match the active camera feed"), roi)
-        }
-        if (!tracker || !tracker.telemetryAvailable || Number(tracker.status.rawValue) !== 1) {
-            return _invalid(qsTr("Tracker has no active target"), roi)
-        }
-        if (!isFinite(Number(tracker.lastUpdateMs)) || now - Number(tracker.lastUpdateMs) > _trackerFreshnessMs ||
-                trackTimestamp < selectionTimestampMs) {
-            return _invalid(qsTr("Tracker result is stale or predates the current selection"), roi)
-        }
-        if (!roi || !isFinite(roi.x0) || !isFinite(roi.y0) || !isFinite(roi.x1) || !isFinite(roi.y1)) {
-            return _invalid(qsTr("Tracker ROI is invalid"), roi)
-        }
-        var centerX = (roi.x0 + roi.x1) / 2
-        var centerY = (roi.y0 + roi.y1) / 2
-        if (Math.abs(centerX - 0.5) > _centerTolerance || Math.abs(centerY - 0.5) > _centerTolerance) {
-            return _invalid(qsTr("Target must be centered in the camera frame"), roi)
+        var trackSource = ""
+        if (c12TrackingActive) {
+            // C12 on-camera tracker steers the gimbal onto the target, so the gimbal
+            // line of sight is the target bearing; it reports no ROI back to the GCS.
+            trackSource = "C12_ONBOARD_TRACKER"
+        } else {
+            var trackTimestamp = Number(tracker ? tracker.lastUpdateMs : 0)
+            if (!tracker || !tracker.telemetryAvailable || Number(tracker.status.rawValue) !== 1) {
+                return _invalid(qsTr("No active tracker (start C12 tracking or select a target)"), roi)
+            }
+            if (selectedCameraSource < 0 || selectedCameraSource !== activeCameraSource) {
+                return _invalid(qsTr("Tracker source does not match the active camera feed"), roi)
+            }
+            if (!isFinite(trackTimestamp) || now - trackTimestamp > _trackerFreshnessMs ||
+                    trackTimestamp < selectionTimestampMs) {
+                return _invalid(qsTr("Tracker result is stale or predates the current selection"), roi)
+            }
+            if (!roi || !isFinite(roi.x0) || !isFinite(roi.y0) || !isFinite(roi.x1) || !isFinite(roi.y1)) {
+                return _invalid(qsTr("Tracker ROI is invalid"), roi)
+            }
+            var centerX = (roi.x0 + roi.x1) / 2
+            var centerY = (roi.y0 + roi.y1) / 2
+            if (Math.abs(centerX - 0.5) > _centerTolerance || Math.abs(centerY - 0.5) > _centerTolerance) {
+                return _invalid(qsTr("Target must be centered in the camera frame"), roi)
+            }
+            trackSource = "NEXAM_TARGET_TRACK"
         }
 
-        var targetAltitudeAmsl = Number(targetGroundAltitudeText)
-        if (targetGroundAltitudeText.trim() === "" || !isFinite(targetAltitudeAmsl)) {
-            return _invalid(qsTr("Enter the target ground elevation in AMSL"), roi)
+        var height = heightAboveTakeoff
+        if (!isFinite(height)) {
+            return _invalid(qsTr("Vehicle altitude above take-off is unavailable"), roi)
         }
-        var height = altitudeAmsl - targetAltitudeAmsl
         if (height <= 0) {
-            return _invalid(qsTr("Vehicle AMSL altitude must be above target ground elevation"), roi)
+            return _invalid(qsTr("Vehicle must be above the take-off elevation"), roi)
         }
         if (gimbalPitchDegrees >= 0) {
             return _invalid(qsTr("C12 camera must be pitched downward to estimate ground target coordinates"), roi)
@@ -159,6 +161,7 @@ Item {
         return {
             status: "VALID",
             reason: "",
+            trackSource: trackSource,
             latitude: targetLatitude,
             longitude: targetLongitude,
             horizontalRange: horizontalRange,
@@ -197,7 +200,8 @@ Item {
     onSelectedCameraSourceChanged: _refresh()
     onActiveCameraSourceChanged: _refresh()
     onSelectionTimestampMsChanged: _refresh()
-    onTargetGroundAltitudeTextChanged: _refresh()
+    onC12TrackingActiveChanged: _refresh()
+    onHeightAboveTakeoffChanged: _refresh()
     onVehicleChanged: {
         _lastPositionMs = 0
         _lastHeadingMs = 0
@@ -243,19 +247,11 @@ Item {
         spacing: ScreenTools.defaultFontPixelHeight / 3
 
         QGCLabel {
-            text: qsTr("Target GPS estimate (AMSL ground elevation required)")
-            font.bold: true
-        }
-
-        RowLayout {
             Layout.fillWidth: true
-            QGCLabel { text: qsTr("Target ground AMSL") }
-            QGCTextField {
-                Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 12
-                placeholderText: qsTr("meters")
-                inputMethodHints: Qt.ImhFormattedNumbersOnly
-                onTextChanged: root.targetGroundAltitudeText = text
-            }
+            wrapMode: Text.WordWrap
+            text: isFinite(root.heightAboveTakeoff)
+                  ? qsTr("Height above take-off (target ground): %1 m").arg(Number(root.heightAboveTakeoff).toFixed(1))
+                  : qsTr("Height above take-off (target ground): unavailable")
         }
 
         QGCLabel {
@@ -269,18 +265,26 @@ Item {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             color: qgcPal.warningText
-            text: qsTr("Displayed ROI is received from NEXAM_TARGET_TRACK. The supplied spec does not define a C12 AI CW2 result packet, so no C12 SDK ROI is claimed.")
+            font.pointSize: ScreenTools.smallFontPointSize
+            text: root.c12TrackingActive
+                  ? qsTr("Source: C12 on-camera tracker. Target bearing is taken from the gimbal line of sight (tracker keeps the target centred).")
+                  : qsTr("Source: NEXAM_TARGET_TRACK. The C12 does not report its tracker ROI to the GCS.")
         }
 
-        TextArea {
+        ScrollView {
             Layout.fillWidth: true
-            Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 9
-            readOnly: true
-            selectByMouse: true
-            wrapMode: TextEdit.WrapAnywhere
-            text: root._jsonOutput()
-            font.family: "Consolas"
-            font.pixelSize: ScreenTools.smallFontPixelSize
+            Layout.preferredHeight: Math.min(jsonArea.implicitHeight, ScreenTools.defaultFontPixelHeight * 24)
+            clip: true
+
+            TextArea {
+                id: jsonArea
+                readOnly: true
+                selectByMouse: true
+                wrapMode: TextEdit.WrapAnywhere
+                text: root._jsonOutput()
+                font.family: "Consolas"
+                font.pixelSize: ScreenTools.smallFontPixelSize
+            }
         }
     }
 
