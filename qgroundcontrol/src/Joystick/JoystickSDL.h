@@ -63,6 +63,7 @@ public:
 
     // Gamepad type
     bool isGamepad() const override;
+    bool supportsProtectedGamepad() const override;
     QString gamepadType() const override;
 
     // Control labels
@@ -142,6 +143,7 @@ public:
     static QMap<QString, Joystick*> discover();
 
 private:
+    int _getProtectedTrigger(bool left) const override;
     [[nodiscard]] bool _open() final;
     void _close() final;
     bool _update() final;
