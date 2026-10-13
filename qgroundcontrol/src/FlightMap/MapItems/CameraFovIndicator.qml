@@ -30,8 +30,9 @@ Canvas {
     readonly property real _yaw: _usesC12 ? Number(_videoManager.c12YawDegrees)
                                          : (_gimbal ? Number(_gimbal.yawInVehicleFrame
                                                              ? _gimbal.bodyYaw.rawValue : _gimbal.absoluteYaw.rawValue) : NaN)
-    readonly property real _bearing: _usesC12 || (_gimbal && _gimbal.yawInVehicleFrame)
-                                     ? normalizeHeading(_vehicleHeading + _yaw) : normalizeHeading(_yaw)
+    readonly property real _bearing: _usesC12 ? normalizeHeading(_vehicleHeading - _yaw)
+                                     : (_gimbal && _gimbal.yawInVehicleFrame
+                                        ? normalizeHeading(_vehicleHeading + _yaw) : normalizeHeading(_yaw))
     readonly property real _hfov: _stream && Number(_stream.hfov) !== 0
                                   ? Number(_stream.hfov) : Number(_fovSettings.cameraHFov.rawValue)
     readonly property real _attitudeTimestamp: _usesC12 ? Number(_videoManager.c12AttitudeTimestampMs)

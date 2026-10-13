@@ -84,11 +84,13 @@ class CameraFovIndicatorTest(unittest.TestCase):
 
     def test_relative_camera_yaw_and_map_rotation(self):
         self.assertTrue(self.item.property("_available"))
-        self.assertAlmostEqual(self.item.property("_bearing"), 120.0)
-        self.video.insert("c12YawDegrees", -30.0)
         self.assertAlmostEqual(self.item.property("_bearing"), 60.0)
+        self.video.insert("c12YawDegrees", -30.0)
+        self.assertAlmostEqual(self.item.property("_bearing"), 120.0)
         self.facts.value("heading").insert("rawValue", 350.0)
         self.video.insert("c12YawDegrees", 30.0)
+        self.assertAlmostEqual(self.item.property("_bearing"), 320.0)
+        self.video.insert("c12YawDegrees", -30.0)
         self.assertAlmostEqual(self.item.property("_bearing"), 20.0)
         self.map.insert("bearing", 10.0)
         self.assertAlmostEqual(self.item.property("rotation"), 10.0)
@@ -175,7 +177,7 @@ class CameraFovIndicatorTest(unittest.TestCase):
         self.assertLessEqual(self.item.property("_radius"), 120.0)
 
     def test_canvas_renders_with_clear_icon_center(self):
-        self.video.insert("c12YawDegrees", -90.0)
+        self.video.insert("c12YawDegrees", 90.0)
         self.video.insert("c12PitchDegrees", 0.0)
         window = QQuickWindow()
         window.resize(320, 320)
