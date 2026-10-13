@@ -2,6 +2,8 @@
 #include "GimbalController.h"
 #include "QGCLoggingCategory.h"
 
+#include <QtCore/QDateTime>
+
 QGC_LOGGING_CATEGORY(GimbalLog, "Gimbal.Gimbal")
 
 Gimbal::Gimbal(GimbalController *parent)
@@ -43,6 +45,8 @@ const Gimbal &Gimbal::operator=(const Gimbal &other)
     _absoluteYawFact = other._absoluteYawFact;
     _deviceIdFact = other._deviceIdFact;
     _yawLock = other._yawLock;
+    _attitudeTimestampMs = other._attitudeTimestampMs;
+    _yawInVehicleFrame = other._yawInVehicleFrame;
     _haveControl = other._haveControl;
     _othersHaveControl = other._othersHaveControl;
 
@@ -64,6 +68,13 @@ void Gimbal::_initFacts()
     _absoluteYawFact.setRawValue(0.0f);
     _deviceIdFact.setRawValue(0);
     _managerCompidFact.setRawValue(0);
+}
+
+void Gimbal::markAttitudeReceived(bool yawInVehicleFrame)
+{
+    _yawInVehicleFrame = yawInVehicleFrame;
+    _attitudeTimestampMs = QDateTime::currentMSecsSinceEpoch();
+    emit attitudeUpdated();
 }
 
 void Gimbal::setCapabilityFlags(uint32_t flags)

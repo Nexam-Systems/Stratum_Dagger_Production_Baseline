@@ -19,6 +19,7 @@ class QGCVideoStreamInfo : public QObject
     Q_PROPERTY(quint8   type        READ type           NOTIFY infoChanged)
     Q_PROPERTY(qreal    aspectRatio READ aspectRatio    NOTIFY infoChanged)
     Q_PROPERTY(quint16  hfov        READ hfov           NOTIFY infoChanged)
+    Q_PROPERTY(qint64   statusTimestampMs READ statusTimestampMs NOTIFY statusUpdated)
     Q_PROPERTY(bool     isThermal   READ isThermal      NOTIFY infoChanged)
     Q_PROPERTY(bool     isActive    READ isActive       NOTIFY infoChanged)
     Q_PROPERTY(QSize    resolution  READ resolution     NOTIFY infoChanged)
@@ -40,6 +41,7 @@ public:
     QString name() const { return QString(_streamInfo.name); }
     qreal aspectRatio() const;
     quint16 hfov() const { return _streamInfo.hfov; }
+    qint64 statusTimestampMs() const { return _statusTimestampMs; }
     quint8 type() const { return _streamInfo.type; }
     quint8 streamID() const { return _streamInfo.stream_id; }
     quint8 encoding() const { return _streamInfo.encoding; }
@@ -54,7 +56,9 @@ public:
 
 signals:
     void infoChanged();
+    void statusUpdated();
 
 private:
     mavlink_video_stream_information_t _streamInfo{};
+    qint64 _statusTimestampMs = 0;
 };

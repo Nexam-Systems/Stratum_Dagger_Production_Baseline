@@ -4,6 +4,7 @@
 
 #include <cmath>
 
+#include <QtCore/QDateTime>
 #include <QtGui/QQuaternion>
 #include <QtGui/QVector3D>
 
@@ -126,6 +127,8 @@ void VehicleFactGroup::_handleAttitudeWorker(double rollRadians, double pitchRad
     roll()->setRawValue(rollDegrees);
     pitch()->setRawValue(pitchDegrees);
     heading()->setRawValue(yawDegrees);
+    _attitudeTimestampMs = QDateTime::currentMSecsSinceEpoch();
+    emit attitudeUpdated();
 }
 
 void VehicleFactGroup::_handleAttitude(Vehicle *vehicle, const mavlink_message_t &message)

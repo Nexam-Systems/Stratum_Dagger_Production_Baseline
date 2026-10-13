@@ -12,6 +12,8 @@ class Gimbal : public FactGroup
     Q_PROPERTY(Fact     *absolutePitch          READ absolutePitch              CONSTANT)
     Q_PROPERTY(Fact     *bodyYaw                READ bodyYaw                    CONSTANT)
     Q_PROPERTY(Fact     *absoluteYaw            READ absoluteYaw                CONSTANT)
+    Q_PROPERTY(qint64   attitudeTimestampMs     READ attitudeTimestampMs        NOTIFY attitudeUpdated)
+    Q_PROPERTY(bool     yawInVehicleFrame      READ yawInVehicleFrame           NOTIFY attitudeUpdated)
     Q_PROPERTY(Fact     *deviceId               READ deviceId                   CONSTANT)
     Q_PROPERTY(Fact     *managerCompid          READ managerCompid              CONSTANT)
     Q_PROPERTY(float    pitchRate               READ pitchRate                  NOTIFY pitchRateChanged)
@@ -41,6 +43,9 @@ public:
     float pitchRate() const { return _pitchRate; }
     float yawRate() const { return _yawRate; }
     bool yawLock() const { return _yawLock; }
+    qint64 attitudeTimestampMs() const { return _attitudeTimestampMs; }
+    bool yawInVehicleFrame() const { return _yawInVehicleFrame; }
+    void markAttitudeReceived(bool yawInVehicleFrame);
     bool retracted() const { return _retracted; }
     bool gimbalHaveControl() const { return _haveControl; }
     bool gimbalOthersHaveControl() const { return _othersHaveControl; }
@@ -64,6 +69,7 @@ public:
     bool supportsYawLock() const { return (_capabilityFlags & GIMBAL_MANAGER_CAP_FLAGS_HAS_YAW_LOCK) != 0; }
 
 signals:
+    void attitudeUpdated();
     void pitchRateChanged();
     void yawRateChanged();
     void yawLockChanged();
@@ -93,6 +99,8 @@ private:
     Fact _managerCompidFact = Fact(0, QStringLiteral("managerCompid"), FactMetaData::valueTypeUint8);
 
     float _pitchRate = 0.f;
+    qint64 _attitudeTimestampMs = 0;
+    bool _yawInVehicleFrame = false;
     float _yawRate = 0.f;
     bool _yawLock = false;
     bool _retracted = false;

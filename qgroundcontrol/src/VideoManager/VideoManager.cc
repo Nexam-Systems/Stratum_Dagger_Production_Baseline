@@ -409,11 +409,12 @@ void VideoManager::_processC12Frame(const QByteArray &frame)
     auto decode = [&](int offset) {
         bool ok = false;
         const uint16_t raw = frame.mid(dataStart + offset, 4).toUShort(&ok, 16);
-        return ok ? static_cast<double>(static_cast<int16_t>(raw)) * 0.01 : 0.0;
+        return ok ? static_cast<double>(static_cast<int16_t>(raw)) * 0.01 : qQNaN();
     };
     const double yawDeg   = decode(0);
     const double pitchDeg = decode(4);
     const double rollDeg  = decode(8);
+    if (!std::isfinite(yawDeg) || !std::isfinite(pitchDeg) || !std::isfinite(rollDeg)) return;
 
     _c12YawDeg = yawDeg;
     _c12PitchDeg = pitchDeg;

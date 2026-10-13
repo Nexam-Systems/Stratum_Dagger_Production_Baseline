@@ -1,6 +1,8 @@
 #include "QGCVideoStreamInfo.h"
 #include "QGCLoggingCategory.h"
 
+#include <QtCore/QDateTime>
+
 QGC_LOGGING_CATEGORY(QGCVideoStreamInfoLog, "Camera.QGCVideoStreamInfo")
 
 QGCVideoStreamInfo::QGCVideoStreamInfo(const mavlink_video_stream_information_t &info, QObject *parent)
@@ -9,6 +11,7 @@ QGCVideoStreamInfo::QGCVideoStreamInfo(const mavlink_video_stream_information_t 
     qCDebug(QGCVideoStreamInfoLog) << this;
 
     (void) memcpy(&_streamInfo, &info, sizeof(mavlink_video_stream_information_t));
+    _statusTimestampMs = QDateTime::currentMSecsSinceEpoch();
 }
 
 QGCVideoStreamInfo::~QGCVideoStreamInfo()
@@ -68,5 +71,7 @@ bool QGCVideoStreamInfo::update(const mavlink_video_stream_status_t &status)
         emit infoChanged();
     }
 
+    _statusTimestampMs = QDateTime::currentMSecsSinceEpoch();
+    emit statusUpdated();
     return changed;
 }
