@@ -50,6 +50,25 @@ Item {
         standoffPanel.toggle()
     }
 
+    function gamepadStandoffRequest() {
+        const target = QtPositioning.coordinate(Number(standoffLatField.text), Number(standoffLonField.text))
+        const distance = Number(standoffDistanceField.text)
+        const height = Number(standoffHeightField.text)
+        const speed = Number(standoffSpeedField.text)
+        if (standoffLatField.text.trim() === "" || standoffLonField.text.trim() === ""
+                || !target.isValid || !isFinite(distance) || distance <= 0 || !isFinite(height) || height <= 0
+                || !isFinite(speed) || speed <= 0 || !mapControl || !mapControl.isCoordinateInsideAOP(target)) return null
+        return { target: target, distance: distance, height: height, speed: speed, direction: standoffDirectionCombo.currentIndex }
+    }
+
+    function executeGamepadStandoff(request) {
+        if (!request || !mapControl || !mapControl.isCoordinateInsideAOP(request.target)) return false
+        const sent = mapControl.standoffCmdController.beginStandoff(request.distance, request.height,
+                                                                   request.speed, request.direction, request.target)
+        if (sent) standoffPanel.close()
+        return sent
+    }
+
     // STRATUM: opens the Set Standoff panel (if not already visible) and pre-fills
     // the target lat/lon fields with the coordinate the operator picked from the map
     // click menu. The panel's own textChanged handlers push the pending marker.

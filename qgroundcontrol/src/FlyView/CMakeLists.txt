@@ -29,6 +29,10 @@ qt_add_qml_module(FlyViewModule
         FlightDisplayViewUVC.qml
         FlightDisplayViewVideo.qml
         FlyView.qml
+        GamepadSafetyState.qml
+        GamepadCommandController.qml
+        GamepadOverlay.qml
+        GamepadHoldProgress.qml
         FlyViewAdditionalActionsButton.qml
         FlyViewAdditionalActionsList.qml
         FlyViewAdditionalActionsPanel.qml

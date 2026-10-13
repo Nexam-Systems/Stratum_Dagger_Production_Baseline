@@ -17,6 +17,8 @@ import QGroundControl.Viewer3D
 
 Item {
     id: _root
+    readonly property var _gamepadJoystickManager: joystickManager
+    readonly property var _gamepadEngagementController: engagementController
 
     readonly property bool _is3DMode:       QGCViewer3DManager.displayMode === QGCViewer3DManager.View3D
     readonly property bool _keepSceneAlive: QGroundControl.settingsManager.viewer3DSettings.keepSceneAlive.rawValue
@@ -41,6 +43,36 @@ Item {
     // below, so both act on one piece of arming/destination state.
     EngagementController {
         id: engagementController
+    }
+
+    GamepadCommandController {
+        id: gamepadController
+        joystickManager: _root._gamepadJoystickManager
+        vehicle: _root._activeVehicle
+        guidedController: _root._guidedController
+        engagementController: _root._gamepadEngagementController
+        widgetLayer: _root._widgetLayer
+        mapControl: _root._mapControl
+    }
+
+    GamepadOverlay {
+        controller: gamepadController
+        anchors.left: parent.left
+        anchors.leftMargin: ScreenTools.defaultFontPixelWidth * 10
+        anchors.top: parent.top
+        anchors.topMargin: toolbar.height + _root._toolsMargin
+        width: Math.min(ScreenTools.defaultFontPixelWidth * 32, parent.width - anchors.leftMargin - _root._toolsMargin)
+        z: QGroundControl.zOrderTopMost
+    }
+
+    GamepadHoldProgress {
+        safetyState: gamepadController.state
+        anchors.top: parent.top
+        anchors.topMargin: toolbar.height + 4
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(440, parent.width - 24)
+        height: implicitHeight
+        z: QGroundControl.zOrderTopMost + 1
     }
 
     // STRATUM: joystick safety-critical combos. When two buttons are assigned to the
