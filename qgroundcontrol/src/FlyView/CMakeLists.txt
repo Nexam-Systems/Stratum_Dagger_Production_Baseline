@@ -9,6 +9,10 @@ qt_add_qml_module(FlyViewModule
     URI QGroundControl.FlyView
     VERSION 1.0
     RESOURCE_PREFIX /qml
+    SOURCES
+        CameraGeolocation.cc
+        CameraGeolocation.h
+        CameraGroundRay.h
     QML_FILES
         ConnectPodAction.qml
         CustomGuidedActionsController.qml
@@ -104,6 +108,8 @@ qt_add_qml_module(FlyViewModule
         VTOLChecklist.qml
     NO_PLUGIN
 )
+
+target_link_libraries(FlyViewModule PRIVATE QGCGeoMath GeographicLib::GeographicLib)
 
 qt_add_resources(FlyViewModule flyview_resources
     PREFIX "/res"
