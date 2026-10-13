@@ -4,41 +4,53 @@ import QtQuick.Layouts
 
 import QGroundControl
 import QGroundControl.Controls
-import QGroundControl.FlyView
 
 Item {
     id: root
 
     required property var vehicle
+    required property var tracker
     required property real gimbalYawDegrees
     required property real gimbalPitchDegrees
-    required property real gimbalRollDegrees
     required property double gimbalTimestampMs
+    required property int selectedCameraSource
+    required property int activeCameraSource
+    required property double selectionTimestampMs
+    property bool c12TrackingActive: false
 
     // Target ground is assumed level with the take-off point, so height above it is the relative altitude.
     readonly property real heightAboveTakeoff: (vehicle && vehicle.vehicle) ? Number(vehicle.vehicle.altitudeRelative.rawValue) : NaN
+    property double _lastPositionMs: 0
+    property double _lastHeadingMs: 0
+    property double _lastAltitudeMs: 0
+    property int _refreshTick: 0
     property var estimate: ({})
 
+    readonly property int _gpsFreshnessMs: 2000
     readonly property int _attitudeFreshnessMs: 1500
-    readonly property var _facts: vehicle ? vehicle.vehicle : null
-
-    CameraGeolocation { id: geometry }
+    readonly property int _trackerFreshnessMs: 500
+    readonly property int _maxInputSkewMs: 1500
+    readonly property real _minPitchDegrees: 1.0
+    readonly property real _centerTolerance: 0.02
+    readonly property real _cameraOffsetMeters: 0.1524
 
     implicitWidth: resultLayout.implicitWidth
     implicitHeight: resultLayout.implicitHeight
 
-    function _invalid(reason) {
+    function _invalid(reason, roi) {
         return {
             status: "INVALID",
             reason: reason,
-            source: "CAMERA_CENTRE_RAY",
+            trackSource: null,
             latitude: null,
             longitude: null,
             horizontalRange: null,
             bearing: null,
             dNorth: null,
             dEast: null,
-            slantRange: null
+            companionTrackerROI: roi,
+            c12SdkROI: null,
+            c12SdkROIStatus: "UNAVAILABLE_NO_CW2_RESULT_SCHEMA"
         }
     }
 
@@ -46,84 +58,180 @@ Item {
         return fact ? Number(fact.rawValue) : NaN
     }
 
+    function _roi() {
+        if (!tracker) return null
+        return {
+            source: "NEXAM_TARGET_TRACK",
+            coordinateSystem: "normalized_0_to_1",
+            x0: _number(tracker.topLeftX),
+            y0: _number(tracker.topLeftY),
+            x1: _number(tracker.botRightX),
+            y1: _number(tracker.botRightY)
+        }
+    }
+
     function _buildEstimate() {
-        const now = Date.now()
+        var roi = _roi()
+        var now = Date.now()
         if (!vehicle || !vehicle.coordinate || !vehicle.coordinate.isValid) {
-            return _invalid(qsTr("Vehicle position is invalid"))
+            return _invalid(qsTr("Vehicle position is invalid"), roi)
         }
+        // Facts only signal on value change, so a steady heading/altitude is not stale while the link is alive.
         if (!vehicle.vehicleLinkManager || vehicle.vehicleLinkManager.communicationLost) {
-            return _invalid(qsTr("Vehicle telemetry lost"))
+            return _invalid(qsTr("Vehicle telemetry lost"), roi)
         }
-        if (!vehicle.gps || !isFinite(_number(vehicle.gps.lock)) || _number(vehicle.gps.lock) < 3) {
-            return _invalid(qsTr("GPS fix is not 3D or better"))
+        if (!vehicle.gps || _number(vehicle.gps.lock) < 3) {
+            return _invalid(qsTr("GPS fix is not 3D or better"), roi)
         }
-        if (!vehicle.homePosition.isValid) {
-            return _invalid(qsTr("Home position is unavailable"))
+
+        var latitude = Number(vehicle.coordinate.latitude)
+        var longitude = Number(vehicle.coordinate.longitude)
+        var headingDegrees = _number(vehicle.vehicle ? vehicle.vehicle.heading : null)
+        if (!isFinite(latitude) || !isFinite(longitude)) {
+            return _invalid(qsTr("Vehicle latitude or longitude is invalid"), roi)
         }
-        const positionTimestamp = Number(vehicle.positionTimestampMs)
-        if (!isFinite(positionTimestamp) || positionTimestamp <= 0
-                || now - positionTimestamp < 0 || now - positionTimestamp > 2000) {
-            return _invalid(qsTr("Fused vehicle position is unavailable or stale"))
+        if (!isFinite(headingDegrees)) {
+            return _invalid(qsTr("Vehicle heading is unavailable"), roi)
         }
-        if (!_facts || !isFinite(Number(_facts.attitudeTimestampMs)) || _facts.attitudeTimestampMs <= 0
-                || now - Number(_facts.attitudeTimestampMs) < 0 || now - Number(_facts.attitudeTimestampMs) > _attitudeFreshnessMs) {
-            return _invalid(qsTr("Vehicle attitude is unavailable or stale"))
+        if (!isFinite(gimbalYawDegrees) || !isFinite(gimbalPitchDegrees) ||
+                gimbalTimestampMs <= 0 || now - gimbalTimestampMs > _attitudeFreshnessMs) {
+            return _invalid(qsTr("C12 gimbal attitude is unavailable or stale"), roi)
         }
-        if (!isFinite(gimbalYawDegrees) || !isFinite(gimbalPitchDegrees) || !isFinite(gimbalRollDegrees)
-                || !isFinite(gimbalTimestampMs) || gimbalTimestampMs <= 0
-                || now - gimbalTimestampMs < 0 || now - gimbalTimestampMs > _attitudeFreshnessMs) {
-            return _invalid(qsTr("C12 measured attitude is unavailable or stale"))
+        var trackSource = ""
+        if (c12TrackingActive) {
+            // C12 on-camera tracker steers the gimbal onto the target, so the gimbal
+            // line of sight is the target bearing; it reports no ROI back to the GCS.
+            trackSource = "C12_ONBOARD_TRACKER"
+        } else {
+            var trackTimestamp = Number(tracker ? tracker.lastUpdateMs : 0)
+            if (!tracker || !tracker.telemetryAvailable || Number(tracker.status.rawValue) !== 1) {
+                return _invalid(qsTr("No active tracker (start C12 tracking or select a target)"), roi)
+            }
+            if (selectedCameraSource < 0 || selectedCameraSource !== activeCameraSource) {
+                return _invalid(qsTr("Tracker source does not match the active camera feed"), roi)
+            }
+            if (!isFinite(trackTimestamp) || now - trackTimestamp > _trackerFreshnessMs ||
+                    trackTimestamp < selectionTimestampMs) {
+                return _invalid(qsTr("Tracker result is stale or predates the current selection"), roi)
+            }
+            if (!roi || !isFinite(roi.x0) || !isFinite(roi.y0) || !isFinite(roi.x1) || !isFinite(roi.y1)) {
+                return _invalid(qsTr("Tracker ROI is invalid"), roi)
+            }
+            var centerX = (roi.x0 + roi.x1) / 2
+            var centerY = (roi.y0 + roi.y1) / 2
+            if (Math.abs(centerX - 0.5) > _centerTolerance || Math.abs(centerY - 0.5) > _centerTolerance) {
+                return _invalid(qsTr("Target must be centered in the camera frame"), roi)
+            }
+            trackSource = "NEXAM_TARGET_TRACK"
         }
-        const latestSample = Math.max(positionTimestamp, Number(_facts.attitudeTimestampMs), gimbalTimestampMs)
-        const earliestSample = Math.min(positionTimestamp, Number(_facts.attitudeTimestampMs), gimbalTimestampMs)
-        if (latestSample - earliestSample > 500)
-            return _invalid(qsTr("Position, vehicle and camera attitude samples are not aligned"))
-        const result = geometry.estimate(vehicle.coordinate, vehicle.homePosition, heightAboveTakeoff,
-                                        _number(_facts.roll), _number(_facts.pitch), _number(_facts.heading),
-                                        gimbalRollDegrees, gimbalPitchDegrees, gimbalYawDegrees)
-        result.sampleTimestampMs = Math.min(Number(_facts.attitudeTimestampMs), gimbalTimestampMs)
-        return result
+
+        var height = heightAboveTakeoff
+        if (!isFinite(height)) {
+            return _invalid(qsTr("Vehicle altitude above take-off is unavailable"), roi)
+        }
+        if (height <= 0) {
+            return _invalid(qsTr("Vehicle must be above the take-off elevation"), roi)
+        }
+        if (gimbalPitchDegrees >= 0) {
+            return _invalid(qsTr("C12 camera must be pitched downward to estimate ground target coordinates"), roi)
+        }
+        var pitchMagnitude = Math.abs(gimbalPitchDegrees)
+        if (pitchMagnitude < _minPitchDegrees) {
+            return _invalid(qsTr("Pitch too close to horizontal"), roi)
+        }
+
+        var radians = Math.PI / 180.0
+        var headingRadians = headingDegrees * radians
+        var bearing = ((headingDegrees - gimbalYawDegrees) % 360.0 + 360.0) % 360.0
+        var bearingRadians = bearing * radians
+        var horizontalRange = height / Math.tan(pitchMagnitude * radians)
+        var dNorth = horizontalRange * Math.cos(bearingRadians) + _cameraOffsetMeters * Math.cos(headingRadians)
+        var dEast = horizontalRange * Math.sin(bearingRadians) + _cameraOffsetMeters * Math.sin(headingRadians)
+        var longitudeScale = 111320.0 * Math.cos(latitude * radians)
+        if (Math.abs(longitudeScale) < 1.0) {
+            return _invalid(qsTr("Longitude calculation is singular at this latitude"), roi)
+        }
+        var targetLatitude = latitude + dNorth / 111320.0
+        var targetLongitude = longitude + dEast / longitudeScale
+        if (!isFinite(targetLatitude) || !isFinite(targetLongitude) ||
+                Math.abs(targetLatitude) > 90 || Math.abs(targetLongitude) > 180) {
+            return _invalid(qsTr("Calculated target coordinates are outside valid bounds"), roi)
+        }
+
+        return {
+            status: "VALID",
+            reason: "",
+            trackSource: trackSource,
+            latitude: targetLatitude,
+            longitude: targetLongitude,
+            horizontalRange: horizontalRange,
+            bearing: bearing,
+            dNorth: dNorth,
+            dEast: dEast,
+            companionTrackerROI: roi,
+            c12SdkROI: null,
+            c12SdkROIStatus: "UNAVAILABLE_NO_CW2_RESULT_SCHEMA"
+        }
     }
 
     function _refresh() {
+        _refreshTick++
         estimate = _buildEstimate()
     }
 
     function _formatResult() {
-        if (!estimate || (estimate.status !== "VALID" && estimate.status !== "DEGRADED")) {
+        if (!estimate || estimate.status !== "VALID") {
             return qsTr("INVALID: %1").arg(estimate ? estimate.reason : qsTr("Waiting for telemetry"))
         }
-        return qsTr("Centre ground point %1, %2 | Horizontal %3 m | Bearing %4° | Slant %5 m")
+        return qsTr("Target %1, %2 | Range %3 m | Bearing %4°")
                 .arg(Number(estimate.latitude).toFixed(7))
                 .arg(Number(estimate.longitude).toFixed(7))
                 .arg(Number(estimate.horizontalRange).toFixed(1))
                 .arg(Number(estimate.bearing).toFixed(1))
-                .arg(Number(estimate.slantRange).toFixed(1))
     }
 
     function _jsonOutput() {
-        return JSON.stringify(estimate || _invalid(qsTr("Waiting for telemetry")), null, 2)
+        return JSON.stringify(estimate || _invalid(qsTr("Waiting for telemetry"), null), null, 2)
     }
 
     onGimbalYawDegreesChanged: _refresh()
     onGimbalPitchDegreesChanged: _refresh()
-    onGimbalRollDegreesChanged: _refresh()
     onGimbalTimestampMsChanged: _refresh()
+    onSelectedCameraSourceChanged: _refresh()
+    onActiveCameraSourceChanged: _refresh()
+    onSelectionTimestampMsChanged: _refresh()
+    onC12TrackingActiveChanged: _refresh()
     onHeightAboveTakeoffChanged: _refresh()
-    onVehicleChanged: _refresh()
+    onVehicleChanged: {
+        _lastPositionMs = 0
+        _lastHeadingMs = 0
+        _lastAltitudeMs = 0
+        _refresh()
+    }
+    onTrackerChanged: _refresh()
 
     Connections {
         target: root.vehicle
         function onCoordinateChanged() {
+            root._lastPositionMs = Date.now()
             root._refresh()
         }
-        function onHomePositionChanged() { root._refresh() }
-        function onPositionUpdated() { root._refresh() }
     }
 
     Connections {
-        target: root._facts
-        function onAttitudeUpdated() { root._refresh() }
+        target: root.vehicle && root.vehicle.vehicle ? root.vehicle.vehicle.heading : null
+        function onRawValueChanged() {
+            root._lastHeadingMs = Date.now()
+            root._refresh()
+        }
+    }
+
+    Connections {
+        target: root.vehicle && root.vehicle.vehicle ? root.vehicle.vehicle.altitudeAMSL : null
+        function onRawValueChanged() {
+            root._lastAltitudeMs = Date.now()
+            root._refresh()
+        }
     }
 
     Timer {
@@ -158,9 +266,9 @@ Item {
             wrapMode: Text.WordWrap
             color: qgcPal.warningText
             font.pointSize: ScreenTools.smallFontPointSize
-            text: root.estimate && root.estimate.status === "DEGRADED"
-                ? qsTr("DEGRADED: %1").arg(root.estimate.reason)
-                : qsTr("Source: measured camera centre ray. Tracking is not required. Ground is assumed level with take-off.")
+            text: root.c12TrackingActive
+                  ? qsTr("Source: C12 on-camera tracker. Target bearing is taken from the gimbal line of sight (tracker keeps the target centred).")
+                  : qsTr("Source: NEXAM_TARGET_TRACK. The C12 does not report its tracker ROI to the GCS.")
         }
 
         ScrollView {

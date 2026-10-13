@@ -899,10 +899,6 @@ void Vehicle::_handleGlobalPositionInt(mavlink_message_t& message)
         _coordinate = newPosition;
         emit coordinateChanged(_coordinate);
     }
-    if (newPosition.isValid()) {
-        _positionTimestampMs = QDateTime::currentMSecsSinceEpoch();
-        emit positionUpdated();
-    }
 }
 
 // TODO: VehicleFactGroup
