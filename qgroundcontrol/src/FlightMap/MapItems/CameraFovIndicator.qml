@@ -47,7 +47,7 @@ Canvas {
                                       && vehicle.vehicleLinkManager && !vehicle.vehicleLinkManager.communicationLost
                                       && isFinite(_bearing) && isFinite(_pitch) && Math.abs(_pitch) <= 90
                                       && isFinite(_hfov) && _hfov > 0 && _hfov < 180
-    readonly property real _radius: Math.max(48, Math.min(120, iconSize * 2.5))
+    readonly property real _radius: Math.max(72, Math.min(180, iconSize * 3.75))
     readonly property real _innerRadius: iconSize * 0.58
     readonly property real _horizontalProjection: Math.cos(_pitch * Math.PI / 180)
     readonly property real _coneRadius: _innerRadius + (_radius - _innerRadius) * _horizontalProjection
