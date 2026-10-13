@@ -8,6 +8,7 @@ class VehicleFactGroup : public FactGroup
     Q_PROPERTY(Fact *roll                   READ roll                   CONSTANT)
     Q_PROPERTY(Fact *pitch                  READ pitch                  CONSTANT)
     Q_PROPERTY(Fact *heading                READ heading                CONSTANT)
+    Q_PROPERTY(qint64 attitudeTimestampMs   READ attitudeTimestampMs    NOTIFY attitudeUpdated)
     Q_PROPERTY(Fact *rollRate               READ rollRate               CONSTANT)
     Q_PROPERTY(Fact *pitchRate              READ pitchRate              CONSTANT)
     Q_PROPERTY(Fact *yawRate                READ yawRate                CONSTANT)
@@ -43,6 +44,7 @@ public:
     Fact *roll() { return &_rollFact; }
     Fact *pitch() { return &_pitchFact; }
     Fact *heading() { return &_headingFact; }
+    qint64 attitudeTimestampMs() const { return _attitudeTimestampMs; }
     Fact *rollRate() { return &_rollRateFact; }
     Fact *pitchRate() { return &_pitchRateFact; }
     Fact *yawRate() { return &_yawRateFact; }
@@ -77,6 +79,9 @@ public:
     /// Write a raw RSSI sample (0-100, or 255 for invalid) through the low-pass filter
     /// into the rcRSSI Fact. Called by Vehicle when an RC_CHANNELS message arrives.
     void updateRCRSSI(uint8_t rssi);
+
+signals:
+    void attitudeUpdated();
 
 protected:
     void _handleAttitude(Vehicle *vehicle, const mavlink_message_t &message);
@@ -131,6 +136,7 @@ private:
     void _handleAttitudeWorker(double rollRadians, double pitchRadians, double yawRadians);
 
     bool _receivingAttitudeQuaternion = false;
+    qint64 _attitudeTimestampMs = 0;
 
     // Low-pass filter state for rcRSSI. 255 is the sentinel "invalid/uninitialized" value.
     double _rcRSSIStore = 255.0;
