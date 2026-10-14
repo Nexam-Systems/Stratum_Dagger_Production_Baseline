@@ -321,7 +321,8 @@ Item {
 
         // STRATUM: toggle the standoff entry panel beside the strip.
         onSetStandoff: toggleStandoff()
-        onFetchCameraTarget: fetchCameraTarget()
+        // Qualified: unqualified name would resolve to the strip's own same-named signal.
+        onFetchCameraTarget: _root.fetchCameraTarget()
 
         property real topEdgeLeftInset:     visible ? y + height : 0
         property real leftEdgeTopInset:     visible ? x + width : 0
