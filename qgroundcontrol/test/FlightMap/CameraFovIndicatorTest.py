@@ -163,6 +163,8 @@ class CameraFovIndicatorTest(unittest.TestCase):
     def test_pitch_and_zoom_legibility(self):
         self.video.insert("c12PitchDegrees", 0.0)
         forward_radius = self.item.property("_coneRadius")
+        self.assertAlmostEqual(forward_radius, 150.0)
+        self.assertAlmostEqual(self.item.property("_innerRadius"), 23.2)
         self.video.insert("c12PitchDegrees", -60.0)
         self.assertLess(self.item.property("_coneRadius"), forward_radius)
         self.video.insert("c12PitchDegrees", -90.0)
@@ -172,9 +174,9 @@ class CameraFovIndicatorTest(unittest.TestCase):
         self.map.insert("zoomLevel", 20)
         self.assertEqual(self.item.property("width"), width)
         self.item.setProperty("iconSize", 12.0)
-        self.assertGreaterEqual(self.item.property("_radius"), 48.0)
+        self.assertEqual(self.item.property("_radius"), 72.0)
         self.item.setProperty("iconSize", 100.0)
-        self.assertLessEqual(self.item.property("_radius"), 120.0)
+        self.assertEqual(self.item.property("_radius"), 180.0)
 
     def test_canvas_renders_with_clear_icon_center(self):
         self.video.insert("c12YawDegrees", 90.0)
@@ -191,6 +193,7 @@ class CameraFovIndicatorTest(unittest.TestCase):
         center = image.pixelColor(160, 160)
         self.assertEqual(center, image.pixelColor(160, 150))
         self.assertNotEqual(center, image.pixelColor(160, 80))
+        self.assertNotEqual(center, image.pixelColor(160, 30))
         self.stream.insert("hfov", 100)
         QTest.qWait(50)
         wide_image = window.grabWindow()
