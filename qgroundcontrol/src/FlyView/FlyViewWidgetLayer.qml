@@ -64,6 +64,37 @@ Item {
         standoffLonField.text = coordinate.longitude.toFixed(7)
     }
 
+    function fetchCameraTarget() {
+        const estimator = cameraTargetEstimatorComponent.createObject(_root)
+        const estimate = estimator ? estimator.computeEstimate() : null
+        if (estimator) {
+            estimator.destroy()
+        }
+        const usable = estimate && (estimate.status === "VALID" || estimate.status === "DEGRADED")
+                       && typeof estimate.latitude === "number" && typeof estimate.longitude === "number"
+                       && isFinite(estimate.latitude) && isFinite(estimate.longitude)
+        if (!usable) {
+            QGroundControl.showMessageDialog(_root, qsTr("Fetch Target"),
+                                             qsTr("Camera target estimate unavailable: %1")
+                                                 .arg(estimate && estimate.reason ? estimate.reason : qsTr("no estimate")))
+            return
+        }
+        openStandoffWithTarget(QtPositioning.coordinate(estimate.latitude, estimate.longitude))
+    }
+
+    Component {
+        id: cameraTargetEstimatorComponent
+
+        TargetGpsEstimate {
+            visible:            false
+            vehicle:            QGroundControl.multiVehicleManager.activeVehicle
+            gimbalYawDegrees:   QGroundControl.videoManager.c12YawDegrees
+            gimbalPitchDegrees: QGroundControl.videoManager.c12PitchDegrees
+            gimbalRollDegrees:  QGroundControl.videoManager.c12RollDegrees
+            gimbalTimestampMs:  QGroundControl.videoManager.c12AttitudeTimestampMs
+        }
+    }
+
     QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
     // STRATUM: AOP edit-mode action bar. Shown only while defining the Area of
@@ -290,6 +321,7 @@ Item {
 
         // STRATUM: toggle the standoff entry panel beside the strip.
         onSetStandoff: toggleStandoff()
+        onFetchCameraTarget: fetchCameraTarget()
 
         property real topEdgeLeftInset:     visible ? y + height : 0
         property real leftEdgeTopInset:     visible ? x + width : 0

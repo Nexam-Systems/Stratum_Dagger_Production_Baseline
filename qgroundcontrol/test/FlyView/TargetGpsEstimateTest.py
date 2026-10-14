@@ -135,6 +135,14 @@ Item {
         link.setProperty("communicationLost", True)
         self.assertIn("lost", self.estimate()["reason"])
 
+    def test_public_compute_estimate_for_fetch_target(self):
+        result = self.engine.newQObject(self.panel).property("computeEstimate").call()
+        self.assertFalse(result.isError(), result.toString())
+        estimate = result.toVariant()
+        self.assertEqual(estimate["status"], "DEGRADED")
+        self.assertAlmostEqual(estimate["latitude"], 12.001)
+        self.assertAlmostEqual(estimate["longitude"], 77.001)
+
 
 if __name__ == "__main__":
     unittest.main()

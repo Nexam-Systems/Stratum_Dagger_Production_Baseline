@@ -84,6 +84,10 @@ Item {
         return result
     }
 
+    function computeEstimate() {
+        return _buildEstimate()
+    }
+
     function _refresh() {
         estimate = _buildEstimate()
     }
