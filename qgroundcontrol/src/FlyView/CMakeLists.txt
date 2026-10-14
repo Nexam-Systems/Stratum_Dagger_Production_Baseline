@@ -9,10 +9,6 @@ qt_add_qml_module(FlyViewModule
     URI QGroundControl.FlyView
     VERSION 1.0
     RESOURCE_PREFIX /qml
-    SOURCES
-        CameraGeolocation.cc
-        CameraGeolocation.h
-        CameraGroundRay.h
     QML_FILES
         ConnectPodAction.qml
         CustomGuidedActionsController.qml
@@ -109,7 +105,16 @@ qt_add_qml_module(FlyViewModule
     NO_PLUGIN
 )
 
-target_link_libraries(FlyViewModule PRIVATE QGCGeoMath GeographicLib::GeographicLib)
+# C++ QML types must live in the main target; FlyViewModule is QML-only (NO_PLUGIN).
+target_sources(${CMAKE_PROJECT_NAME}
+    PRIVATE
+        CameraGeolocation.cc
+        CameraGeolocation.h
+        CameraGroundRay.h
+)
+
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE GeographicLib::GeographicLib)
 
 qt_add_resources(FlyViewModule flyview_resources
     PREFIX "/res"

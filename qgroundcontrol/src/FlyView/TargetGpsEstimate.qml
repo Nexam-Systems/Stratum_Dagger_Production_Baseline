@@ -4,7 +4,6 @@ import QtQuick.Layouts
 
 import QGroundControl
 import QGroundControl.Controls
-import QGroundControl.FlyView
 
 Item {
     id: root
