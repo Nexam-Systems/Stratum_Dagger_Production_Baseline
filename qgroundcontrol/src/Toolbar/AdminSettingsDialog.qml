@@ -91,7 +91,12 @@ QGCPopupDialog {
                 Layout.maximumWidth:    ScreenTools.defaultFontPixelWidth * 58
                 wrapMode:               Text.WordWrap
                 color:                  qgcPal.warningText
-                text:                   qsTr("Changes take effect immediately.")
+                text:                   qsTr("Changes take effect immediately. Firmware compatibility settings apply on the next connection attempt.")
+            }
+
+            FactCheckBox {
+                text: qsTr("Enable firmware compatibility checks")
+                fact: _admin ? _admin.firmwareCompatibilityChecksEnabled : null
             }
 
             GridLayout {
@@ -164,7 +169,7 @@ QGCPopupDialog {
                     Layout.topMargin: ScreenTools.defaultFontPixelHeight / 3
                     Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 58
                     wrapMode: Text.WordWrap
-                    text: qsTr("Both version triplets must match exactly. Incompatible vehicles are rejected before connection. Set base firmware major, minor, and patch all to 0 to disable only that comparison.")
+                    text: qsTr("When compatibility checks are enabled, both version triplets must match exactly and incompatible vehicles are rejected before connection. Disabling checks allows connections regardless of base/NX version, marker or schema, including unavailable version information. Set base firmware major, minor, and patch all to 0 to disable only the base comparison.")
                 }
 
                 QGCLabel { text: qsTr("Tracker click box") }

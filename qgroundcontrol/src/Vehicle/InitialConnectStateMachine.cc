@@ -406,12 +406,14 @@ void InitialConnectStateMachine::_handleAutopilotVersionFailure()
     qCDebug(InitialConnectStateMachineLog) << "AUTOPILOT_VERSION request failed, setting assumed capabilities";
 
     if (vehicle()->px4Firmware()) {
-        vehicle()->checkStratumCustomVersionAgainstAdminFloor(tr("Vehicle connect"));
-        Vehicle* incompatibleVehicle = vehicle();
-        QTimer::singleShot(0, incompatibleVehicle, [incompatibleVehicle]() {
-            incompatibleVehicle->closeVehicle();
-        });
-        return;
+        if (!vehicle()->checkStratumCustomVersionAgainstAdminFloor(tr("Vehicle connect"))) {
+            Vehicle* incompatibleVehicle = vehicle();
+            QTimer::singleShot(0, incompatibleVehicle, [incompatibleVehicle]() {
+                incompatibleVehicle->closeVehicle();
+            });
+            return;
+        }
+        vehicle()->acceptFirmwareConnection();
     }
 
     uint64_t assumedCapabilities = MAV_PROTOCOL_CAPABILITY_MAVLINK2;
