@@ -25,8 +25,15 @@ Item {
     visible: _hasVehicle && QGroundControl.videoManager.hasVideo
 
     // ---- HUD palette --------------------------------------------------------
-    readonly property string _green:    "#3DFFA6"   // bright readable green — values, tapes
-    readonly property string _greenDim: "#1FB97D"   // dimmer green — labels
+    QGCPalette { id: contrastPalette; colorGroupEnabled: true }
+    readonly property string _green:    contrastPalette.highContrast ? "#D6FF85" : "#3DFFA6"
+    readonly property string _greenDim: contrastPalette.highContrast ? "#F5FFE9" : "#1FB97D"
+
+    on_GreenChanged: {
+        headingTape.requestPaint()
+        speedTape.canvas.requestPaint()
+        altTape.canvas.requestPaint()
+    }
     readonly property string _shadow:   "rgba(0,0,0,0.9)"
     readonly property string _noVal:    "--"
 
@@ -142,7 +149,7 @@ Item {
             anchors.left:           vt.boxOnRight ? undefined : parent.left
             width:                  valueText.contentWidth + ScreenTools.defaultFontPixelWidth * 1.4
             height:                 valueText.contentHeight + ScreenTools.defaultFontPixelHeight * 0.4
-            color:                  "#A0000000"
+            color:                  contrastPalette.highContrast ? "#FF050A06" : "#A0000000"
             border.color:           _root._green
             border.width:           1
             Text {
@@ -239,7 +246,7 @@ Item {
             anchors.bottom:           parent.top
             width:                    hdgText.contentWidth + ScreenTools.defaultFontPixelWidth * 1.6
             height:                   hdgText.contentHeight + ScreenTools.defaultFontPixelHeight * 0.3
-            color:                    "#A0000000"
+            color:                    contrastPalette.highContrast ? "#FF050A06" : "#A0000000"
             border.color:             _root._green
             border.width:             1
             Text {

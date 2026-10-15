@@ -13,8 +13,9 @@ Rectangle {
 
     property var dropperAction
 
-    readonly property color _accent:    "#3DFFA6"
-    readonly property color _accentDim:  "#1FB97D"
+    QGCPalette { id: contrastPalette; colorGroupEnabled: true }
+    readonly property color _accent:    contrastPalette.highContrast ? contrastPalette.buttonBorder : "#3DFFA6"
+    readonly property color _accentDim:  contrastPalette.highContrast ? contrastPalette.text : "#1FB97D"
     readonly property color _danger:     "#EF5350"
     readonly property color _dangerFill: "#B71C1C"
 
@@ -22,7 +23,7 @@ Rectangle {
 
     width: ScreenTools.defaultFontPixelWidth * 30
     implicitHeight: contentColumn.implicitHeight + (ScreenTools.defaultFontPixelWidth * 1.5)
-    color: Qt.rgba(0, 0, 0, 0.86)
+    color: contrastPalette.highContrast ? contrastPalette.window : Qt.rgba(0, 0, 0, 0.86)
     radius: ScreenTools.defaultBorderRadius
     border.color: _accent
     border.width: 1

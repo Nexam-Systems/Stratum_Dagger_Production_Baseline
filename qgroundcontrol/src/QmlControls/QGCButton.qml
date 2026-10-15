@@ -47,7 +47,7 @@ Button {
         radius: backRadius
         implicitWidth: ScreenTools.implicitButtonWidth
         implicitHeight: ScreenTools.implicitButtonHeight
-        border.width: showBorder ? 1 : 0
+        border.width: qgcPal.highContrast ? 2 : (showBorder ? 1 : 0)
         border.color: qgcPal.buttonBorder
         color: primary ? qgcPal.primaryButton : qgcPal.button
 
@@ -56,7 +56,7 @@ Button {
             color: qgcPal.buttonHighlight
             // STRATUM: bumped hover overlay from 0.2 -> 0.4 so hovered buttons visibly
             // glow accent-green in daylight; pressed / checked still full-opacity.
-            opacity: _showHighlight ? 1 : control.enabled && control.hovered ? .4 : 0
+            opacity: _showHighlight ? 1 : control.enabled && control.hovered ? (qgcPal.highContrast ? 0.12 : 0.4) : 0
             radius: parent.radius
         }
     }
