@@ -131,6 +131,7 @@ Item {
             Layout.alignment:   Qt.AlignHCenter
             visible:            root._abortEnabled
             text:               qsTr("HOLD TO ABORT")
+            delay:              1000
             onActivated: {
                 if (root.engagementController) {
                     root.engagementController.abort()

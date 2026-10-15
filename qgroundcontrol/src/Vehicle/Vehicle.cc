@@ -885,6 +885,8 @@ void Vehicle::_handleGlobalPositionInt(mavlink_message_t& message)
     if (!_altitudeMessageAvailable) {
         _altitudeRelativeFact.setRawValue(globalPositionInt.relative_alt / 1000.0);
         _altitudeAMSLFact.setRawValue(globalPositionInt.alt / 1000.0);
+        _altitudeTimestampMs = QDateTime::currentMSecsSinceEpoch();
+        emit altitudeUpdated();
     }
 
     // ArduPilot sends bogus GLOBAL_POSITION_INT messages with lat/lat 0/0 even when it has no gps signal
@@ -1233,6 +1235,11 @@ void Vehicle::_handleHomePosition(mavlink_message_t& message)
 
 void Vehicle::_updateArmed(bool armed)
 {
+    if (!_armedStateReceived || (armed && !_armed)) {
+        _armedTimerSinceConnection = !_armedStateReceived && armed;
+        _armedStateReceived = true;
+        emit armedTimerReferenceChanged();
+    }
     if (_armed != armed) {
         _armed = armed;
         emit armedChanged(_armed);
@@ -1646,6 +1653,7 @@ void Vehicle::_flightTimerStart()
 
 void Vehicle::_flightTimerStop()
 {
+    if (_flightTimer.isValid()) _updateFlightTime();
     _flightTimeUpdater.stop();
 }
 

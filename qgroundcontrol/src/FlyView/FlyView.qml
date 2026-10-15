@@ -145,10 +145,13 @@ Item {
     // fold its camera controls away (they live on the video instead). See req. 4.
     readonly property bool _cameraMaximized: QGroundControl.videoManager.hasVideo &&
                                              videoControl.pipState.state === videoControl.pipState.fullState
+    property bool _rightPanelExpanded: true
+    readonly property bool _showRightPanel: (!_cameraMaximized || _rightPanelExpanded) && !QGroundControl.videoManager.fullScreen
+    readonly property real _dockWidth: _showRightPanel ? widgetLayer.commandPanelWidth + _widgetMargin * 2 : 0
+    on_CameraMaximizedChanged: _rightPanelExpanded = true
 
     function _calcCenterViewPort() {
-        var newToolInset = Qt.rect(0, 0, width, height)
-        toolstrip.adjustToolInset(newToolInset)
+        _centerViewport = Qt.rect(0, toolbar.height, Math.max(0, width - _dockWidth), Math.max(0, height - toolbar.height))
     }
 
     function dropMainStatusIndicatorTool() {
@@ -160,16 +163,24 @@ Item {
         topEdgeLeftInset:       toolbar.height
         topEdgeCenterInset:     topEdgeLeftInset
         topEdgeRightInset:      topEdgeLeftInset
-        leftEdgeBottomInset:    _pipView.leftEdgeBottomInset
-        bottomEdgeLeftInset:    _pipView.bottomEdgeLeftInset
+        leftEdgeBottomInset:    0
+        bottomEdgeLeftInset:    0
     }
 
     Item {
         id:                 mapHolder
         anchors.fill:       parent
 
+        Item {
+            id: flightSurface
+            anchors.fill: parent
+            anchors.topMargin: QGroundControl.videoManager.fullScreen ? 0 : toolbar.height
+            anchors.rightMargin: _root._dockWidth
+        }
+
         FlyViewMap {
             id:                     mapControl
+            parent:                 flightSurface
             planMasterController:   _planController
             rightPanelWidth:        ScreenTools.defaultFontPixelHeight * 9
             pipView:                _pipView
@@ -182,18 +193,22 @@ Item {
 
         FlyViewVideo {
             id:         videoControl
+            parent:     flightSurface
             pipView:    _pipView
         }
 
         PipView {
             id:                     _pipView
-            anchors.left:           parent.left
-            anchors.bottom:         parent.bottom
-            anchors.margins:        _toolsMargin
+            parent:                 widgetLayer.previewSlot
+            anchors.centerIn:       parent
+            docked:                 true
+            fullItemParent:         flightSurface
+            width:                  parent.width
+            height:                 width * 9 / 16
             item1IsFullSettingsKey: "MainFlyWindowIsMap"
             item1:                  mapControl
             item2:                  QGroundControl.videoManager.hasVideo ? videoControl : null
-            show:                   QGroundControl.videoManager.hasVideo && !QGroundControl.videoManager.fullScreen &&
+            show:                   _root._showRightPanel && QGroundControl.videoManager.hasVideo && !QGroundControl.videoManager.fullScreen &&
                                         (videoControl.pipState.state === videoControl.pipState.pipState || mapControl.pipState.state === mapControl.pipState.pipState)
             z:                      QGroundControl.zOrderWidgets
 
@@ -215,6 +230,8 @@ Item {
             engagementController:   engagementController
             cameraMaximized:        _cameraMaximized
             standoffController:     mapControl.standoffCmdController
+            panelExpanded:          _root._showRightPanel
+            cameraControlsComponent: _stratumIsDagger ? daggerCameraComponent : dropperCameraComponent
             visible:                !QGroundControl.videoManager.fullScreen
         }
 
@@ -227,33 +244,48 @@ Item {
             visible:            !QGroundControl.videoManager.fullScreen
         }
 
-        // STRATUM: camera / gimbal controls overlaid on the live video when the camera
-        // is the maximized window. Lives in mapHolder (not the widget layer) so it stays
-        // visible in full-screen video, where the widget layer is hidden. When the map is
-        // maximized this hides and the same controls fold back into the dropper panel's
-        // camera section (req. 4).
-        FlyViewCameraControls {
-            id:                     videoCameraOverlay
-            overlayMode:            true
-            anchors.right:          parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.rightMargin:    _toolsMargin
-            width:                  ScreenTools.defaultFontPixelWidth * 24
-            z:                      QGroundControl.zOrderWidgets + 1
-            visible:                _cameraMaximized && _stratumIsDropper
+        Component {
+            id: dropperCameraComponent
+            FlyViewCameraControls { compact: true }
         }
 
-        // STRATUM: Dagger camera-control overlay. Wraps a segmented A2 mini / C12
-        // selector; the selected camera drives both the RTSP feed and the control cluster.
-        FlyViewCameraControlsDaggerRoot {
-            id:                     videoCameraOverlayDagger
-            overlayMode:            true
-            anchors.right:          parent.right
+        Component {
+            id: daggerCameraComponent
+            FlyViewCameraControlsDaggerRoot { compact: true }
+        }
+
+        QGCButton {
+            anchors.right: parent.right
+            anchors.rightMargin: _root._showRightPanel ? _root._dockWidth : 0
             anchors.verticalCenter: parent.verticalCenter
-            anchors.rightMargin:    _toolsMargin
-            width:                  ScreenTools.defaultFontPixelWidth * 24
-            z:                      QGroundControl.zOrderWidgets + 1
-            visible:                _cameraMaximized && _stratumIsDagger
+            width: 36
+            height: 64
+            iconSource: _root._showRightPanel ? "/InstrumentValueIcons/cheveron-right.svg" : "/InstrumentValueIcons/cheveron-left.svg"
+            visible: _root._cameraMaximized && !QGroundControl.videoManager.fullScreen
+            z: QGroundControl.zOrderTopMost
+            Accessible.name: _root._showRightPanel ? qsTr("Hide panel") : qsTr("Show panel")
+            ToolTip.visible: hovered
+            ToolTip.text: Accessible.name
+            onClicked: _root._rightPanelExpanded = !_root._rightPanelExpanded
+        }
+
+        Rectangle {
+            anchors.top: parent.top
+            anchors.topMargin: toolbar.height + 8
+            anchors.horizontalCenter: flightSurface.horizontalCenter
+            width: Math.min(420, flightSurface.width - 24)
+            height: 60
+            z: QGroundControl.zOrderTopMost + 2
+            visible: widgetLayer.holdCommand !== ""
+            color: qgcPal.window
+            border.color: qgcPal.warningText
+            border.width: 2
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 8
+                QGCLabel { text: widgetLayer.holdComplete ? qsTr("%1 request sent").arg(widgetLayer.holdCommand) : qsTr("Hold to %1").arg(widgetLayer.holdCommand) }
+                ProgressBar { Layout.fillWidth: true; value: widgetLayer.holdProgress }
+            }
         }
 
         // Development tool for visualizing the insets for a paticular layer, show if needed
@@ -356,7 +388,7 @@ Item {
         EngagementAbortOverlay {
             id:                     engagementAbortOverlay
             engagementController:    engagementController
-            topMargin:               toolbar.height + (_toolsMargin * 3)
+            topMargin:               toolbar.height + (widgetLayer.holdCommand !== "" ? 80 : _toolsMargin * 3)
         }
 
         // STRATUM: vision-engagement status + abort overlay. Same top-centre slot as the
@@ -367,7 +399,7 @@ Item {
         VisionEngagementOverlay {
             id:                     visionEngagementOverlay
             engagementController:    engagementController
-            topMargin:               toolbar.height + (_toolsMargin * 3)
+            topMargin:               toolbar.height + (widgetLayer.holdCommand !== "" ? 80 : _toolsMargin * 3)
         }
 
         Loader {
@@ -407,6 +439,8 @@ Item {
         id:                 toolbar
         guidedValueSlider:  _guidedValueSlider
         visible:            !QGroundControl.videoManager.fullScreen
+        pendingTarget:      mapControl._standoffPendingCoordinate
+        designatedTarget:   mapControl.standoffCmdController._targetCoordinate
 
         // STRATUM: AOP / standoff entry commands relocated to the ribbon centre; route
         // them to the widget layer that owns the standoff panel and the AOP map editor.

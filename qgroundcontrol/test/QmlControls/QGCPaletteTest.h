@@ -10,4 +10,5 @@ private slots:
     void _standardThemeRestored();
     void _allPalettesNotified();
     void _disabledControlsRemainReadable();
+    void _savedDisplayThemeAppliesToPalette();
 };

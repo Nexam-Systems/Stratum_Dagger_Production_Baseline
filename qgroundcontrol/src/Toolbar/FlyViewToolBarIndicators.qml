@@ -56,10 +56,10 @@ Item {
             QGCLabel {
                 id:                 wordmarkLabel
                 anchors.centerIn:   parent
-                text:               "STRATUM"
+                text:               "STRATUM\n" + QGroundControl.qgcVersion
                 color:              ribbonTextColor
                 font.bold:          true
-                font.pointSize:     ScreenTools.mediumFontPointSize
+                font.pointSize:     ScreenTools.smallFontPointSize
                 font.letterSpacing: 2
             }
 

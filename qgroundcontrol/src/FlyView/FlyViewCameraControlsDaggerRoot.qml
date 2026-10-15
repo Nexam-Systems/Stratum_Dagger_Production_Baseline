@@ -16,6 +16,9 @@ Item {
 
     property bool overlayMode: false
     property bool compact: false
+    function stopMotion() { if (clusterLoader.item && clusterLoader.item.stopMotion) clusterLoader.item.stopMotion() }
+    onVisibleChanged: if (!visible) stopMotion()
+    Component.onDestruction: stopMotion()
 
     signal statusMessage(string text)
 
@@ -23,8 +26,8 @@ Item {
     readonly property int _cam: _vs.daggerCamera.rawValue    // 0 = A2 mini, 1 = C12
 
     QGCPalette { id: contrastPalette; colorGroupEnabled: true }
-    readonly property color _accent:    contrastPalette.highContrast ? contrastPalette.buttonBorder : "#3DFFA6"
-    readonly property color _accentDim: contrastPalette.highContrast ? contrastPalette.text : "#1FB97D"
+    readonly property color _accent:    contrastPalette.highContrast ? contrastPalette.buttonBorder : "#79CBE8"
+    readonly property color _accentDim: contrastPalette.highContrast ? contrastPalette.text : "#BCD7E4"
     readonly property real  _spacing:   ScreenTools.defaultFontPixelWidth * 0.4
     readonly property real  _pad:       overlayMode ? ScreenTools.defaultFontPixelWidth * 0.75 : 0
 

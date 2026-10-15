@@ -12,7 +12,9 @@ Item {
 
     id:     control
     width:  parent.width
-    height: ScreenTools.toolbarHeight
+    height: ScreenTools.toolbarHeight + telemetryHeader.implicitHeight
+    property var pendingTarget: null
+    property var designatedTarget: null
 
     // STRATUM: the standoff / AOP entry commands now live in the centre of this ribbon
     // (moved off the left command strip). The handlers are wired in FlyView.qml, which
@@ -36,10 +38,10 @@ Item {
         if (_activeVehicle && _activeVehicle.flightMode === _engagementModeName) {
             return "#DC2626"                    // engagement (live-fire safety colour)
         }
-        return qgcPal.highContrast ? qgcPal.window : "#1B2228"
+        return qgcPal.window
     }
     // STRATUM: light-on-dark ribbon text. Red engagement bg still reads with light text.
-    readonly property color _ribbonTextColor: qgcPal.highContrast ? qgcPal.text : "#F1F4F7"
+    readonly property color _ribbonTextColor: qgcPal.text
 
     function dropMainStatusIndicatorTool() {
         mainStatusIndicator.dropMainStatusIndicator();
@@ -66,7 +68,10 @@ Item {
     }
 
     QGCFlickable {
-        anchors.fill:       parent
+        anchors.top:        parent.top
+        anchors.left:       parent.left
+        anchors.right:      parent.right
+        height:             ScreenTools.toolbarHeight
         contentWidth:       toolBarLayout.width
         flickableDirection: Flickable.HorizontalFlick
 
@@ -143,26 +148,8 @@ Item {
             }
             Item {
                 id:     centerPanel
-                // STRATUM: centre of the ribbon carries the Define AOP and Set Standoff
-                // command buttons (relocated from the left command strip).
                 width:  Math.max(0, control.width - (leftPanel.width + rightPanel.width))
                 height: parent.height
-
-                Row {
-                    anchors.centerIn:   parent
-                    spacing:            ScreenTools.defaultFontPixelWidth
-
-                    QGCButton {
-                        text:       qsTr("Define AOP")
-                        onClicked:  control.defineAOP()
-                    }
-
-                    QGCButton {
-                        text:       qsTr("Set Standoff")
-                        onClicked:  control.setStandoff()
-                    }
-
-                }
             }
 
             Item {
@@ -177,6 +164,18 @@ Item {
                 }
             }
         }
+    }
+
+    FlightTelemetryHeader {
+        id: telemetryHeader
+        anchors.top: parent.top
+        anchors.topMargin: ScreenTools.toolbarHeight
+        width: parent.width
+        height: implicitHeight
+        vehicle: control._activeVehicle
+        pendingTarget: control.pendingTarget
+        designatedTarget: control.designatedTarget
+        videoLive: QGroundControl.videoManager.decoding
     }
 
     // STRATUM: the guided-action confirm bar and its message display were moved to the

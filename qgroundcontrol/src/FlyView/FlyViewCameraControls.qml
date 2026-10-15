@@ -25,6 +25,10 @@ Item {
     property bool overlayMode: false
     // compact: tighter spacing / fonts for the picture-in-picture / panel context.
     property bool compact: false
+    signal motionStopped()
+    function stopMotion() { motionStopped() }
+    onVisibleChanged: if (!visible) stopMotion()
+    onEnabledChanged: if (!enabled) stopMotion()
     // daggerMode: when true (Dagger airframe with C12), TV/IR toggle drives the
     // daggerC12TvRtspUrl / daggerC12IrRtspUrl settings instead of tvRtspUrl / irRtspUrl.
     property bool daggerMode: false
@@ -56,8 +60,8 @@ Item {
         return Math.max(1, Math.min(127, Math.round(raw)))
     }
 
-    readonly property color _accent:    btnPal.highContrast ? btnPal.buttonBorder : "#3DFFA6"
-    readonly property color _accentDim:  btnPal.highContrast ? btnPal.text : "#1FB97D"
+    readonly property color _accent:    btnPal.highContrast ? btnPal.buttonBorder : "#79CBE8"
+    readonly property color _accentDim:  btnPal.highContrast ? btnPal.text : "#BCD7E4"
     readonly property real  _btnHeight:  ScreenTools.defaultFontPixelHeight * (compact ? 1.9 : 2.3)
     readonly property real  _iconSize:   Math.round(_btnHeight * 0.45)
     readonly property real  _spacing:    ScreenTools.defaultFontPixelWidth * 0.7
@@ -301,6 +305,13 @@ Item {
             repeat: true
             onTriggered: root._send(ptzButton.ptzAction)
         }
+        Connections {
+            target: root
+            function onMotionStopped() {
+                if (ptzHoldTimer.running) { ptzHoldTimer.stop(); root._send("stop") }
+            }
+        }
+        Component.onDestruction: if (ptzHoldTimer.running) root._send("stop")
     }
 
     Timer {
