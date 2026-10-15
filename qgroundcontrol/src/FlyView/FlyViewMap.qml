@@ -830,7 +830,7 @@ FlightMap {
 
         delegate: MapPolygon {
             path:           object.path
-            color:          Qt.rgba(0.16, 0.55, 1, 0.18)
+            color:          Qt.rgba(0.16, 0.55, 1, 0.10)
             border.width:   0
             z:              QGroundControl.zOrderMapItems - 1
             visible:        object.inclusion
