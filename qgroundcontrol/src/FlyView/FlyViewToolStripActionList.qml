@@ -21,6 +21,7 @@ ToolStripActionList {
     signal displayPreFlightChecklist
     signal defineAOP      // retained: emitters relocated to the ribbon (FlyViewToolBar)
     signal setStandoff    // retained: emitters relocated to the ribbon (FlyViewToolBar)
+    signal fetchCameraTarget
 
     // STRATUM: Land / Hold command a flight-mode change the same way the flight-mode
     // dropdown does (a direct, reliable write to Vehicle.flightMode by its advertised
@@ -62,6 +63,14 @@ ToolStripActionList {
             visible:     true
             enabled:     !!QGroundControl.multiVehicleManager.activeVehicle
             onTriggered: _root.setStandoff()
+        },
+        // Common: camera-estimated target pre-fills the Set Standoff panel; operator still commits.
+        ToolStripAction {
+            text:        qsTr("Fetch Target")
+            iconSource:  "/InstrumentValueIcons/target.svg"
+            visible:     true
+            enabled:     !!QGroundControl.multiVehicleManager.activeVehicle
+            onTriggered: _root.fetchCameraTarget()
         },
         // Common: Land (direct flight-mode change, confirm dialog).
         ToolStripAction {
