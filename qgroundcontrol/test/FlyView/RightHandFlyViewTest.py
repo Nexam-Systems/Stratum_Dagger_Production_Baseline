@@ -2,8 +2,11 @@ import os
 from pathlib import Path
 import tempfile
 import re
+import shutil
+import subprocess
 import time
 import unittest
+import PySide6
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
@@ -31,6 +34,20 @@ class DisplayMode(QObject):
 
 
 class RightHandFlyViewTest(unittest.TestCase):
+    def test_widget_layer_cache_compiles(self):
+        compiler = shutil.which("qmlcachegen")
+        if not compiler:
+            candidates = [Path(PySide6.__file__).parent / "qmlcachegen.exe",
+                          Path(PySide6.__file__).parent / "qmlcachegen"]
+            compiler = next((str(path) for path in candidates if path.is_file()), None)
+        if not compiler:
+            self.skipTest("Qt qmlcachegen is unavailable")
+        source = self.root / "src/FlyView/FlyViewWidgetLayer.qml"
+        result = subprocess.run([compiler, "--bare", "--resource-path",
+                                 "/qml/QGroundControl/FlyView/FlyViewWidgetLayer.qml",
+                                 "-o", str(self.folder / "widget.cpp"), str(source)], capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+
     @classmethod
     def setUpClass(cls):
         cls.app = QGuiApplication.instance() or QGuiApplication([])
