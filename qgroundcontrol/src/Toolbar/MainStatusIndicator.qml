@@ -44,9 +44,9 @@ RowLayout {
         anchors.leftMargin:     -ScreenTools.defaultFontPixelWidth * 0.35
         anchors.rightMargin:    -ScreenTools.defaultFontPixelWidth * 0.35
         radius:                 ScreenTools.defaultFontPixelHeight * 0.3
-        color:                  Qt.rgba(1, 1, 1, _hovered ? 0.12 : 0.06)
-        border.color:           Qt.rgba(1, 1, 1, _hovered ? 0.35 : 0.18)
-        border.width:           1
+        color:                  qgcPal.highContrast ? qgcPal.window : Qt.rgba(1, 1, 1, _hovered ? 0.12 : 0.06)
+        border.color:           qgcPal.highContrast ? qgcPal.buttonBorder : Qt.rgba(1, 1, 1, _hovered ? 0.35 : 0.18)
+        border.width:           qgcPal.highContrast ? 2 : 1
         z:                      -1
         Behavior on color { ColorAnimation { duration: 120 } }
         Behavior on border.color { ColorAnimation { duration: 120 } }

@@ -10,6 +10,8 @@ QGCPalette::Theme QGCPalette::_theme = QGCPalette::Dark;
 QMap<int, QMap<int, QMap<QString, QColor>>> QGCPalette::_colorInfoMap;
 
 QStringList QGCPalette::_colors;
+bool QGCPalette::_highContrast = true;
+QMap<QString, QColor> QGCPalette::_highContrastColors;
 
 QGCPalette::QGCPalette(QObject* parent) :
     QObject(parent),
@@ -18,6 +20,7 @@ QGCPalette::QGCPalette(QObject* parent) :
     if (_colorInfoMap.isEmpty()) {
         _buildMap();
     }
+    if (_highContrastColors.isEmpty()) setHighContrast(_highContrast);
 
     // We have to keep track of all QGCPalette objects in the system so we can signal theme change to all of them
     _paletteObjects += this;
@@ -96,6 +99,47 @@ void QGCPalette::_buildMap()
     DECLARE_QGC_SINGLE_COLOR(surveyPolygonInterior,         "green")
     DECLARE_QGC_SINGLE_COLOR(surveyPolygonTerrainCollision, "red")
 
+}
+
+QColor QGCPalette::_color(const QString &name) const
+{
+    if (!_highContrast) return _colorInfoMap[_theme][_colorGroupEnabled ? ColorGroupEnabled : ColorGroupDisabled][name];
+    QColor color = _highContrastColors.value(name, _colorInfoMap[Dark][ColorGroupEnabled][name]);
+    if (!_colorGroupEnabled) {
+        if (name == "button" || name == "primaryButton" || name == "buttonHighlight") return QColor("#202420");
+        if (name == "text" || name == "buttonText" || name == "primaryButtonText" || name == "buttonHighlightText") return QColor("#B5BDB0");
+        if (name == "buttonBorder") return QColor("#7D8876");
+    }
+    return color;
+}
+
+void QGCPalette::setHighContrast(bool enabled)
+{
+    if (_highContrast == enabled && !_highContrastColors.isEmpty()) return;
+    if (_highContrastColors.isEmpty()) {
+        const QMap<QString, QString> colors = {
+            {"window", "#050A06"}, {"windowTransparent", "#FF050A06"},
+            {"windowShade", "#101910"}, {"windowShadeDark", "#000000"}, {"windowShadeLight", "#273324"},
+            {"text", "#F5FFE9"}, {"warningText", "#FFD166"},
+            {"button", "#0B160B"}, {"buttonText", "#D6FF85"}, {"buttonBorder", "#C5F779"},
+            {"buttonHighlight", "#C5F779"}, {"buttonHighlightText", "#071007"},
+            {"primaryButton", "#C5F779"}, {"primaryButtonText", "#071007"},
+            {"textField", "#000000"}, {"textFieldText", "#F5FFE9"},
+            {"mapButton", "#050A06"}, {"mapButtonHighlight", "#C5F779"},
+            {"mapIndicator", "#FFD166"}, {"mapIndicatorChild", "#F5FFE9"},
+            {"groupBorder", "#C5F779"}, {"toolbarBackground", "#050A06"},
+            {"brandingPurple", "#C5F779"}, {"brandingBlue", "#C5F779"},
+            {"toolStripFGColor", "#D6FF85"}, {"toolStripHoverColor", "#273324"},
+            {"statusFailedText", "#FF9292"}, {"statusPassedText", "#D6FF85"}, {"statusPendingText", "#FFD166"},
+            {"colorRed", "#FF7070"}, {"colorOrange", "#FFBC66"}, {"colorYellow", "#FFE680"},
+            {"colorGreen", "#B4FF87"}, {"colorBlue", "#8EDCFF"}, {"colorGrey", "#BEC8B7"},
+            {"alertBackground", "#FFD166"}, {"alertBorder", "#FFFFFF"}, {"alertText", "#071007"},
+            {"missionItemEditor", "#101910"}, {"modifiedParamValue", "#FFD166"}
+        };
+        for (auto entry = colors.cbegin(); entry != colors.cend(); ++entry) _highContrastColors.insert(entry.key(), QColor(entry.value()));
+    }
+    _highContrast = enabled;
+    _signalPaletteChangeToAll();
 }
 
 void QGCPalette::setColorGroupEnabled(bool enabled)

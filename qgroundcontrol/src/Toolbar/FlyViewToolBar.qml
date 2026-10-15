@@ -36,10 +36,10 @@ Item {
         if (_activeVehicle && _activeVehicle.flightMode === _engagementModeName) {
             return "#DC2626"                    // engagement (live-fire safety colour)
         }
-        return "#1B2228"                        // neutral tactical chrome (windowShade dark)
+        return qgcPal.highContrast ? qgcPal.window : "#1B2228"
     }
     // STRATUM: light-on-dark ribbon text. Red engagement bg still reads with light text.
-    readonly property color _ribbonTextColor: "#F1F4F7"
+    readonly property color _ribbonTextColor: qgcPal.highContrast ? qgcPal.text : "#F1F4F7"
 
     function dropMainStatusIndicatorTool() {
         mainStatusIndicator.dropMainStatusIndicator();
@@ -161,6 +161,7 @@ Item {
                         text:       qsTr("Set Standoff")
                         onClicked:  control.setStandoff()
                     }
+
                 }
             }
 

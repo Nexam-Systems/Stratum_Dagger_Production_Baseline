@@ -22,8 +22,9 @@ Item {
     readonly property var _vs: QGroundControl.settingsManager.videoSettings
     readonly property int _cam: _vs.daggerCamera.rawValue    // 0 = A2 mini, 1 = C12
 
-    readonly property color _accent:    "#3DFFA6"
-    readonly property color _accentDim: "#1FB97D"
+    QGCPalette { id: contrastPalette; colorGroupEnabled: true }
+    readonly property color _accent:    contrastPalette.highContrast ? contrastPalette.buttonBorder : "#3DFFA6"
+    readonly property color _accentDim: contrastPalette.highContrast ? contrastPalette.text : "#1FB97D"
     readonly property real  _spacing:   ScreenTools.defaultFontPixelWidth * 0.4
     readonly property real  _pad:       overlayMode ? ScreenTools.defaultFontPixelWidth * 0.75 : 0
 
@@ -33,7 +34,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         visible: root.overlayMode
-        color: Qt.rgba(0, 0, 0, 0.72)
+        color: contrastPalette.highContrast ? contrastPalette.window : Qt.rgba(0, 0, 0, 0.72)
         radius: ScreenTools.defaultBorderRadius
         border.color: root._accent
         border.width: 1

@@ -95,9 +95,9 @@ Canvas {
 
         const centerX = width / 2
         const centerY = height / 2
-        context.lineWidth = 1.5
-        context.strokeStyle = "#63E6C6"
-        context.fillStyle = "rgba(50, 211, 169, 0.12)"
+        context.lineWidth = 2
+        context.strokeStyle = "#FF79C6"
+        context.fillStyle = "rgba(255, 121, 198, 0.20)"
         context.beginPath()
         if (_nadir) {
             context.arc(centerX, centerY, _innerRadius + 6, 0, Math.PI * 2)
