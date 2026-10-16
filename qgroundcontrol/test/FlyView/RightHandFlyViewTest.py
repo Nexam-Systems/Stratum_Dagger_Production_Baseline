@@ -60,6 +60,7 @@ class RightHandFlyViewTest(unittest.TestCase):
             "src/FlyView/FlyView.qml",
             "src/FlyView/FlyViewVideoOSD.qml",
             "src/FlyView/RightMissionPanel.qml",
+            "src/FlyView/FlyViewTopRightColumnLayout.qml",
             "src/Toolbar/FlightTelemetryHeader.qml",
             "src/Toolbar/FlyViewToolBar.qml",
             "src/Toolbar/FlyViewToolBarIndicators.qml",
@@ -270,6 +271,21 @@ component PtzButton: Button {
         self.assertEqual(len(self.item.property("commands").toVariant()), count)
         self.assertFalse(self.errors, self.errors)
 
+    def test_status_drawer_click_targets_follow_the_status_labels(self):
+        source = (self.root / "src/Toolbar/MainStatusIndicator.qml").read_text(encoding="utf-8")
+        status_label = source.split("id:                 mainStatusLabel", 1)[1].split("id:                 mainStatusChevron", 1)[0]
+        chevron = source.split("id:                 mainStatusChevron", 1)[1].split("id:                 vtolModeLabel", 1)[0]
+        self.assertIn("MouseArea", status_label)
+        self.assertIn("onClicked:      control.dropMainStatusIndicator()", status_label)
+        self.assertIn("MouseArea", chevron)
+        self.assertIn("onClicked:      control.dropMainStatusIndicator()", chevron)
+        self.assertNotIn("statusHoverArea", source)
+
+    def test_photo_video_controls_are_not_loaded_in_right_dock(self):
+        source = (self.root / "src/FlyView/FlyViewTopRightColumnLayout.qml").read_text(encoding="utf-8")
+        self.assertIn("TerrainProgress", source)
+        self.assertNotIn("PhotoVideoControl", source)
+
     def panel_scene(self, width=1024, height=768):
         for name in ["RightMissionPanel.qml", "FlightTelemetryHeader.qml"]:
             path = self.folder / name
@@ -391,7 +407,7 @@ actionModel: [modeAction]
             image.save(str(Path(output) / "stratum-compact-toolbar-header.png"))
         self.assertFalse(self.errors, self.errors)
 
-    def test_compass_is_visible_above_secondary_actions(self):
+    def test_compass_is_visible_below_secondary_actions(self):
         self.panel_scene(1024, 768)
         panel = self.item.property("panel")
 
@@ -406,12 +422,14 @@ actionModel: [modeAction]
 
         compass = visual_child(panel, "missionCompass")
         define_aop = visual_child(panel, "missionDefineAOP")
+        last_action = visual_child(panel, "missionSecondary_Flight Mode")
         self.assertIsNotNone(compass)
         self.assertIsNotNone(define_aop)
+        self.assertIsNotNone(last_action)
         self.assertTrue(compass.isVisible())
         compass_point = compass.mapToItem(panel, 0, compass.height())
-        action_point = define_aop.mapToItem(panel, 0, 0)
-        self.assertLess(compass_point.y(), action_point.y())
+        action_point = last_action.mapToItem(panel, 0, last_action.height())
+        self.assertGreater(compass_point.y(), action_point.y())
         self.assertLessEqual(panel.width(), 138)
         self.assertFalse(self.errors, self.errors)
 

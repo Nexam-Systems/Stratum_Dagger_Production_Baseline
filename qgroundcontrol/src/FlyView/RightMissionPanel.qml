@@ -180,19 +180,6 @@ Rectangle {
 
             }
 
-            QGCCompassWidget {
-                Layout.alignment: Qt.AlignHCenter
-                objectName: "missionCompass"
-                size: 72
-                vehicle: root.headingFresh ? root.vehicle : null
-                visible: root.headingFresh
-            }
-
-            QGCLabel {
-                Layout.alignment: Qt.AlignHCenter
-                text: root.headingFresh ? qsTr("%1°").arg(Number(root.vehicle.vehicle.heading.rawValue).toFixed(0)) : qsTr("Heading unavailable")
-            }
-
             GridLayout {
                 Layout.fillWidth: true
                 columnSpacing: 4
@@ -257,11 +244,18 @@ Rectangle {
                 height: 1
             }
 
-            QGCLabel {
-                font.bold: true
-                text: qsTr("NAVIGATION")
+            QGCCompassWidget {
+                Layout.alignment: Qt.AlignHCenter
+                objectName: "missionCompass"
+                size: 72
+                vehicle: root.headingFresh ? root.vehicle : null
+                visible: root.headingFresh
             }
 
+            QGCLabel {
+                Layout.alignment: Qt.AlignHCenter
+                text: root.headingFresh ? qsTr("%1°").arg(Number(root.vehicle.vehicle.heading.rawValue).toFixed(0)) : qsTr("Heading unavailable")
+            }
         }
     }
 
