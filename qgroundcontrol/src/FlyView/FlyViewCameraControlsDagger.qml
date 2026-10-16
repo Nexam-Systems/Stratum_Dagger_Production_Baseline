@@ -16,6 +16,9 @@ Item {
 
     property bool overlayMode: false
     property bool compact: false
+    function stopMotion() { root._sendStop() }
+    onVisibleChanged: if (!visible) stopMotion()
+    Component.onDestruction: stopMotion()
 
     signal statusMessage(string text)
 
@@ -108,7 +111,7 @@ Item {
         Timer {
             interval: 120
             repeat: true
-            running: mouseArea.pressed
+            running: mouseArea.pressed && root.visible && root.enabled
             onTriggered: root._send(ptzButton.ptzAction)
         }
     }

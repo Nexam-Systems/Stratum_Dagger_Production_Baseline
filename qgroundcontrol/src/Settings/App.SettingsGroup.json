@@ -221,14 +221,14 @@
         },
         {
             "name": "indoorPalette",
-            "shortDesc": "Switches between light and dark color schemes for different lighting conditions.",
-            "longDesc": "The color scheme for the user interface.",
+            "shortDesc": "Select High Contrast or Normal display colors.",
+            "longDesc": "High Contrast uses black surfaces and yellow-green outlines. Normal uses dark surfaces, cyan details and teal controls. The selection is saved across restarts.",
             "type": "uint32",
-            "enumStrings": "Indoor,Outdoor",
-            "enumValues": "1,0",
+            "enumStrings": "High Contrast,Normal",
+            "enumValues": "0,1",
             "default": 0,
-            "label": "Color Scheme",
-            "keywords": "palette,dark mode,theme,color scheme"
+            "label": "Color Theme",
+            "keywords": "palette,high contrast,normal,theme,color scheme"
         },
         {
             "name": "savePath",

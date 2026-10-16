@@ -44,6 +44,12 @@ Item {
     // True from the moment a standoff is committed until it is cancelled. Drives the
     // on-map surveillance circle (centre = target, radius = standoff distance).
     property bool   _standoffActive:    false
+    on_ActiveVehicleChanged: {
+        _targetCoordinate = QtPositioning.coordinate()
+        _standoffActive = false
+        _standoffDistance = 0
+        _standoffHeight = 0
+    }
 
     // STRATUM: bridge companion computer + standoff command ids (Dropper web UI contract).
     readonly property int _bridgeComponentId:   191

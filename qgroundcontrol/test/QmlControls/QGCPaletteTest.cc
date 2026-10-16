@@ -1,7 +1,10 @@
 #include "QGCPaletteTest.h"
 #include "QGCPalette.h"
+#include "AppSettings.h"
+#include "SettingsManager.h"
 
 #include <QtTest/QSignalSpy>
+#include <QtCore/qscopeguard.h>
 
 namespace {
 class PaletteStateGuard
@@ -72,6 +75,24 @@ void QGCPaletteTest::_disabledControlsRemainReadable()
     QCOMPARE(palette.buttonBorder(), QColor("#7D8876"));
     QVERIFY(palette.buttonText() != enabledText);
     QCOMPARE(palette.warningText(), QColor("#FFD166"));
+}
+
+void QGCPaletteTest::_savedDisplayThemeAppliesToPalette()
+{
+    PaletteStateGuard guard;
+    auto *theme = SettingsManager::instance()->appSettings()->indoorPalette();
+    const QVariant previous = theme->rawValue();
+    const auto restore = qScopeGuard([&]() { theme->setRawValue(previous); });
+    QGCPalette palette;
+    palette.setColorGroupEnabled(true);
+    theme->setRawValue(0);
+    theme->setRawValue(1);
+    QVERIFY(!QGCPalette::highContrast());
+    QCOMPARE(QGCPalette::globalTheme(), QGCPalette::Dark);
+    QCOMPARE(palette.window(), QColor("#06131B"));
+    theme->setRawValue(0);
+    QVERIFY(QGCPalette::highContrast());
+    QCOMPARE(palette.window(), QColor("#050A06"));
 }
 
 UT_REGISTER_TEST(QGCPaletteTest, TestLabel::Unit)

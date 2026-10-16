@@ -30,7 +30,7 @@
         },
         {
             "heading": "General",
-            "keywords": ["language", "locale", "color scheme", "dark mode", "theme", "palette", "follow me", "audio", "volume", "sound", "gstreamer", "debug level", "ui scale", "font size", "zoom", "save path", "storage", "reset", "clear settings", "factory reset"],
+            "keywords": ["language", "locale", "color theme", "color scheme", "high contrast", "normal", "dark mode", "theme", "palette", "follow me", "audio", "volume", "sound", "gstreamer", "debug level", "ui scale", "font size", "zoom", "save path", "storage", "reset", "clear settings", "factory reset"],
             "controls": [
                 {
                     "setting": "appSettings.qLocaleLanguage",

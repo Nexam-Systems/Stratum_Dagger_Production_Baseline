@@ -56,8 +56,7 @@ AppSettings::LanguageInfo_t AppSettings::_rgLanguageInfo[] = {
 
 DECLARE_SETTINGGROUP(App, "")
 {
-    QGCPalette::setGlobalTheme(indoorPalette()->rawValue().toBool() ? QGCPalette::Dark : QGCPalette::Light);
-    QGCPalette::setHighContrast(true);
+    _indoorPaletteChanged();
 
     // Instantiate savePath so we can check for override and setup default path if needed
 
@@ -261,7 +260,8 @@ QString AppSettings::_childSavePath(const char* directory)
 
 void AppSettings::_indoorPaletteChanged(void)
 {
-    QGCPalette::setGlobalTheme(indoorPalette()->rawValue().toBool() ? QGCPalette::Dark : QGCPalette::Light);
+    QGCPalette::setGlobalTheme(QGCPalette::Dark);
+    QGCPalette::setHighContrast(indoorPalette()->rawValue().toUInt() != 1);
 }
 
 QString AppSettings::missionSavePath(void)

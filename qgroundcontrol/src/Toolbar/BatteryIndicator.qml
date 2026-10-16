@@ -164,6 +164,7 @@ Item {
     }
 
     QGCPalette { id: qgcPal }
+    readonly property color indicatorColor: qgcPal.highContrast ? qgcPal.text : "#79CBE8"
 
     RowLayout {
         id:             batteryIndicatorRow
@@ -213,14 +214,14 @@ Item {
                     case MAVLinkEnums.MAV_BATTERY_CHARGE_STATE_OK:
                         if (!isNaN(battery.percentRemaining.rawValue)) {
                             if (battery.percentRemaining.rawValue > threshold1) {
-                                return qgcPal.colorGreen
+                                return qgcPal.highContrast ? qgcPal.colorGreen : control.indicatorColor
                             } else if (battery.percentRemaining.rawValue > threshold2) {
                                 return qgcPal.colorYellowGreen
                             } else {
                                 return qgcPal.colorYellow
                             }
                         } else {
-                            return qgcPal.text
+                            return control.indicatorColor
                         }
                     case MAVLinkEnums.MAV_BATTERY_CHARGE_STATE_LOW:
                         return qgcPal.colorOrange
@@ -230,7 +231,7 @@ Item {
                     case MAVLinkEnums.MAV_BATTERY_CHARGE_STATE_UNHEALTHY:
                         return qgcPal.colorRed
                     default:
-                        return qgcPal.text
+                        return control.indicatorColor
                 }
             }
 
@@ -339,7 +340,7 @@ Item {
                         // Background track
                         ctx.beginPath()
                         ctx.lineWidth   = lw
-                        ctx.strokeStyle = qgcPal.text
+                        ctx.strokeStyle = control.indicatorColor
                         ctx.globalAlpha = 0.25
                         ctx.arc(cx, cy, r, 0, 2 * Math.PI)
                         ctx.stroke()
@@ -361,7 +362,7 @@ Item {
 
                 QGCLabel {
                     anchors.centerIn:   parent
-                    color:              qgcPal.text
+                    color:              control.indicatorColor
                     font.pointSize:     ScreenTools.smallFontPointSize
                     text:               batteryDial.pctKnown ? (Math.round(batteryDial.dialPct) + "%") : ""
                 }
@@ -376,7 +377,7 @@ Item {
                 QGCLabel {
                     Layout.alignment:       Qt.AlignHCenter
                     verticalAlignment:      Text.AlignVCenter
-                    color:                  qgcPal.text
+                    color:                  control.indicatorColor
                     text:                   getBatteryPercentageText()
                     font.pointSize:         _showBoth ? ScreenTools.defaultFontPointSize : ScreenTools.mediumFontPointSize
                     visible:                false // STRATUM: percentage is displayed inside the battery dial
@@ -385,7 +386,7 @@ Item {
                 QGCLabel {
                     Layout.alignment:       Qt.AlignHCenter
                     font.pointSize:         _showBoth ? ScreenTools.defaultFontPointSize : ScreenTools.mediumFontPointSize
-                    color:                  qgcPal.text
+                    color:                  control.indicatorColor
                     text:                   getBatteryVoltageText()
                     visible:                _showBoth || _showVoltage
                 }

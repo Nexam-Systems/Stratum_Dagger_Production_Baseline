@@ -14,8 +14,8 @@ Rectangle {
     property var dropperAction
 
     QGCPalette { id: contrastPalette; colorGroupEnabled: true }
-    readonly property color _accent:    contrastPalette.highContrast ? contrastPalette.buttonBorder : "#3DFFA6"
-    readonly property color _accentDim:  contrastPalette.highContrast ? contrastPalette.text : "#1FB97D"
+    readonly property color _accent:    contrastPalette.highContrast ? contrastPalette.buttonBorder : "#79CBE8"
+    readonly property color _accentDim:  contrastPalette.highContrast ? contrastPalette.text : "#BCD7E4"
     readonly property color _danger:     "#EF5350"
     readonly property color _dangerFill: "#B71C1C"
 
