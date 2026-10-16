@@ -10,7 +10,6 @@ Rectangle {
 
     property var actionModel: []
     readonly property var activeHold: abortButton.holding ? abortButton : engageButton.holding ? engageButton : null
-    property Component cameraControlsComponent: null
     property bool cameraPrimary: false
     property bool contextActive: true
     required property var engagementController
@@ -54,9 +53,8 @@ Rectangle {
 
     border.color: panelPalette.groupBorder
     border.width: 1
-    color: panelPalette.window
+    color: panelPalette.highContrast ? panelPalette.window : Qt.rgba(panelPalette.window.r, panelPalette.window.g, panelPalette.window.b, 0.80)
 
-    onCameraPrimaryChanged: cancelHolds()
     onContextActiveChanged: if (!contextActive)
         cancelHolds()
     onVehicleChanged: {
@@ -86,7 +84,7 @@ Rectangle {
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         anchors.bottom: previewSection.top
         anchors.left: parent.left
-        anchors.margins: 10
+        anchors.margins: 6
         anchors.right: parent.right
         anchors.top: parent.top
         clip: true
@@ -94,7 +92,7 @@ Rectangle {
 
         ColumnLayout {
             height: implicitHeight
-            spacing: 8
+            spacing: 5
             width: actionScroll.availableWidth
 
             QGCLabel {
@@ -104,15 +102,11 @@ Rectangle {
 
             GridLayout {
                 Layout.fillWidth: true
-                columnSpacing: 5
-                columns: 3
-                rowSpacing: 5
+                Layout.rightMargin: 6
+                columnSpacing: 4
+                columns: 2
+                rowSpacing: 4
                 uniformCellWidths: true
-
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 1
-                }
 
                 PrimaryCommand {
                     enabled: root.linkReady && root.guidedController && root.guidedController.showTakeoff
@@ -126,11 +120,6 @@ Rectangle {
                         actionPopup.close();
                         root.takeoffRequested();
                     }
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 1
                 }
 
                 HoldCommand {
@@ -154,11 +143,6 @@ Rectangle {
                     }
                 }
 
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 1
-                }
-
                 PrimaryCommand {
                     enabled: !!root.vehicle
                     iconSource: "/qmlimages/StandoffMarker.svg"
@@ -171,11 +155,6 @@ Rectangle {
                         actionPopup.close();
                         root.standoffRequested();
                     }
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 1
                 }
 
                 HoldCommand {
@@ -199,20 +178,30 @@ Rectangle {
                     }
                 }
 
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 1
-                }
+            }
+
+            QGCCompassWidget {
+                Layout.alignment: Qt.AlignHCenter
+                objectName: "missionCompass"
+                size: 72
+                vehicle: root.headingFresh ? root.vehicle : null
+                visible: root.headingFresh
+            }
+
+            QGCLabel {
+                Layout.alignment: Qt.AlignHCenter
+                text: root.headingFresh ? qsTr("%1°").arg(Number(root.vehicle.vehicle.heading.rawValue).toFixed(0)) : qsTr("Heading unavailable")
             }
 
             GridLayout {
                 Layout.fillWidth: true
-                columnSpacing: 6
-                columns: 2
-                rowSpacing: 6
+                columnSpacing: 4
+                columns: 1
+                rowSpacing: 4
 
                 CommandButton {
                     iconSource: "/InstrumentValueIcons/map.svg"
+                    objectName: "missionDefineAOP"
                     text: qsTr("Define AOP")
 
                     onClicked: {
@@ -262,13 +251,6 @@ Rectangle {
                 wrapMode: Text.WordWrap
             }
 
-            Loader {
-                Layout.fillWidth: true
-                Layout.preferredHeight: item ? item.implicitHeight : 0
-                active: root.cameraPrimary && root.visible
-                sourceComponent: root.cameraControlsComponent
-            }
-
             Rectangle {
                 Layout.fillWidth: true
                 color: panelPalette.groupBorder
@@ -280,17 +262,6 @@ Rectangle {
                 text: qsTr("NAVIGATION")
             }
 
-            QGCCompassWidget {
-                Layout.alignment: Qt.AlignHCenter
-                size: 112
-                vehicle: root.headingFresh ? root.vehicle : null
-                visible: root.headingFresh
-            }
-
-            QGCLabel {
-                Layout.alignment: Qt.AlignHCenter
-                text: root.headingFresh ? qsTr("%1°").arg(Number(root.vehicle.vehicle.heading.rawValue).toFixed(0)) : qsTr("Heading unavailable")
-            }
         }
     }
 
@@ -299,9 +270,9 @@ Rectangle {
 
         anchors.bottom: parent.bottom
         anchors.left: parent.left
-        anchors.margins: 10
+        anchors.margins: 6
         anchors.right: parent.right
-        spacing: 6
+        spacing: 4
 
         QGCLabel {
             font.bold: true
@@ -387,17 +358,26 @@ Rectangle {
         textColor: foreground
         Accessible.name: text
         Layout.fillWidth: true
-        Layout.preferredHeight: 56
+        Layout.preferredHeight: 44
         _horizontalPadding: 3
         pointSize: ScreenTools.smallFontPointSize
         wrapMode: Text.WordWrap
         background: Rectangle {
             readonly property color baseFill: actionButton.enabled ? root.actionFill(actionButton.visualRole) : "#172A34"
             color: panelPalette.highContrast ? ((actionButton.down || actionButton.checked) ? commandPalette.buttonHighlight : commandPalette.button)
-                   : (actionButton.down ? Qt.lighter(baseFill, 1.4) : actionButton.hovered ? Qt.lighter(baseFill, 1.15) : baseFill)
+                   : Qt.rgba(baseFill.r, baseFill.g, baseFill.b, 0.82)
             border.color: panelPalette.highContrast ? commandPalette.buttonBorder : (actionButton.enabled ? root.actionBorder(actionButton.visualRole) : "#617886")
             border.width: 2
             radius: 4
+
+            Rectangle {
+                readonly property color glowColor: root.actionBorder(actionButton.visualRole)
+                anchors.fill: parent
+                anchors.margins: -3
+                color: Qt.rgba(glowColor.r, glowColor.g, glowColor.b, actionButton.enabled ? (actionButton.hovered ? 0.42 : 0.20) : 0)
+                radius: 7
+                z: -1
+            }
         }
     }
     component HoldCommand: MissionHoldButton {
@@ -407,7 +387,7 @@ Rectangle {
         readonly property color foreground: enabled ? panelPalette.buttonText : (panelPalette.highContrast ? "#B5BDB0" : "#9FB1BE")
 
         Layout.fillWidth: true
-        Layout.preferredHeight: 56
+        Layout.preferredHeight: 46
         contextActive: root.contextActive && root.visible && !actionPopup.visible
         font.family: ScreenTools.normalFontFamily
         font.pointSize: ScreenTools.smallFontPointSize
@@ -416,20 +396,29 @@ Rectangle {
         background: Rectangle {
             border.color: panelPalette.highContrast ? panelPalette.buttonBorder : (holdButton.enabled ? root.actionBorder(holdButton.visualRole) : "#617886")
             border.width: 2
-                 readonly property color baseFill: holdButton.enabled ? root.actionFill(holdButton.visualRole) : "#172A34"
-                 color: panelPalette.highContrast ? (holdButton.down ? panelPalette.windowShadeLight : panelPalette.button)
-                     : (holdButton.down ? Qt.lighter(baseFill, 1.4) : holdButton.hovered ? Qt.lighter(baseFill, 1.15) : baseFill)
+            readonly property color baseFill: holdButton.enabled ? root.actionFill(holdButton.visualRole) : "#172A34"
+            color: panelPalette.highContrast ? (holdButton.down ? panelPalette.windowShadeLight : panelPalette.button)
+                     : Qt.rgba(baseFill.r, baseFill.g, baseFill.b, 0.82)
             radius: 4
+
+            Rectangle {
+                readonly property color glowColor: root.actionBorder(holdButton.visualRole)
+                anchors.fill: parent
+                anchors.margins: -3
+                color: Qt.rgba(glowColor.r, glowColor.g, glowColor.b, holdButton.enabled ? (holdButton.hovered ? 0.42 : 0.20) : 0)
+                radius: 7
+                z: -1
+            }
         }
         contentItem: Column {
             QGCColoredImage {
                 anchors.horizontalCenter: parent.horizontalCenter
                 color: holdButton.foreground
                 fillMode: Image.PreserveAspectFit
-                height: 20
+                height: 16
                 source: parent.parent.iconSource
                 sourceSize.height: height
-                width: 20
+                width: 16
             }
 
             Text {
@@ -450,10 +439,10 @@ Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 color: primaryButton.foreground
                 fillMode: Image.PreserveAspectFit
-                height: 20
+                height: 16
                 source: parent.parent.iconSource
                 sourceSize.height: height
-                width: 20
+                width: 16
             }
 
             QGCLabel {

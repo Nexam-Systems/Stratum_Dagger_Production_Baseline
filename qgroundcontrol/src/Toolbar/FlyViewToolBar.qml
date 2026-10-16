@@ -12,7 +12,7 @@ Item {
 
     id:     control
     width:  parent.width
-    height: ScreenTools.toolbarHeight + telemetryHeader.implicitHeight
+    height: ScreenTools.toolbarHeight
     property var pendingTarget: null
     property var designatedTarget: null
 
@@ -150,6 +150,16 @@ Item {
                 id:     centerPanel
                 width:  Math.max(0, control.width - (leftPanel.width + rightPanel.width))
                 height: parent.height
+
+                FlightTelemetryHeader {
+                    id: telemetryHeader
+                    anchors.fill: parent
+                    compact: true
+                    vehicle: control._activeVehicle
+                    pendingTarget: control.pendingTarget
+                    designatedTarget: control.designatedTarget
+                    videoLive: QGroundControl.videoManager.decoding
+                }
             }
 
             Item {
@@ -164,18 +174,6 @@ Item {
                 }
             }
         }
-    }
-
-    FlightTelemetryHeader {
-        id: telemetryHeader
-        anchors.top: parent.top
-        anchors.topMargin: ScreenTools.toolbarHeight
-        width: parent.width
-        height: implicitHeight
-        vehicle: control._activeVehicle
-        pendingTarget: control.pendingTarget
-        designatedTarget: control.designatedTarget
-        videoLive: QGroundControl.videoManager.decoding
     }
 
     // STRATUM: the guided-action confirm bar and its message display were moved to the

@@ -15,15 +15,15 @@ Item {
 
     // STRATUM: show the network/telemetry link strength whenever the vehicle uses a radio
     // link, so operators always have a link indicator (bars grey out when no live data).
-    property bool showIndicator: _activeVehicle.supports.radio || _hasTelemetry
+    property bool showIndicator: (_activeVehicle && _activeVehicle.supports && _activeVehicle.supports.radio) || _hasTelemetry
 
     property var  _activeVehicle:   QGroundControl.multiVehicleManager.activeVehicle
-    property var  _radioStatus:     _activeVehicle.radioStatus
-    property bool _hasTelemetry:    _radioStatus.lrssi.rawValue !== 0
+    property var  _radioStatus:     _activeVehicle ? _activeVehicle.radioStatus : null
+    property bool _hasTelemetry:    _radioStatus && _radioStatus.lrssi && Number(_radioStatus.lrssi.rawValue) !== 0
 
     // RADIO_STATUS rssi is reported as a 0-255 raw value (higher is stronger). Map to a
     // 0-100 percentage for the shared SignalStrength bar visual.
-    property real _linkPercent:     _hasTelemetry ? Math.max(0, Math.min(100, _radioStatus.lrssi.rawValue * (100.0 / 255.0))) : 0
+    property real _linkPercent:     _hasTelemetry ? Math.max(0, Math.min(100, Number(_radioStatus.lrssi.rawValue) * (100.0 / 255.0))) : 0
 
     Row {
         id:             telemRow

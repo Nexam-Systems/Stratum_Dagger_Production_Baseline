@@ -35,14 +35,10 @@ RowLayout {
     // to just the label + chevron so an adjacent VTOL mode label (when present)
     // keeps its own interactive region.
     Rectangle {
-        anchors.left:           mainStatusLabel.left
-        anchors.right:          mainStatusChevron.right
-        anchors.top:            parent.top
-        anchors.bottom:         parent.bottom
-        anchors.topMargin:      ScreenTools.defaultFontPixelHeight * 0.15
-        anchors.bottomMargin:   ScreenTools.defaultFontPixelHeight * 0.15
-        anchors.leftMargin:     -ScreenTools.defaultFontPixelWidth * 0.35
-        anchors.rightMargin:    -ScreenTools.defaultFontPixelWidth * 0.35
+        x:                      mainStatusLabel.x - ScreenTools.defaultFontPixelWidth * 0.35
+        y:                      ScreenTools.defaultFontPixelHeight * 0.15
+        width:                  mainStatusChevron.x + mainStatusChevron.width - mainStatusLabel.x + ScreenTools.defaultFontPixelWidth * 0.7
+        height:                 parent.height - ScreenTools.defaultFontPixelHeight * 0.3
         radius:                 ScreenTools.defaultFontPixelHeight * 0.3
         color:                  qgcPal.highContrast ? qgcPal.window : Qt.rgba(1, 1, 1, _hovered ? 0.12 : 0.06)
         border.color:           qgcPal.highContrast ? qgcPal.buttonBorder : Qt.rgba(1, 1, 1, _hovered ? 0.35 : 0.18)
@@ -54,12 +50,10 @@ RowLayout {
 
     MouseArea {
         id:                 statusHoverArea
-        anchors.left:       mainStatusLabel.left
-        anchors.right:      mainStatusChevron.right
-        anchors.top:        parent.top
-        anchors.bottom:     parent.bottom
-        anchors.leftMargin: -ScreenTools.defaultFontPixelWidth * 0.35
-        anchors.rightMargin:-ScreenTools.defaultFontPixelWidth * 0.35
+        x:                  mainStatusLabel.x - ScreenTools.defaultFontPixelWidth * 0.35
+        y:                  0
+        width:              mainStatusChevron.x + mainStatusChevron.width - mainStatusLabel.x + ScreenTools.defaultFontPixelWidth * 0.7
+        height:             parent.height
         hoverEnabled:       !ScreenTools.isMobile
         cursorShape:        Qt.PointingHandCursor
         acceptedButtons:    Qt.LeftButton

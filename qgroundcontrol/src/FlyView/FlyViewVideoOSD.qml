@@ -356,8 +356,8 @@ Item {
 
         HUDField { label: qsTr("FLIGHT MODE"); value: _hasVehicle ? _activeVehicle.flightMode : _noVal }
         HUDField { label: qsTr("ARMED");       value: _hasVehicle ? (_activeVehicle.armed ? qsTr("ARMED") : qsTr("DISARMED")) : _noVal }
-        HUDField { label: qsTr("GPS SATS");    value: _hasVehicle ? _activeVehicle.gps.count.valueString : _noVal }
-        HUDField { label: qsTr("HDOP");        value: _hasVehicle ? _activeVehicle.gps.hdop.valueString : _noVal }
+        HUDField { label: qsTr("GPS SATS");    value: _hasVehicle && _activeVehicle.gps && _activeVehicle.gps.count ? _activeVehicle.gps.count.valueString : _noVal }
+        HUDField { label: qsTr("HDOP");        value: _hasVehicle && _activeVehicle.gps && _activeVehicle.gps.hdop ? _activeVehicle.gps.hdop.valueString : _noVal }
     }
 
     // ====================== TOP-RIGHT : power / link =========================
@@ -371,7 +371,7 @@ Item {
         HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("BATTERY");  value: _battery ? _battery.percentRemaining.valueString : _noVal; units: "%" }
         HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("VOLTAGE");  value: _battery ? _battery.voltage.valueString : _noVal; units: _battery ? _battery.voltage.units : "" }
         HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("CURRENT");  value: _battery ? _battery.current.valueString : _noVal; units: _battery ? _battery.current.units : "" }
-        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("RC RSSI");  value: _hasVehicle ? _activeVehicle.rcRSSI.valueString : _noVal; units: "%" }
+        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("RC RSSI");  value: _hasVehicle && _activeVehicle.rcRSSI ? _activeVehicle.rcRSSI.valueString : _noVal; units: "%" }
     }
 
     // ====================== BOTTOM-LEFT : target / time ======================
@@ -381,8 +381,8 @@ Item {
         anchors.margins: _margin
         spacing:         _margin * 0.5
 
-        HUDField { label: qsTr("LATITUDE");    value: _hasVehicle ? _activeVehicle.gps.lat.valueString : _noVal }
-        HUDField { label: qsTr("LONGITUDE");   value: _hasVehicle ? _activeVehicle.gps.lon.valueString : _noVal }
+        HUDField { label: qsTr("LATITUDE");    value: _hasVehicle && _activeVehicle.gps && _activeVehicle.gps.lat ? _activeVehicle.gps.lat.valueString : _noVal }
+        HUDField { label: qsTr("LONGITUDE");   value: _hasVehicle && _activeVehicle.gps && _activeVehicle.gps.lon ? _activeVehicle.gps.lon.valueString : _noVal }
         HUDField { label: qsTr("FLIGHT TIME"); value: _hasVehicle ? _activeVehicle.flightTime.valueString : _noVal }
     }
 

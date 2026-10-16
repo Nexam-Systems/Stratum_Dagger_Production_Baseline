@@ -48,6 +48,34 @@ class RightHandFlyViewTest(unittest.TestCase):
                                  "-o", str(self.folder / "widget.cpp"), str(source)], capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
 
+    def test_changed_fly_view_and_toolbar_qml_cache_compile(self):
+        compiler = shutil.which("qmlcachegen")
+        if not compiler:
+            candidates = [Path(PySide6.__file__).parent / "qmlcachegen.exe",
+                          Path(PySide6.__file__).parent / "qmlcachegen"]
+            compiler = next((str(path) for path in candidates if path.is_file()), None)
+        if not compiler:
+            self.skipTest("Qt qmlcachegen is unavailable")
+        sources = [
+            "src/FlyView/FlyView.qml",
+            "src/FlyView/FlyViewVideoOSD.qml",
+            "src/FlyView/RightMissionPanel.qml",
+            "src/Toolbar/FlightTelemetryHeader.qml",
+            "src/Toolbar/FlyViewToolBar.qml",
+            "src/Toolbar/FlyViewToolBarIndicators.qml",
+            "src/Toolbar/GPSIndicator.qml",
+            "src/Toolbar/MainStatusIndicator.qml",
+            "src/Toolbar/RCRSSIIndicator.qml",
+            "src/Toolbar/TelemetryRSSIIndicator.qml",
+            "src/Toolbar/VehicleGPSIndicator.qml",
+        ]
+        for index, relative_path in enumerate(sources):
+            source = self.root / relative_path
+            result = subprocess.run([compiler, "--bare", "--resource-path",
+                                     "/qml/QGroundControl/" + relative_path.removeprefix("src/"),
+                                     "-o", str(self.folder / f"changed-{index}.cpp"), str(source)], capture_output=True)
+            self.assertEqual(result.returncode, 0, f"{relative_path}: {result.stderr.decode(errors='replace')}")
+
     @classmethod
     def setUpClass(cls):
         cls.app = QGuiApplication.instance() or QGuiApplication([])
@@ -308,8 +336,8 @@ pendingTarget: ({isValid:true, latitude:24.2, longitude:67.3})
 designatedTarget: ({isValid:true, latitude:24.4, longitude:67.5})
 }
 RightMissionPanel {
-id: panel; width: 280; height: parent.height - header.height
-x: parent.width - width; y: header.height
+id: panel; width: Math.min(138, Math.max(122, parent.width * 0.11)); height: parent.height - header.height
+x: parent.width - width - 6; y: header.height
 vehicle: craft; guidedController: guided; engagementController: engagement
 actionModel: [modeAction]
 }
@@ -338,8 +366,53 @@ actionModel: [modeAction]
                     self.assertLessEqual(item.property("contentWidth"), item.width() + 2)
                 for child in item.childItems(): check_text(child)
             check_text(header)
+            check_text(panel)
+            for name in ["missionTakeoff", "missionAbort", "missionStandoff", "missionEngage"]:
+                button = self.item.findChild(QObject, name)
+                self.assertIsNotNone(button)
+                button_right = button.mapToItem(panel, button.width(), 0).x()
+                self.assertLessEqual(button_right, panel.width() + 1)
             output = os.environ.get("STRATUM_RIGHT_PANEL_SCREENSHOTS")
             if output: image.save(str(Path(output) / f"stratum-right-panel-{width}.png"))
+        self.assertFalse(self.errors, self.errors)
+
+    def test_compact_header_fits_toolbar_height(self):
+        self.panel_scene(1024, 700)
+        header = self.item.property("header")
+        header.setProperty("compact", True)
+        header.setWidth(520)
+        header.setHeight(54)
+        QTest.qWait(80)
+        self.assertLessEqual(header.property("implicitHeight"), 54)
+        image = self.window.grabWindow()
+        self.assertFalse(image.isNull())
+        output = os.environ.get("STRATUM_RIGHT_PANEL_SCREENSHOTS")
+        if output:
+            image.save(str(Path(output) / "stratum-compact-toolbar-header.png"))
+        self.assertFalse(self.errors, self.errors)
+
+    def test_compass_is_visible_above_secondary_actions(self):
+        self.panel_scene(1024, 768)
+        panel = self.item.property("panel")
+
+        def visual_child(item, name):
+            if item.objectName() == name:
+                return item
+            for child in item.childItems():
+                found = visual_child(child, name)
+                if found:
+                    return found
+            return None
+
+        compass = visual_child(panel, "missionCompass")
+        define_aop = visual_child(panel, "missionDefineAOP")
+        self.assertIsNotNone(compass)
+        self.assertIsNotNone(define_aop)
+        self.assertTrue(compass.isVisible())
+        compass_point = compass.mapToItem(panel, 0, compass.height())
+        action_point = define_aop.mapToItem(panel, 0, 0)
+        self.assertLess(compass_point.y(), action_point.y())
+        self.assertLessEqual(panel.width(), 138)
         self.assertFalse(self.errors, self.errors)
 
     def test_normal_colors_and_live_high_contrast_restore(self):
@@ -349,9 +422,15 @@ actionModel: [modeAction]
         takeoff = self.item.findChild(QObject, "missionTakeoff")
         self.assertEqual(panel.property("color"), QColor("#050A06"))
         self.display_mode.highContrast = False
-        self.assertEqual(panel.property("color"), QColor("#06131B"))
-        self.assertEqual(engage.property("background").property("color"), QColor("#7C202C"))
-        self.assertEqual(takeoff.property("background").property("color"), QColor("#073E37"))
+        panel_color = panel.property("color")
+        self.assertEqual(panel_color.name(), "#06131b")
+        self.assertLess(panel_color.alpha(), 255)
+        engage_color = engage.property("background").property("color")
+        takeoff_color = takeoff.property("background").property("color")
+        self.assertEqual(engage_color.name(), "#7c202c")
+        self.assertLess(engage_color.alpha(), 255)
+        self.assertEqual(takeoff_color.name(), "#073e37")
+        self.assertLess(takeoff_color.alpha(), 255)
         self.assertEqual(engage.property("holdDuration"), 3000)
         self.assertEqual(engage.property("foreground"), QColor("#F1F7FA"))
         self.display_mode.highContrast = True
@@ -374,7 +453,12 @@ actionModel: [modeAction]
                 self.assertFalse(image.isNull())
                 engage = self.item.findChild(QObject, "missionEngage")
                 point = engage.mapToItem(self.item, 6, 6).toPoint()
-                self.assertEqual(image.pixelColor(point), QColor("#7C202C" if normal else "#0B160B"))
+                pixel = image.pixelColor(point)
+                if normal:
+                    self.assertGreater(pixel.red(), pixel.green() * 2)
+                    self.assertGreater(pixel.red(), 60)
+                else:
+                    self.assertEqual(pixel, QColor("#0B160B"))
                 if output: image.save(str(Path(output) / f"stratum-{'normal' if normal else 'contrast'}-{width}.png"))
         self.assertFalse(self.errors, self.errors)
 
@@ -399,15 +483,16 @@ actionModel: [modeAction]
         header.setProperty("nowMs", int(time.time() * 1000))
         self.assertFalse(header.property("positionFresh"))
 
-    def test_diamond_positions_and_command_dispatch(self):
+    def test_compact_primary_positions_and_command_dispatch(self):
         self.panel_scene(1366, 768)
         buttons = {name: self.item.findChild(QObject, "mission" + name) for name in ["Takeoff", "Abort", "Standoff", "Engage"]}
         self.assertTrue(all(buttons.values()))
         points = {name: button.mapToItem(self.item, button.width() / 2, button.height() / 2) for name, button in buttons.items()}
-        self.assertLess(points["Takeoff"].y(), points["Abort"].y())
-        self.assertLess(points["Abort"].x(), points["Standoff"].x())
-        self.assertAlmostEqual(points["Abort"].y(), points["Standoff"].y())
-        self.assertGreater(points["Engage"].y(), points["Standoff"].y())
+        self.assertAlmostEqual(points["Takeoff"].y(), points["Abort"].y())
+        self.assertLess(points["Takeoff"].x(), points["Abort"].x())
+        self.assertAlmostEqual(points["Standoff"].y(), points["Engage"].y())
+        self.assertLess(points["Standoff"].x(), points["Engage"].x())
+        self.assertLess(points["Takeoff"].y(), points["Standoff"].y())
         for name, duration, counter in [("Abort", 1000, "abortRequests"), ("Engage", 3000, "engageRequests")]:
             button = buttons[name]
             button.setProperty("applicationActive", True)

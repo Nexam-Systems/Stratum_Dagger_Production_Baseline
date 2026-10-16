@@ -22,7 +22,7 @@ Item {
     property real   _vAccM:         _gps ? _gps.verticalAccuracy.value   : NaN
     property string _hAccText:      (_gps && !isNaN(_hAccM)) ? (_hAccM.toFixed(2) + " " + qsTr("m")) : qsTr("--")
     property string _vAccText:      (_gps && !isNaN(_vAccM)) ? (_vAccM.toFixed(2) + " " + qsTr("m")) : qsTr("--")
-    property string _nSatText:      _gps ? _gps.count.valueString : qsTr("--")
+    property string _nSatText:      _gps && _gps.count ? _gps.count.valueString : qsTr("--")
 
     QGCPalette { id: qgcPal }
 
@@ -54,7 +54,7 @@ Item {
                 source:             "/qmlimages/Gps.svg"
                 fillMode:           Image.PreserveAspectFit
                 sourceSize.height:  height
-                opacity:            (_activeVehicle && _activeVehicle.gps.count.value >= 0) ? 1 : 0.5
+                opacity:            (_gps && _gps.count && _gps.count.value >= 0) ? 1 : 0.5
                 color:              qgcPal.text
             }
         }

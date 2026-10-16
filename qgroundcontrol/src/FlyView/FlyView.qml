@@ -140,15 +140,13 @@ Item {
     property real   _fullItemZorder:    0
     property real   _pipItemZorder:     QGroundControl.zOrderWidgets
 
-    // STRATUM: true when the video (camera) is the maximized window rather than the
-    // map. Drives the on-video camera-control overlay and tells the dropper panel to
-    // fold its camera controls away (they live on the video instead). See req. 4.
+    // STRATUM: camera controls dock to the left only while the video is maximized.
     readonly property bool _cameraMaximized: QGroundControl.videoManager.hasVideo &&
                                              videoControl.pipState.state === videoControl.pipState.fullState
-    property bool _rightPanelExpanded: true
-    readonly property bool _showRightPanel: (!_cameraMaximized || _rightPanelExpanded) && !QGroundControl.videoManager.fullScreen
+    property bool _cameraControlsExpanded: true
+    readonly property bool _showRightPanel: !QGroundControl.videoManager.fullScreen
     readonly property real _dockWidth: _showRightPanel ? widgetLayer.commandPanelWidth + _widgetMargin * 2 : 0
-    on_CameraMaximizedChanged: _rightPanelExpanded = true
+    on_CameraMaximizedChanged: _cameraControlsExpanded = true
 
     function _calcCenterViewPort() {
         _centerViewport = Qt.rect(0, toolbar.height, Math.max(0, width - _dockWidth), Math.max(0, height - toolbar.height))
@@ -231,7 +229,6 @@ Item {
             cameraMaximized:        _cameraMaximized
             standoffController:     mapControl.standoffCmdController
             panelExpanded:          _root._showRightPanel
-            cameraControlsComponent: _stratumIsDagger ? daggerCameraComponent : dropperCameraComponent
             visible:                !QGroundControl.videoManager.fullScreen
         }
 
@@ -254,19 +251,72 @@ Item {
             FlyViewCameraControlsDaggerRoot { compact: true }
         }
 
+        Rectangle {
+            id: cameraControlsCard
+            anchors.left: flightSurface.left
+            anchors.leftMargin: 8
+            anchors.verticalCenter: flightSurface.verticalCenter
+            width: Math.min(176, flightSurface.width * 0.22)
+            height: Math.min(flightSurface.height - 16, Math.max(180, cameraControlsScroll.contentHeight + 16))
+            visible: _root._cameraMaximized && _root._cameraControlsExpanded && !QGroundControl.videoManager.fullScreen
+            color: qgcPal.highContrast ? qgcPal.window : Qt.rgba(qgcPal.window.r, qgcPal.window.g, qgcPal.window.b, 0.84)
+            border.color: qgcPal.groupBorder
+            border.width: 1
+            radius: 4
+            clip: true
+            z: QGroundControl.zOrderTopMost
+
+            ScrollView {
+                id: cameraControlsScroll
+                anchors.fill: parent
+                anchors.margins: 6
+                clip: true
+                contentWidth: availableWidth
+
+                ColumnLayout {
+                    width: cameraControlsScroll.availableWidth
+                    spacing: 6
+
+                    QGCLabel {
+                        Layout.fillWidth: true
+                        text: qsTr("CAMERA CONTROLS")
+                        font.bold: true
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Loader {
+                        id: cameraControlsLoader
+                        Layout.fillWidth: true
+                        active: _root._cameraMaximized && _root._cameraControlsExpanded
+                        sourceComponent: _stratumIsDagger ? daggerCameraComponent : dropperCameraComponent
+                    }
+                }
+            }
+        }
+
         QGCButton {
-            anchors.right: parent.right
-            anchors.rightMargin: _root._showRightPanel ? _root._dockWidth : 0
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: _root._cameraControlsExpanded ? cameraControlsCard.right : flightSurface.left
+            anchors.leftMargin: _root._cameraControlsExpanded ? 2 : 8
+            anchors.verticalCenter: flightSurface.verticalCenter
             width: 36
             height: 64
-            iconSource: _root._showRightPanel ? "/InstrumentValueIcons/cheveron-right.svg" : "/InstrumentValueIcons/cheveron-left.svg"
             visible: _root._cameraMaximized && !QGroundControl.videoManager.fullScreen
-            z: QGroundControl.zOrderTopMost
-            Accessible.name: _root._showRightPanel ? qsTr("Hide panel") : qsTr("Show panel")
+            z: QGroundControl.zOrderTopMost + 1
+            Accessible.name: _root._cameraControlsExpanded ? qsTr("Hide camera controls") : qsTr("Show camera controls")
             ToolTip.visible: hovered
             ToolTip.text: Accessible.name
-            onClicked: _root._rightPanelExpanded = !_root._rightPanelExpanded
+            contentItem: Item {
+                QGCColoredImage {
+                    anchors.centerIn: parent
+                    width: 18
+                    height: 18
+                    sourceSize.height: height
+                    fillMode: Image.PreserveAspectFit
+                    source: _root._cameraControlsExpanded ? "/InstrumentValueIcons/cheveron-left.svg" : "/InstrumentValueIcons/cheveron-right.svg"
+                    color: qgcPal.buttonText
+                }
+            }
+            onClicked: _root._cameraControlsExpanded = !_root._cameraControlsExpanded
         }
 
         Rectangle {

@@ -24,8 +24,7 @@ Item {
     property var    engagementController    // STRATUM: forwarded to the Engage trigger
     property bool   cameraMaximized:        false   // STRATUM: video is the maximized window
     property bool panelExpanded: true
-    property Component cameraControlsComponent: null
-    readonly property real commandPanelWidth: Math.min(310, Math.max(244, width * 0.22))
+    readonly property real commandPanelWidth: Math.min(138, Math.max(122, width * 0.11))
     property alias previewSlot: toolStrip.previewSlot
     readonly property real holdProgress: toolStrip.holdProgress
     readonly property string holdCommand: toolStrip.holdCommand
@@ -347,7 +346,6 @@ Item {
         engagementController:    _root.engagementController
         cameraPrimary:           _root.cameraMaximized
         contextActive:           _root.visible && _root.panelExpanded && !(_root.mapControl && _root.mapControl._aopEditMode) && !standoffPanel.visible
-        cameraControlsComponent: _root.cameraControlsComponent
         actionModel:             missionActions.model
         z:                      QGroundControl.zOrderWidgets
         visible:                _root.panelExpanded
