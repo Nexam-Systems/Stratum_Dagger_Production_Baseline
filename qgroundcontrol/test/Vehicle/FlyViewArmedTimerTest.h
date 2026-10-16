@@ -9,4 +9,5 @@ class FlyViewArmedTimerTest : public UnitTest
 private slots:
     void _observedArmingResetsAndDisarmingFreezes();
     void _alreadyArmedConnectionIsLabeled();
+    void _flightTimePropertyRetainsCppOwnership();
 };

@@ -91,7 +91,7 @@ Item {
         Group {
             iconSource: "/InstrumentValueIcons/time.svg"
             title: root.compact ? qsTr("TIME") : root.vehicle && root.vehicle.armedTimerSinceConnection ? qsTr("SINCE CONNECTION") : qsTr("ARMED TIME")
-            value: root.live && root.facts ? root.duration(root.facts.getFact("flightTime")) : "--:--:--"
+            value: root.live && root.facts ? root.duration(root.facts.flightTime) : "--:--:--"
         }
 
         Group {

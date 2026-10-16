@@ -328,7 +328,7 @@ property var climbRate: QtObject { property real rawValue: -2; property real val
 property var altitudeRelative: QtObject { property real rawValue: 80; property real value: 80; property string units: "m" }
 property var distanceToHome: QtObject { property real rawValue: 300; property real value: 300; property string units: "m" }
 property var clock: QtObject { property real rawValue: 3661 }
-function getFact(name) { return clock }
+readonly property var flightTime: clock
 }
 }
 QtObject { id: guided; property bool showTakeoff: true }
@@ -576,6 +576,25 @@ actionModel: [modeAction]
         craft.setProperty("positionTimestampMs", int(time.time() * 1000) - 3000)
         header.setProperty("nowMs", int(time.time() * 1000))
         self.assertFalse(header.property("positionFresh"))
+
+    def test_header_reads_flight_time_without_invokable_ownership_transfer(self):
+        source = (self.root / "src/Toolbar/FlightTelemetryHeader.qml").read_text(encoding="utf-8")
+        self.assertNotIn(".getFact(", source)
+        self.panel_scene()
+        header = self.item.property("header")
+
+        def texts(item):
+            values = [item.property("text")] if item.inherits("QQuickText") else []
+            for child in item.childItems():
+                values.extend(texts(child))
+            return values
+
+        self.assertIn("01:01:01", texts(header))
+        for _ in range(5):
+            self.engine.collectGarbage()
+            self.app.processEvents()
+        self.assertIn("01:01:01", texts(header))
+        self.assertFalse(self.errors, self.errors)
 
     def test_compact_primary_positions_and_command_dispatch(self):
         self.panel_scene(1366, 768)

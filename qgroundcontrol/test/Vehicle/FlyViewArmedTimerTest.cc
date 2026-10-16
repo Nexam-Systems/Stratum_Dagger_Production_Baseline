@@ -5,6 +5,12 @@
 #include "VideoSettings.h"
 
 #include <QtCore/qscopeguard.h>
+#include <QtCore/QCoreApplication>
+#include <QtCore/QEvent>
+#include <QtQml/QQmlContext>
+#include <QtQml/QQmlEngine>
+#include <QtQml/QQmlExpression>
+#include <QtTest/QSignalSpy>
 
 void FlyViewArmedTimerTest::_observedArmingResetsAndDisarmingFreezes()
 {
@@ -33,6 +39,33 @@ void FlyViewArmedTimerTest::_alreadyArmedConnectionIsLabeled()
     Vehicle vehicle(MAV_AUTOPILOT_PX4, MAV_TYPE_QUADROTOR);
     vehicle._updateArmed(true);
     QVERIFY(vehicle.armedTimerSinceConnection());
+}
+
+void FlyViewArmedTimerTest::_flightTimePropertyRetainsCppOwnership()
+{
+    VehicleFactGroup facts;
+    Fact *const flightTime = facts.flightTime();
+    QCOMPARE(facts.getFact(QStringLiteral("flightTime")), flightTime);
+    QSignalSpy destroyedSpy(flightTime, &QObject::destroyed);
+
+    {
+        QQmlEngine engine;
+        QQmlContext context(engine.rootContext());
+        context.setContextProperty(QStringLiteral("vehicleFacts"), &facts);
+        QQmlExpression expression(&context, nullptr, QStringLiteral("vehicleFacts.flightTime"));
+        const QVariant result = expression.evaluate();
+        QVERIFY2(!expression.hasError(), qPrintable(expression.error().toString()));
+        QCOMPARE(result.value<Fact *>(), flightTime);
+        QCOMPARE(QQmlEngine::objectOwnership(flightTime), QQmlEngine::CppOwnership);
+        engine.collectGarbage();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCOMPARE(destroyedSpy.count(), 0);
+    }
+
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCOMPARE(destroyedSpy.count(), 0);
+    flightTime->setRawValue(42);
+    QCOMPARE(flightTime->rawValue().toInt(), 42);
 }
 
 UT_REGISTER_TEST(FlyViewArmedTimerTest, TestLabel::Unit, TestLabel::Vehicle)
