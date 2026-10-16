@@ -181,7 +181,6 @@ Rectangle {
                             return;
                         root.engagementController.engage();
                         root.engageConfirmed = false;
-                        root.engageConfirmed = false;
                         root.feedback = qsTr("Engage requested — awaiting vehicle response");
                         root.completedCommand = qsTr("Engage");
                         completionTimer.restart();
@@ -398,12 +397,13 @@ Rectangle {
         _horizontalPadding: 3
         pointSize: ScreenTools.smallFontPointSize
         wrapMode: Text.WordWrap
-        contentItem: RowLayout {
-            spacing: 6
+        contentItem: Column {
+            spacing: 2
 
             QGCColoredImage {
-                Layout.preferredWidth: 16
-                Layout.preferredHeight: 16
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 16
+                height: 16
                 source: actionButton.iconSource
                 sourceSize.height: height
                 fillMode: Image.PreserveAspectFit
@@ -412,13 +412,14 @@ Rectangle {
             }
 
             QGCLabel {
-                Layout.fillWidth: true
+                anchors.horizontalCenter: parent.horizontalCenter
                 text: actionButton.text
                 color: actionButton.foreground
                 font.pointSize: ScreenTools.smallFontPointSize
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 wrapMode: Text.WordWrap
+                width: parent.width
             }
         }
         background: Rectangle {

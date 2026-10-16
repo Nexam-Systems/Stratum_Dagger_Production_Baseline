@@ -59,6 +59,7 @@ class RightHandFlyViewTest(unittest.TestCase):
         sources = [
             "src/FlyView/FlyView.qml",
             "src/FlyView/FlyViewVideoOSD.qml",
+            "src/FlyView/FlyViewVideo.qml",
             "src/FlyView/RightMissionPanel.qml",
             "src/FlyView/FlyViewTopRightColumnLayout.qml",
             "src/Toolbar/FlightTelemetryHeader.qml",
@@ -286,6 +287,13 @@ component PtzButton: Button {
         self.assertIn("TerrainProgress", source)
         self.assertNotIn("PhotoVideoControl", source)
 
+    def test_video_osd_is_hidden_in_picture_in_picture(self):
+        video_source = (self.root / "src/FlyView/FlyViewVideo.qml").read_text(encoding="utf-8")
+        osd_source = (self.root / "src/FlyView/FlyViewVideoOSD.qml").read_text(encoding="utf-8")
+        self.assertIn("visible:    videoStreaming.visible && _root.pipState.state === _root.pipState.fullState", video_source)
+        self.assertIn("visible: _hasVehicle && QGroundControl.videoManager.hasVideo && !compact", osd_source)
+        self.assertIn("function factText(fact, fallback)", osd_source)
+
     def panel_scene(self, width=1024, height=768):
         for name in ["RightMissionPanel.qml", "FlightTelemetryHeader.qml"]:
             path = self.folder / name
@@ -400,6 +408,9 @@ actionModel: [modeAction]
         header.setHeight(54)
         QTest.qWait(80)
         self.assertLessEqual(header.property("implicitHeight"), 54)
+        fields = next(child for child in header.childItems() if child.metaObject().className() == "QQuickGridLayout")
+        self.assertGreaterEqual(fields.y(), 5)
+        self.assertGreaterEqual(fields.property("rowSpacing"), 5)
         image = self.window.grabWindow()
         self.assertFalse(image.isNull())
         output = os.environ.get("STRATUM_RIGHT_PANEL_SCREENSHOTS")

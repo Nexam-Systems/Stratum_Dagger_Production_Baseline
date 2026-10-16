@@ -18,6 +18,11 @@ Item {
 
     property var    _activeVehicle:     QGroundControl.multiVehicleManager.activeVehicle
     property bool   _rcRSSIAvailable:   _activeVehicle && _activeVehicle.rcRSSI && Number(_activeVehicle.rcRSSI.rawValue) > 0 && Number(_activeVehicle.rcRSSI.rawValue) <= 100
+    readonly property string _rcRSSIText: {
+        if (!_activeVehicle || !_activeVehicle.rcRSSI) return qsTr("--")
+        var value = Number(_activeVehicle.rcRSSI.rawValue)
+        return isFinite(value) && value > 0 && value <= 100 ? value.toFixed(0) + "%" : qsTr("--")
+    }
 
     Component {
         id: rcRSSIInfoPage
@@ -30,7 +35,7 @@ Item {
 
                 LabelledLabel {
                     label:      qsTr("RSSI")
-                    labelText:  _rcRSSIAvailable ? Number(_activeVehicle.rcRSSI.rawValue).toFixed(0) + "%" : qsTr("--")
+                    labelText:  _rcRSSIText
                 }
             }
         }
@@ -55,7 +60,7 @@ Item {
 
         QGCLabel {
             anchors.verticalCenter: parent.verticalCenter
-            text:                   _rcRSSIAvailable ? (_activeVehicle.rcRSSI.rawValue + qsTr("%")) : qsTr("--")
+            text:                   _rcRSSIText
             color:                  qgcPal.buttonText
             font.pointSize:         ScreenTools.smallFontPointSize
             font.bold:              true

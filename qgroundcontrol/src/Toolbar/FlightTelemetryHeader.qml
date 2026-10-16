@@ -34,7 +34,7 @@ Item {
         return Number(fact.value).toFixed(1) + " " + fact.units;
     }
 
-    implicitHeight: fields.implicitHeight + (compact ? 2 : 12)
+    implicitHeight: fields.implicitHeight + 12
 
     QGCPalette {
         id: headerPalette
@@ -46,11 +46,11 @@ Item {
         id: fields
 
         columns: 4
-        columnSpacing: root.compact ? 2 : 12
-        rowSpacing: root.compact ? 1 : 8
+        columnSpacing: root.compact ? 4 : 12
+        rowSpacing: root.compact ? 6 : 8
         width: parent.width - (root.compact ? 4 : 16)
         x: root.compact ? 2 : 8
-        y: root.compact ? 1 : 6
+        y: 6
 
         Group {
             iconSource: "/InstrumentValueIcons/airplane.svg"

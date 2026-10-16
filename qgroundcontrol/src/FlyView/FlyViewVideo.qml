@@ -253,6 +253,6 @@ Item {
         id:         flightParamOSD
         anchors.fill: parent
         compact:    _root.pipState.state !== _root.pipState.fullState
-        visible:    videoStreaming.visible
+        visible:    videoStreaming.visible && _root.pipState.state === _root.pipState.fullState
     }
 }

@@ -18,11 +18,29 @@ Item {
     property var  _activeVehicle: QGroundControl.multiVehicleManager.activeVehicle
     property bool _hasVehicle:    _activeVehicle !== null
 
+    function factValue(fact, fallback) {
+        if (!fact || fact.value === undefined || fact.value === null || !isFinite(Number(fact.value))) {
+            return fallback
+        }
+        return Number(fact.value)
+    }
+
+    function factText(fact, fallback) {
+        if (!fact || fact.valueString === undefined || fact.valueString === null) {
+            return fallback
+        }
+        return String(fact.valueString)
+    }
+
+    function factUnits(fact) {
+        return fact && fact.units !== undefined && fact.units !== null ? String(fact.units) : ""
+    }
+
     // Smaller / reduced HUD when the video is in the picture-in-picture corner.
     property bool compact: false
     property bool _full:   !compact
 
-    visible: _hasVehicle && QGroundControl.videoManager.hasVideo
+    visible: _hasVehicle && QGroundControl.videoManager.hasVideo && !compact
 
     // ---- HUD palette --------------------------------------------------------
     QGCPalette { id: contrastPalette; colorGroupEnabled: true }
@@ -44,15 +62,15 @@ Item {
     readonly property real _margin:     ScreenTools.defaultFontPixelHeight * (compact ? 0.6 : 1.0)
 
     // ---- Live numeric values (drive the tapes; repaint on change) -----------
-    property real hdg:  _hasVehicle ? _activeVehicle.heading.value          : 0
-    property real spd:  _hasVehicle ? _activeVehicle.groundSpeed.value      : 0
-    property real altv: _hasVehicle ? _activeVehicle.altitudeRelative.value : 0
+    property real hdg:  _hasVehicle ? factValue(_activeVehicle.heading, 0)          : 0
+    property real spd:  _hasVehicle ? factValue(_activeVehicle.groundSpeed, 0)      : 0
+    property real altv: _hasVehicle ? factValue(_activeVehicle.altitudeRelative, 0) : 0
 
-    onHdgChanged:  headingTape.requestPaint()
-    onSpdChanged:  speedTape.canvas.requestPaint()
-    onAltvChanged: altTape.canvas.requestPaint()
+    onHdgChanged:  if (headingTape) headingTape.requestPaint()
+    onSpdChanged:  if (speedTape) speedTape.canvas.requestPaint()
+    onAltvChanged: if (altTape) altTape.canvas.requestPaint()
 
-    property var _battery: (_hasVehicle && _activeVehicle.batteries.count > 0) ? _activeVehicle.batteries.get(0) : null
+    property var _battery: (_hasVehicle && _activeVehicle.batteries && _activeVehicle.batteries.count > 0) ? _activeVehicle.batteries.get(0) : null
 
     // ====================== corner readout field =============================
     component HUDField : ColumnLayout {
@@ -311,7 +329,7 @@ Item {
         anchors.top:              speedTape.bottom
         anchors.topMargin:        2
         visible:                  _full
-        text:                     "GS " + (_hasVehicle ? _activeVehicle.groundSpeed.units : "")
+        text:                     "GS " + factUnits(_hasVehicle ? _activeVehicle.groundSpeed : null)
         color:                    _root._greenDim
         style:                    Text.Outline
         styleColor:               "black"
@@ -339,7 +357,7 @@ Item {
         anchors.top:              altTape.bottom
         anchors.topMargin:        2
         visible:                  _full
-        text:                     "ALT " + (_hasVehicle ? _activeVehicle.altitudeRelative.units : "")
+        text:                     "ALT " + factUnits(_hasVehicle ? _activeVehicle.altitudeRelative : null)
         color:                    _root._greenDim
         style:                    Text.Outline
         styleColor:               "black"
@@ -354,10 +372,10 @@ Item {
         anchors.margins: _margin
         spacing:         _margin * 0.5
 
-        HUDField { label: qsTr("FLIGHT MODE"); value: _hasVehicle ? _activeVehicle.flightMode : _noVal }
-        HUDField { label: qsTr("ARMED");       value: _hasVehicle ? (_activeVehicle.armed ? qsTr("ARMED") : qsTr("DISARMED")) : _noVal }
-        HUDField { label: qsTr("GPS SATS");    value: _hasVehicle && _activeVehicle.gps && _activeVehicle.gps.count ? _activeVehicle.gps.count.valueString : _noVal }
-        HUDField { label: qsTr("HDOP");        value: _hasVehicle && _activeVehicle.gps && _activeVehicle.gps.hdop ? _activeVehicle.gps.hdop.valueString : _noVal }
+        HUDField { label: qsTr("FLIGHT MODE"); value: _hasVehicle && _activeVehicle.flightMode !== undefined ? String(_activeVehicle.flightMode) : _noVal }
+        HUDField { label: qsTr("ARMED");       value: _hasVehicle && _activeVehicle.armed !== undefined ? (_activeVehicle.armed ? qsTr("ARMED") : qsTr("DISARMED")) : _noVal }
+        HUDField { label: qsTr("GPS SATS");    value: factText(_hasVehicle && _activeVehicle.gps ? _activeVehicle.gps.count : null, _noVal) }
+        HUDField { label: qsTr("HDOP");        value: factText(_hasVehicle && _activeVehicle.gps ? _activeVehicle.gps.hdop : null, _noVal) }
     }
 
     // ====================== TOP-RIGHT : power / link =========================
@@ -368,10 +386,10 @@ Item {
         spacing:         _margin * 0.5
         width:           ScreenTools.defaultFontPixelWidth * 18
 
-        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("BATTERY");  value: _battery ? _battery.percentRemaining.valueString : _noVal; units: "%" }
-        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("VOLTAGE");  value: _battery ? _battery.voltage.valueString : _noVal; units: _battery ? _battery.voltage.units : "" }
-        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("CURRENT");  value: _battery ? _battery.current.valueString : _noVal; units: _battery ? _battery.current.units : "" }
-        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("RC RSSI");  value: _hasVehicle && _activeVehicle.rcRSSI ? _activeVehicle.rcRSSI.valueString : _noVal; units: "%" }
+        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("BATTERY");  value: factText(_battery ? _battery.percentRemaining : null, _noVal); units: "%" }
+        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("VOLTAGE");  value: factText(_battery ? _battery.voltage : null, _noVal); units: factUnits(_battery ? _battery.voltage : null) }
+        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("CURRENT");  value: factText(_battery ? _battery.current : null, _noVal); units: factUnits(_battery ? _battery.current : null) }
+        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("RC RSSI");  value: factText(_hasVehicle ? _activeVehicle.rcRSSI : null, _noVal); units: "%" }
     }
 
     // ====================== BOTTOM-LEFT : target / time ======================
@@ -381,9 +399,9 @@ Item {
         anchors.margins: _margin
         spacing:         _margin * 0.5
 
-        HUDField { label: qsTr("LATITUDE");    value: _hasVehicle && _activeVehicle.gps && _activeVehicle.gps.lat ? _activeVehicle.gps.lat.valueString : _noVal }
-        HUDField { label: qsTr("LONGITUDE");   value: _hasVehicle && _activeVehicle.gps && _activeVehicle.gps.lon ? _activeVehicle.gps.lon.valueString : _noVal }
-        HUDField { label: qsTr("FLIGHT TIME"); value: _hasVehicle ? _activeVehicle.flightTime.valueString : _noVal }
+        HUDField { label: qsTr("LATITUDE");    value: factText(_hasVehicle && _activeVehicle.gps ? _activeVehicle.gps.lat : null, _noVal) }
+        HUDField { label: qsTr("LONGITUDE");   value: factText(_hasVehicle && _activeVehicle.gps ? _activeVehicle.gps.lon : null, _noVal) }
+        HUDField { label: qsTr("FLIGHT TIME"); value: factText(_hasVehicle ? _activeVehicle.flightTime : null, _noVal) }
     }
 
     // ====================== BOTTOM-RIGHT : nav / control =====================
@@ -394,8 +412,8 @@ Item {
         width:           ScreenTools.defaultFontPixelWidth * 18
         spacing:         _margin * 0.5
 
-        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("DIST HOME"); value: _hasVehicle ? _activeVehicle.distanceToHome.valueString : _noVal; units: _hasVehicle ? _activeVehicle.distanceToHome.units : "" }
-        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("THROTTLE");  value: _hasVehicle ? _activeVehicle.throttlePct.valueString : _noVal; units: "%" }
-        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("CLIMB");     value: _hasVehicle ? _activeVehicle.climbRate.valueString : _noVal; units: _hasVehicle ? _activeVehicle.climbRate.units : "" }
+        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("DIST HOME"); value: factText(_hasVehicle ? _activeVehicle.distanceToHome : null, _noVal); units: factUnits(_hasVehicle ? _activeVehicle.distanceToHome : null) }
+        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("THROTTLE");  value: factText(_hasVehicle ? _activeVehicle.throttlePct : null, _noVal); units: "%" }
+        HUDField { Layout.fillWidth: true; hAlign: Text.AlignRight; label: qsTr("CLIMB");     value: factText(_hasVehicle ? _activeVehicle.climbRate : null, _noVal); units: factUnits(_hasVehicle ? _activeVehicle.climbRate : null) }
     }
 }
