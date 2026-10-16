@@ -2348,7 +2348,7 @@ void Vehicle::acceptFirmwareConnection()
 bool Vehicle::checkPx4VersionAgainstAdminFloor(const QString& context) const
 {
     AdminSettings* admin = SettingsManager::instance()->adminSettings();
-    if (!admin) {
+    if (!admin || !admin->firmwareCompatibilityChecksEnabled()->rawValue().toBool()) {
         return true;
     }
 
@@ -2409,7 +2409,7 @@ bool Vehicle::checkPx4VersionAgainstAdminFloor(const QString& context) const
 bool Vehicle::checkStratumCustomVersionAgainstAdminFloor(const QString& context) const
 {
     AdminSettings* admin = SettingsManager::instance()->adminSettings();
-    if (!admin) {
+    if (!admin || !admin->firmwareCompatibilityChecksEnabled()->rawValue().toBool()) {
         return true;
     }
 
