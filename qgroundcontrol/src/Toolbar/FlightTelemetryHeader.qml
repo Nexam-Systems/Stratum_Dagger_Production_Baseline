@@ -159,8 +159,9 @@ Item {
 
                 QGCColoredImage {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 13
+                    width: 16
                     height: width
+                    fillMode: Image.PreserveAspectFit
                     sourceSize.height: height
                     source: parent.parent.parent.iconSource
                     color: headerPalette.highContrast ? headerPalette.buttonBorder : "#79CBE8"
@@ -170,11 +171,12 @@ Item {
                     id: compactValueLabel
 
                     Accessible.name: parent.parent.parent.title + ": " + parent.parent.parent.value
-                    font.family: ScreenTools.fixedFontFamily
-                    font.pointSize: ScreenTools.smallFontPointSize * 0.95
-                    font.bold: true
+                    color: headerPalette.highContrast ? headerPalette.text : "#79CBE8"
+                    font.family: ScreenTools.normalFontFamily
+                    font.pointSize: ScreenTools.smallFontPointSize
+                    verticalAlignment: Text.AlignVCenter
                     text: parent.parent.parent.value
-                    width: parent.width - 17
+                    width: Math.max(0, parent.width - 20)
                     wrapMode: Text.NoWrap
                     elide: Text.ElideMiddle
                 }

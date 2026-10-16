@@ -17,6 +17,7 @@ Item {
     property bool showIndicator: _activeVehicle && _activeVehicle.supports && _activeVehicle.supports.radio
 
     property var    _activeVehicle:     QGroundControl.multiVehicleManager.activeVehicle
+    readonly property color indicatorColor: qgcPal.highContrast ? qgcPal.buttonText : "#79CBE8"
     property bool   _rcRSSIAvailable:   _activeVehicle && _activeVehicle.rcRSSI && Number(_activeVehicle.rcRSSI.rawValue) > 0 && Number(_activeVehicle.rcRSSI.rawValue) <= 100
     readonly property string _rcRSSIText: {
         if (!_activeVehicle || !_activeVehicle.rcRSSI) return qsTr("--")
@@ -55,19 +56,20 @@ Item {
             source:             "/qmlimages/RC.svg"
             fillMode:           Image.PreserveAspectFit
             opacity:            _rcRSSIAvailable ? 1 : 0.5
-            color:              qgcPal.buttonText
+            color:              control.indicatorColor
         }
 
         QGCLabel {
             anchors.verticalCenter: parent.verticalCenter
             text:                   _rcRSSIText
-            color:                  qgcPal.buttonText
+            color:                  control.indicatorColor
             font.pointSize:         ScreenTools.smallFontPointSize
             font.bold:              true
             font.family:            ScreenTools.demiboldFontFamily
         }
 
         SignalStrength {
+            indicatorColor: control.indicatorColor
             anchors.verticalCenter: parent.verticalCenter
             size:                   parent.height * 0.5
             percent:                _rcRSSIAvailable ? _activeVehicle.rcRSSI.rawValue : 0

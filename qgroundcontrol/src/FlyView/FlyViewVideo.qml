@@ -101,6 +101,7 @@ Item {
     TrackerRoiOverlay {
         id:                      trackerRoiOverlay
         anchors.fill:            parent
+        visible:                 _root.pipState.state === _root.pipState.fullState
         // STRATUM: sit above flyViewVideoMouseArea (below) so the +/- ROI buttons receive
         // clicks; the overlay's transparent areas still pass mouse events through to the
         // designation MouseArea (a plain Item does not grab events).

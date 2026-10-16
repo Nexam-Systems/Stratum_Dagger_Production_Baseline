@@ -262,14 +262,6 @@ Rectangle {
                 Layout.preferredHeight: implicitHeight
             }
 
-            QGCLabel {
-                Layout.fillWidth: true
-                color: panelPalette.warningText
-                text: root.feedback
-                visible: text !== ""
-                wrapMode: Text.WordWrap
-            }
-
             Rectangle {
                 Layout.fillWidth: true
                 color: panelPalette.groupBorder
@@ -281,6 +273,7 @@ Rectangle {
                 Layout.topMargin: 10
                 objectName: "missionCompass"
                 size: 72
+                showHeadingLabel: false
                 vehicle: root.headingFresh ? root.vehicle : null
                 visible: root.headingFresh
             }

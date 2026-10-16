@@ -70,6 +70,9 @@ class RightHandFlyViewTest(unittest.TestCase):
             "src/Toolbar/RCRSSIIndicator.qml",
             "src/Toolbar/TelemetryRSSIIndicator.qml",
             "src/Toolbar/VehicleGPSIndicator.qml",
+            "src/Toolbar/BatteryIndicator.qml",
+            "src/Toolbar/SignalStrength.qml",
+            "src/FlightMap/Widgets/QGCCompassWidget.qml",
         ]
         for index, relative_path in enumerate(sources):
             source = self.root / relative_path
@@ -128,7 +131,7 @@ font.pointSize: pointSize
 contentItem: Text { text: control.text; color: control.textColor; font: control.font; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
 }''',
             "DeadMouseArea.qml": 'import QtQuick\nMouseArea { acceptedButtons: Qt.AllButtons }',
-            "QGCCompassWidget.qml": 'import QtQuick\nItem { property var vehicle; property real size: 112; implicitWidth: size; implicitHeight: size }',
+            "QGCCompassWidget.qml": 'import QtQuick\nItem { property var vehicle; property bool showHeadingLabel: true; property real size: 112; implicitWidth: size; implicitHeight: size }',
         }.items():
             (self.folder / name).write_text(source, encoding="utf-8")
         palette_source = (self.root / 'src/QmlControls/QGCPalette.cc').read_text(encoding='utf-8')
@@ -286,6 +289,30 @@ component PtzButton: Button {
         source = (self.root / "src/FlyView/FlyViewTopRightColumnLayout.qml").read_text(encoding="utf-8")
         self.assertIn("TerrainProgress", source)
         self.assertNotIn("PhotoVideoControl", source)
+
+    def test_roi_and_dock_feedback_presentation(self):
+        video = (self.root / "src/FlyView/FlyViewVideo.qml").read_text(encoding="utf-8")
+        roi = video.split("TrackerRoiOverlay {", 1)[1].split("MouseArea {", 1)[0]
+        self.assertIn("visible:                 _root.pipState.state === _root.pipState.fullState", roi)
+        panel = (self.root / "src/FlyView/RightMissionPanel.qml").read_text(encoding="utf-8")
+        self.assertNotIn("text: root.feedback", panel)
+        self.panel_scene()
+        compass = self.item.findChild(QObject, "missionCompass")
+        self.assertIsNotNone(compass)
+        self.assertFalse(compass.property("showHeadingLabel"))
+        self.assertFalse(self.errors, self.errors)
+
+    def test_toolbar_indicator_palette_and_font_consistency(self):
+        for name in ["GPSIndicator", "RCRSSIIndicator", "TelemetryRSSIIndicator", "BatteryIndicator"]:
+            source = (self.root / f"src/Toolbar/{name}.qml").read_text(encoding="utf-8")
+            self.assertIn('"#79CBE8"', source)
+            self.assertIn("qgcPal.highContrast", source)
+            self.assertIn("control.indicatorColor", source)
+        source = (self.root / "src/Toolbar/FlightTelemetryHeader.qml").read_text(encoding="utf-8")
+        compact = source.split("id: compactValueLabel", 1)[1].split("QGCLabel {", 1)[0]
+        self.assertIn("font.family: ScreenTools.normalFontFamily", compact)
+        self.assertIn("font.pointSize: ScreenTools.smallFontPointSize", compact)
+        self.assertNotIn("font.bold: true", compact)
 
     def test_video_osd_is_hidden_in_picture_in_picture(self):
         video_source = (self.root / "src/FlyView/FlyViewVideo.qml").read_text(encoding="utf-8")
