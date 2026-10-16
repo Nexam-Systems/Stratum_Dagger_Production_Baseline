@@ -12,6 +12,7 @@ Rectangle {
     readonly property var activeHold: abortButton.holding ? abortButton : engageButton.holding ? engageButton : null
     property bool cameraPrimary: false
     property bool contextActive: true
+    property bool engageConfirmed: false
     required property var engagementController
     property string feedback: ""
     required property var guidedController
@@ -21,6 +22,7 @@ Rectangle {
     readonly property real holdProgress: activeHold ? activeHold.holdProgress : (completedCommand !== "" ? 1 : 0)
     readonly property bool holdComplete: !activeHold && completedCommand !== ""
     readonly property bool linkReady: vehicle && vehicle.initialConnectComplete && !vehicle.vehicleLinkManager.communicationLost
+    readonly property bool engageEligible: linkReady && vehicle.armed && vehicle.flying && engagementController && vehicle.flightModes.indexOf(engagementController.engagementModeName) >= 0 && vehicle.flightMode !== engagementController.engagementModeName
     property double nowMs: Date.now()
     property alias previewSlot: previewSlot
     property alias additionalControlsSlot: additionalControlsSlot
@@ -57,8 +59,11 @@ Rectangle {
 
     onContextActiveChanged: if (!contextActive)
         cancelHolds()
+    onEngageConfirmedChanged: if (!engageConfirmed)
+        engageButton.cancelHold()
     onVehicleChanged: {
         cancelHolds();
+        engageConfirmed = false;
         feedback = "";
         completedCommand = "";
         actionPopup.close();
@@ -96,8 +101,11 @@ Rectangle {
             width: actionScroll.availableWidth
 
             QGCLabel {
+                Layout.fillWidth: true
                 font.bold: true
                 text: qsTr("MISSION CONTROLS")
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
             }
 
             GridLayout {
@@ -161,7 +169,7 @@ Rectangle {
                     id: engageButton
 
                     command: qsTr("Engage")
-                    enabled: root.linkReady && root.vehicle.armed && root.vehicle.flying && root.engagementController && root.vehicle.flightModes.indexOf(root.engagementController.engagementModeName) >= 0 && root.vehicle.flightMode !== root.engagementController.engagementModeName
+                    enabled: root.engageConfirmed && root.engageEligible
                     holdDuration: 3000
                     iconSource: "/res/chevron-double-right.svg"
                     objectName: "missionEngage"
@@ -169,15 +177,40 @@ Rectangle {
                     text: qsTr("Engage")
 
                     onCommitted: {
-                        if (!enabled || !root.linkReady)
+                        if (!enabled || !root.engageEligible || !root.engageConfirmed)
                             return;
                         root.engagementController.engage();
+                        root.engageConfirmed = false;
+                        root.engageConfirmed = false;
                         root.feedback = qsTr("Engage requested — awaiting vehicle response");
                         root.completedCommand = qsTr("Engage");
                         completionTimer.restart();
                     }
                 }
 
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+
+                Switch {
+                    id: engageConfirmSwitch
+                    Layout.alignment: Qt.AlignHCenter
+                    objectName: "missionEngageConfirmation"
+                    checked: root.engageConfirmed
+                    enabled: root.engageEligible || root.engageConfirmed
+                    Accessible.name: qsTr("Enable Engage")
+
+                    onToggled: root.engageConfirmed = checked
+                }
+
+                QGCLabel {
+                    Layout.fillWidth: true
+                    text: qsTr("Enable Engage")
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                }
             }
 
             GridLayout {
@@ -246,6 +279,7 @@ Rectangle {
 
             QGCCompassWidget {
                 Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 10
                 objectName: "missionCompass"
                 size: 72
                 vehicle: root.headingFresh ? root.vehicle : null
@@ -264,7 +298,10 @@ Rectangle {
 
         anchors.bottom: parent.bottom
         anchors.left: parent.left
-        anchors.margins: 6
+        anchors.leftMargin: 6
+        anchors.rightMargin: 6
+        anchors.topMargin: 6
+        anchors.bottomMargin: 18
         anchors.right: parent.right
         spacing: 4
 
@@ -334,7 +371,12 @@ Rectangle {
         repeat: true
         running: root.visible
 
-        onTriggered: root.nowMs = Date.now()
+        onTriggered: {
+            root.nowMs = Date.now()
+            if (root.engageConfirmed && !root.engageEligible) {
+                root.engageConfirmed = false
+            }
+        }
     }
 
     Timer {
@@ -356,6 +398,29 @@ Rectangle {
         _horizontalPadding: 3
         pointSize: ScreenTools.smallFontPointSize
         wrapMode: Text.WordWrap
+        contentItem: RowLayout {
+            spacing: 6
+
+            QGCColoredImage {
+                Layout.preferredWidth: 16
+                Layout.preferredHeight: 16
+                source: actionButton.iconSource
+                sourceSize.height: height
+                fillMode: Image.PreserveAspectFit
+                color: actionButton.foreground
+                visible: actionButton.iconSource !== ""
+            }
+
+            QGCLabel {
+                Layout.fillWidth: true
+                text: actionButton.text
+                color: actionButton.foreground
+                font.pointSize: ScreenTools.smallFontPointSize
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                wrapMode: Text.WordWrap
+            }
+        }
         background: Rectangle {
             readonly property color baseFill: actionButton.enabled ? root.actionFill(actionButton.visualRole) : "#172A34"
             color: panelPalette.highContrast ? ((actionButton.down || actionButton.checked) ? commandPalette.buttonHighlight : commandPalette.button)

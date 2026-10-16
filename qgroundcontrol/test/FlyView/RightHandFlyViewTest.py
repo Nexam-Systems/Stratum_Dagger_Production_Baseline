@@ -427,10 +427,73 @@ actionModel: [modeAction]
         self.assertIsNotNone(define_aop)
         self.assertIsNotNone(last_action)
         self.assertTrue(compass.isVisible())
+        compass_top = compass.mapToItem(panel, 0, 0).y()
         compass_point = compass.mapToItem(panel, 0, compass.height())
         action_point = last_action.mapToItem(panel, 0, last_action.height())
         self.assertGreater(compass_point.y(), action_point.y())
+        self.assertGreaterEqual(compass_top - action_point.y(), 9)
+        preview = self.engine.newQObject(panel).property("previewSlot").toQObject()
+        preview_bottom = preview.mapToItem(panel, 0, preview.height()).y()
+        self.assertLessEqual(preview_bottom, panel.height() - 17)
         self.assertLessEqual(panel.width(), 138)
+        self.assertFalse(self.errors, self.errors)
+
+    def test_engage_requires_fresh_two_way_confirmation(self):
+        self.panel_scene(1024, 768)
+        panel = self.item.property("panel")
+        engage = self.item.findChild(QObject, "missionEngage")
+
+        def visual_child(item, name):
+            if item.objectName() == name:
+                return item
+            for child in item.childItems():
+                found = visual_child(child, name)
+                if found:
+                    return found
+            return None
+
+        confirm = visual_child(panel, "missionEngageConfirmation")
+        self.assertIsNotNone(confirm)
+        self.assertFalse(panel.property("engageConfirmed"))
+        self.assertFalse(engage.isEnabled())
+
+        point = confirm.mapToItem(self.item, confirm.width() / 2, confirm.height() / 2)
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
+        QTest.qWait(30)
+        self.assertTrue(panel.property("engageConfirmed"))
+        self.assertTrue(engage.isEnabled())
+
+        craft = self.item.property("craft")
+        craft.setProperty("flying", False)
+        QTest.qWait(250)
+        self.assertFalse(panel.property("engageConfirmed"))
+        self.assertFalse(engage.isEnabled())
+        craft.setProperty("flying", True)
+        QTest.qWait(30)
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
+        self.assertTrue(panel.property("engageConfirmed"))
+
+        engage.setProperty("applicationActive", True)
+        engage_point = engage.mapToItem(self.item, engage.width() / 2, engage.height() / 2)
+        QTest.mouseMove(self.window, engage_point.toPoint())
+        QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, engage_point.toPoint())
+        self.assertTrue(engage.property("holding"))
+
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
+        self.assertFalse(panel.property("engageConfirmed"))
+        self.assertFalse(engage.property("holding"))
+        self.assertFalse(engage.isEnabled())
+        QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, engage_point.toPoint())
+
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
+        engage_point = engage.mapToItem(self.item, engage.width() / 2, engage.height() / 2)
+        QTest.mouseMove(self.window, engage_point.toPoint())
+        QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, engage_point.toPoint())
+        engage.setProperty("_startedMs", int(time.time() * 1000) - 3000)
+        QTest.qWait(50)
+        self.assertEqual(self.item.property("engageRequests"), 1)
+        self.assertFalse(panel.property("engageConfirmed"))
+        QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, engage_point.toPoint())
         self.assertFalse(self.errors, self.errors)
 
     def test_normal_colors_and_live_high_contrast_restore(self):
@@ -438,6 +501,7 @@ actionModel: [modeAction]
         panel = self.item.property("panel")
         engage = self.item.findChild(QObject, "missionEngage")
         takeoff = self.item.findChild(QObject, "missionTakeoff")
+        panel.setProperty("engageConfirmed", True)
         self.assertEqual(panel.property("color"), QColor("#050A06"))
         self.display_mode.highContrast = False
         panel_color = panel.property("color")
@@ -466,10 +530,11 @@ actionModel: [modeAction]
                 self.window.resize(width, height)
                 self.item.setWidth(width)
                 self.item.setHeight(height)
+                engage = self.item.findChild(QObject, "missionEngage")
+                self.item.property("panel").setProperty("engageConfirmed", True)
                 QTest.qWait(60)
                 image = self.window.grabWindow()
                 self.assertFalse(image.isNull())
-                engage = self.item.findChild(QObject, "missionEngage")
                 point = engage.mapToItem(self.item, 6, 6).toPoint()
                 pixel = image.pixelColor(point)
                 if normal:
@@ -513,6 +578,8 @@ actionModel: [modeAction]
         self.assertLess(points["Takeoff"].y(), points["Standoff"].y())
         for name, duration, counter in [("Abort", 1000, "abortRequests"), ("Engage", 3000, "engageRequests")]:
             button = buttons[name]
+            if name == "Engage":
+                self.item.property("panel").setProperty("engageConfirmed", True)
             button.setProperty("applicationActive", True)
             self.assertEqual(button.property("holdDuration"), duration)
             QTest.mouseMove(self.window, points[name].toPoint())
