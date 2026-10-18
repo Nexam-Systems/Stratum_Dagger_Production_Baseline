@@ -522,12 +522,15 @@ Item {
             }
 
             QGCLabel { text: qsTr("Direction") }
-            QGCComboBox {
-                id:                    standoffDirectionCombo
+            QGCTextField {
+                id:                    standoffDirectionField
                 Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
-                currentIndex:          0
-                // Index maps directly to the web UI direction value (0=N,1=E,2=S,3=W).
-                model:                 [qsTr("North ↑"), qsTr("East →"), qsTr("South ↓"), qsTr("West ←")]
+                text:                  "0"
+                unitsLabel:            qsTr("deg")
+                showUnits:             true
+                inputMethodHints:      Qt.ImhFormattedNumbersOnly
+                // Compass bearing sent to the standoff contract: 0 = N, increasing clockwise.
+                validator:             DoubleValidator { bottom: 0; top: 360; decimals: 1 }
             }
 
             // STRATUM: the command needs a vehicle; surface that instead of failing
@@ -568,10 +571,12 @@ Item {
                         var distance  = parseFloat(standoffDistanceField.text)
                         var height    = parseFloat(standoffHeightField.text)
                         var speed     = parseFloat(standoffSpeedField.text)
-                        var direction = standoffDirectionCombo.currentIndex   // 0=N,1=E,2=S,3=W
+                        var direction = parseFloat(standoffDirectionField.text)   // compass bearing deg, 0=N clockwise
                         if (isNaN(distance) || distance <= 0) { distance = 0 }
                         if (isNaN(height))                    { height   = 0 }
                         if (isNaN(speed)   || speed <= 0)     { speed    = 0 }
+                        if (isNaN(direction))                 { direction = 0 }
+                        direction = ((direction % 360) + 360) % 360
                         var target = QtPositioning.coordinate(parseFloat(standoffLatField.text),
                                                               parseFloat(standoffLonField.text))
                         // AOP enforcement: reject a target outside the defined AOP boundary.
