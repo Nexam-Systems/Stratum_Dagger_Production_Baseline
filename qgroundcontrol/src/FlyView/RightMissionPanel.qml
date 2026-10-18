@@ -261,27 +261,6 @@ Rectangle {
                 implicitHeight: childrenRect.height
                 Layout.preferredHeight: implicitHeight
             }
-
-            Rectangle {
-                Layout.fillWidth: true
-                color: panelPalette.groupBorder
-                height: 1
-            }
-
-            QGCCompassWidget {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.topMargin: 10
-                objectName: "missionCompass"
-                size: 72
-                showHeadingLabel: false
-                vehicle: root.headingFresh ? root.vehicle : null
-                visible: root.headingFresh
-            }
-
-            QGCLabel {
-                Layout.alignment: Qt.AlignHCenter
-                text: root.headingFresh ? qsTr("%1°").arg(Number(root.vehicle.vehicle.heading.rawValue).toFixed(0)) : qsTr("Heading unavailable")
-            }
         }
     }
 
@@ -292,10 +271,29 @@ Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 6
         anchors.rightMargin: 6
-        anchors.topMargin: 6
         anchors.bottomMargin: 18
         anchors.right: parent.right
-        spacing: 4
+        spacing: 6
+
+        Rectangle {
+            width: parent.width
+            color: panelPalette.groupBorder
+            height: 1
+        }
+
+        QGCCompassWidget {
+            anchors.horizontalCenter: parent.horizontalCenter
+            objectName: "missionCompass"
+            size: 72
+            showHeadingLabel: false
+            vehicle: root.headingFresh ? root.vehicle : null
+            visible: root.headingFresh
+        }
+
+        QGCLabel {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: root.headingFresh ? qsTr("%1°").arg(Number(root.vehicle.vehicle.heading.rawValue).toFixed(0)) : qsTr("Heading unavailable")
+        }
 
         QGCLabel {
             font.bold: true
@@ -325,10 +323,14 @@ Rectangle {
     Popup {
         id: actionPopup
 
+        readonly property var panelItem: actionLoader.item
+
         function hide() {
             close();
         }
 
+        implicitWidth: panelItem ? panelItem.implicitWidth + padding * 2 : ScreenTools.defaultFontPixelWidth * 24
+        implicitHeight: panelItem ? panelItem.implicitHeight + padding * 2 : ScreenTools.defaultFontPixelHeight * 8
         height: parent ? Math.min(implicitHeight, parent.height - 16) : implicitHeight
         modal: true
         padding: 12
@@ -343,9 +345,14 @@ Rectangle {
             color: panelPalette.window
             radius: 4
         }
-        contentItem: ScrollView {
+        contentItem: Flickable {
+            boundsBehavior: Flickable.StopAtBounds
             clip: true
-            contentWidth: availableWidth
+            contentWidth: actionLoader.width
+            contentHeight: actionLoader.height
+            flickableDirection: Flickable.VerticalFlick
+
+            ScrollBar.vertical: ScrollBar {}
 
             Loader {
                 id: actionLoader
