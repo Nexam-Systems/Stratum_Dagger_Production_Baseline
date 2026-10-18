@@ -83,30 +83,21 @@ Rectangle {
         anchors.fill: parent
     }
 
-    ScrollView {
+    Item {
         id: actionScroll
 
-        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         anchors.bottom: previewSection.top
         anchors.left: parent.left
         anchors.margins: 6
         anchors.right: parent.right
         anchors.top: parent.top
         clip: true
-        contentWidth: availableWidth
 
         ColumnLayout {
-            height: implicitHeight
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
             spacing: 5
-            width: actionScroll.availableWidth
-
-            QGCLabel {
-                Layout.fillWidth: true
-                font.bold: true
-                text: qsTr("MISSION CONTROLS")
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignHCenter
-            }
 
             GridLayout {
                 Layout.fillWidth: true
