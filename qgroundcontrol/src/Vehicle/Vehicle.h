@@ -107,6 +107,7 @@ class Vehicle : public VehicleFactGroup, public VehicleTypes
     Q_MOC_INCLUDE("VehicleSupports.h")
 
     friend class InitialConnectStateMachine;
+    friend class FlyViewArmedTimerTest;
     friend class VehicleLinkManager;
     friend class FactGroupListModel;                // Allow call _addFactGroup
 #ifdef QGC_UNITTEST_BUILD
@@ -220,6 +221,8 @@ public:
     // The following properties relate to Orbit status
     Q_PROPERTY(bool             orbitActive     READ orbitActive        NOTIFY orbitActiveChanged)
     Q_PROPERTY(QGCMapCircle*    orbitMapCircle  READ orbitMapCircle     CONSTANT)
+
+    Q_PROPERTY(bool armedTimerSinceConnection READ armedTimerSinceConnection NOTIFY armedTimerReferenceChanged)
 
     // Vehicle state used for guided control
     Q_PROPERTY(bool     flying                  READ flying                                         NOTIFY flyingChanged)       ///< Vehicle is flying
@@ -435,6 +438,7 @@ public:
     Q_INVOKABLE QVariant expandedToolbarIndicatorSource(const QString& indicatorName);
 
     bool    isInitialConnectComplete() const;
+    bool armedTimerSinceConnection() const { return _armedTimerSinceConnection; }
     QString gotoFlightMode          () const;
 
     VehicleSupports* supports() { return _vehicleSupports; }
@@ -793,6 +797,7 @@ signals:
     void armedChanged                   (bool armed);
     void flightModeChanged              (const QString& flightMode);
     void flyingChanged                  (bool flying);
+    void armedTimerReferenceChanged();
     void landingChanged                 (bool landing);
     void guidedModeChanged              (bool guidedMode);
     void inFwdFlightChanged             ();
@@ -1039,6 +1044,8 @@ private:
     int     _nextSendMessageMultipleIndex = 0;
 
     QElapsedTimer                   _flightTimer;
+    bool _armedStateReceived = false;
+    bool _armedTimerSinceConnection = false;
     QTimer                          _flightTimeUpdater;
     TrajectoryPoints*               _trajectoryPoints = nullptr;
     std::unique_ptr<QmlObjectListModel> _cameraTriggerPoints;

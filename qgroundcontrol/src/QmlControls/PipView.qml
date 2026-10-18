@@ -14,6 +14,8 @@ Item {
     property var    item2:                  null    // Optional, may come and go
     property string item1IsFullSettingsKey          // Settings key to save whether item1 was saved in full mode
     property bool   show:                   true
+    property bool docked: false
+    property Item fullItemParent: parent
 
     readonly property string _pipExpandedSettingsKey: "IsPIPVisible"
 
@@ -22,7 +24,7 @@ Item {
     property alias  _windowContentItem: window.contentItem
     property alias  _pipContentItem:    pipContent
     property bool   _isExpanded:        true
-    property real   _pipSize:           parent.width * 0.2
+    property real   _pipSize:           docked ? parent.width : parent.width * 0.2
     property real   _maxSize:           0.75                // Percentage of parent control size
     property real   _minSize:           0.10
     property bool   _componentComplete: false
@@ -33,6 +35,7 @@ Item {
     }
 
     onItem2Changed: _initForItems()
+    onDockedChanged: if (docked) _setPipIsExpanded(true)
 
     function showWindow() {
         window.width = _root.width
@@ -52,7 +55,7 @@ Item {
             _fullItem = item1
             _pipOrWindowItem = null
         }
-        _setPipIsExpanded(QGroundControl.loadBoolGlobalSetting(_pipExpandedSettingsKey, true))
+        _setPipIsExpanded(docked || QGroundControl.loadBoolGlobalSetting(_pipExpandedSettingsKey, true))
     }
 
     function _swapPip() {
@@ -112,6 +115,7 @@ Item {
         anchors.fill:       pipResizeIcon
         preventStealing:    true
         cursorShape:        Qt.PointingHandCursor
+        enabled:            !_root.docked
 
         property real initialX:     0
         property real initialWidth: 0
@@ -145,7 +149,7 @@ Item {
         mipmap:         true
         anchors.right:  parent.right
         anchors.top:    parent.top
-        visible:        _isExpanded && (ScreenTools.isMobile || pipMouseArea.containsMouse)
+        visible:        !_root.docked && _isExpanded && (ScreenTools.isMobile || pipMouseArea.containsMouse)
         height:         ScreenTools.defaultFontPixelHeight * 2.5
         width:          ScreenTools.defaultFontPixelHeight * 2.5
         sourceSize.height:  height
@@ -156,6 +160,7 @@ Item {
         target: _root.parent
 
         function onWidthChanged() {
+            if (_root.docked) return
             if (!_componentComplete) {
                 // Wait until first time setup is done
                 return
@@ -177,7 +182,7 @@ Item {
         fillMode:       Image.PreserveAspectFit
         anchors.left:   parent.left
         anchors.top:    parent.top
-        visible:        _isExpanded && !ScreenTools.isMobile && pipMouseArea.containsMouse
+        visible:        !_root.docked && _isExpanded && !ScreenTools.isMobile && pipMouseArea.containsMouse
         height:         ScreenTools.defaultFontPixelHeight * 2.5
         width:          ScreenTools.defaultFontPixelHeight * 2.5
         sourceSize.height:  height
@@ -195,7 +200,7 @@ Item {
         fillMode:       Image.PreserveAspectFit
         anchors.left:   parent.left
         anchors.bottom: parent.bottom
-        visible:        _isExpanded && (ScreenTools.isMobile || pipMouseArea.containsMouse)
+        visible:        !_root.docked && _isExpanded && (ScreenTools.isMobile || pipMouseArea.containsMouse)
         height:         ScreenTools.defaultFontPixelHeight * 2.5
         width:          ScreenTools.defaultFontPixelHeight * 2.5
         sourceSize.height:  height

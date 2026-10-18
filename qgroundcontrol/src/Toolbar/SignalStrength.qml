@@ -10,6 +10,7 @@ Item {
 
     property real size:     50
     property real percent:  0
+    property color indicatorColor: qgcPal.buttonText
 
     QGCPalette { id: qgcPal }
 
@@ -31,7 +32,7 @@ Item {
         source:             getIcon()
         fillMode:           Image.PreserveAspectFit
         anchors.fill:       parent
-        color:              qgcPal.buttonText
+        color:              signalRoot.indicatorColor
         sourceSize.height:  size
     }
 }

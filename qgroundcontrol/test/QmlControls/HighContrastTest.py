@@ -176,11 +176,16 @@ Item {
         QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
         self.assertEqual(self.item.property("clicks"), 2)
 
-    def test_default_without_switch_or_saved_preference(self):
+    def test_default_and_general_theme_dropdown(self):
         facts = json.loads((self.root / "src/Settings/App.SettingsGroup.json").read_text())['QGC.MetaData.Facts']
         self.assertFalse(any(fact['name'] == 'highContrastMode' for fact in facts))
         settings = (self.root / "src/Settings/AppSettings.cc").read_text(encoding="utf-8")
-        self.assertIn('QGCPalette::setHighContrast(true);', settings)
+        self.assertIn('_indoorPaletteChanged();', settings)
+        self.assertIn('QGCPalette::setHighContrast(indoorPalette()->rawValue().toUInt() != 1);', settings)
+        theme = next(fact for fact in facts if fact['name'] == 'indoorPalette')
+        self.assertEqual(theme['enumStrings'], 'High Contrast,Normal')
+        self.assertEqual(theme['enumValues'], '0,1')
+        self.assertEqual(theme['default'], 0)
         self.assertNotIn('highContrastMode', settings)
         palette = (self.root / 'src/QmlControls/QGCPalette.cc').read_text()
         self.assertIn('bool QGCPalette::_highContrast = true;', palette)
