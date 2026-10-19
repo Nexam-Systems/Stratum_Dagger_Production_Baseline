@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 
+import QGroundControl
 import QGroundControl.Controls
 
 // STRATUM Issue #4 / Phase 0: compact Fly View overlay for the RTL Point-of-No-Return
