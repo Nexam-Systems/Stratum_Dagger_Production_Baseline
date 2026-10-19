@@ -361,13 +361,14 @@ Item {
     }
 
     RTLDecisionCountdownPanel {
-        id:                     rtlPnrPanel
-        estimator:              rtlPnrEstimator
-        anchors.left:           parent.left
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin:     _toolsMargin
-        z:                      QGroundControl.zOrderWidgets
-        visible:                rtlPnrEstimator.connected && _root.panelExpanded && !QGroundControl.videoManager.fullScreen
+        id:                       rtlPnrPanel
+        estimator:                rtlPnrEstimator
+        anchors.top:              parent.top
+        anchors.topMargin:        _toolsMargin
+        anchors.horizontalCenter: parent.horizontalCenter
+        z:                        QGroundControl.zOrderWidgets
+        visible:                  rtlPnrEstimator.connected && !QGroundControl.videoManager.fullScreen
+                                      && !(_root.mapControl && _root.mapControl._aopEditMode)
     }
 
     VehicleWarnings {

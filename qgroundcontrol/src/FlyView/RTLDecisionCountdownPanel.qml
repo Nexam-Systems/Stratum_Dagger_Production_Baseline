@@ -29,8 +29,8 @@ Rectangle {
         return _normalColor
     }
 
-    implicitWidth:  210
-    implicitHeight: contentCol.implicitHeight + 16
+    implicitWidth:  barRow.implicitWidth + 20
+    implicitHeight: barRow.implicitHeight + 10
     radius:         4
     border.width:   1
     border.color:   _accentColor
@@ -61,81 +61,65 @@ Rectangle {
     }
     function _statusText() {
         switch (_status) {
-        case "UNKNOWN":        return qsTr("PNR UNKNOWN — TELEMETRY / HOME / MODEL")
+        case "UNKNOWN":        return qsTr("PNR UNKNOWN")
         case "PNR_REACHED":    return qsTr("PNR REACHED — ESTIMATED")
-        case "BEYOND_HORIZON": return qsTr("PNR BEYOND PREDICTION HORIZON")
+        case "BEYOND_HORIZON": return qsTr("BEYOND HORIZON")
         case "VALIDATED":      return qsTr("VALIDATED")
         default:               return qsTr("ESTIMATED — UNCALIBRATED")
         }
     }
 
-    ColumnLayout {
-        id: contentCol
-        anchors.fill:    parent
-        anchors.margins: 8
-        spacing:         2
+    // Inline "KEY value" cell used for each metric in the bar.
+    component Field: Row {
+        id: field
+        property string key
+        property string value
+        spacing: 4
+        QGCLabel { text: field.key; opacity: 0.6 }
+        QGCLabel { text: field.value }
+    }
 
+    RowLayout {
+        id: barRow
+        anchors.centerIn: parent
+        spacing: 12
+
+        QGCLabel { text: qsTr("RTL PNR"); font.bold: true }
         QGCLabel {
-            Layout.fillWidth: true
-            font.bold:        true
-            text:             qsTr("RTL DECISION COUNTDOWN")
+            objectName:     "pnrCountdown"
+            color:          root._accentColor
+            font.bold:      true
+            font.pointSize: ScreenTools.mediumFontPointSize
+            text:           root._hasTimer ? root._clock(root._seconds) : "--:--"
+        }
+        QGCLabel {
+            objectName: "pnrStatus"
+            color:      root._accentColor
+            text:       root._statusText()
         }
 
-        QGCLabel {
-            objectName:            "pnrCountdown"
-            Layout.fillWidth:      true
-            Layout.topMargin:      2
-            horizontalAlignment:   Text.AlignHCenter
-            color:                 root._accentColor
-            font.pointSize:        ScreenTools.largeFontPointSize
-            font.bold:             true
-            text:                  root._hasTimer ? root._clock(root._seconds) : "--:--"
-        }
-        QGCLabel {
-            objectName:          "pnrStatus"
-            Layout.fillWidth:    true
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode:            Text.WordWrap
-            color:               root._accentColor
-            text:                root._statusText()
+        Rectangle {
+            Layout.preferredWidth: 1
+            Layout.fillHeight:     true
+            Layout.topMargin:      3
+            Layout.bottomMargin:   3
+            color:                 panelPalette.groupBorder
         }
 
-        Rectangle { Layout.fillWidth: true; height: 1; color: panelPalette.groupBorder }
-
-        GridLayout {
-            Layout.fillWidth: true
-            columns:          2
-            columnSpacing:    8
-            rowSpacing:       1
-
-            QGCLabel { text: qsTr("LIMIT") }
-            QGCLabel { Layout.fillWidth: true; horizontalAlignment: Text.AlignRight; text: root._reason }
-            QGCLabel { text: qsTr("HOME") }
-            QGCLabel { Layout.fillWidth: true; horizontalAlignment: Text.AlignRight; text: estimator ? root._km(estimator.distanceFromHomeM) : "--" }
-            QGCLabel { text: qsTr("POWER") }
-            QGCLabel { Layout.fillWidth: true; horizontalAlignment: Text.AlignRight; text: estimator ? root._kw(estimator.filteredPowerW) : "--" }
-            QGCLabel { text: qsTr("SPEED") }
-            QGCLabel { Layout.fillWidth: true; horizontalAlignment: Text.AlignRight; text: estimator ? root._kmh(estimator.groundSpeedMS) : "--" }
-            QGCLabel { text: qsTr("RTL TIME") }
-            QGCLabel { Layout.fillWidth: true; horizontalAlignment: Text.AlignRight; text: estimator ? root._clock(estimator.rtlEstimatedTimeSeconds) : "--" }
-            QGCLabel { text: qsTr("MARGIN") }
-            QGCLabel { Layout.fillWidth: true; horizontalAlignment: Text.AlignRight; text: estimator ? root._wh(estimator.energyMarginWh) : "--" }
-        }
+        Field { key: qsTr("LIMIT");  value: root._reason }
+        Field { key: qsTr("HOME");   value: estimator ? root._km(estimator.distanceFromHomeM) : "--" }
+        Field { key: qsTr("POWER");  value: estimator ? root._kw(estimator.filteredPowerW) : "--" }
+        Field { key: qsTr("SPEED");  value: estimator ? root._kmh(estimator.groundSpeedMS) : "--" }
+        Field { key: qsTr("RTL");    value: estimator ? root._clock(estimator.rtlEstimatedTimeSeconds) : "--" }
+        Field { key: qsTr("MARGIN"); value: estimator ? root._wh(estimator.energyMarginWh) : "--" }
+        Field { key: qsTr("MAX");    value: estimator ? root._km(estimator.totalDistanceLimitM) : "--" }
 
         QGCLabel {
-            Layout.fillWidth: true
-            text:             estimator ? qsTr("MISSION LIMIT: %1 total").arg(root._km(estimator.totalDistanceLimitM)) : ""
-        }
-
-        QGCLabel {
-            objectName:       "pnrBatteryWarning"
-            Layout.fillWidth: true
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode:         Text.WordWrap
-            visible:          estimator && estimator.batteryCritical
-            color:            root._criticalColor
-            font.bold:        true
-            text:             qsTr("PX4 BATTERY CRITICAL")
+            objectName: "pnrBatteryWarning"
+            visible:    estimator && estimator.batteryCritical
+            color:      root._criticalColor
+            font.bold:  true
+            text:       qsTr("PX4 BATTERY CRITICAL")
         }
     }
 }
