@@ -354,6 +354,22 @@ Item {
         onAopRequested: _root.startAOP()
     }
 
+    // STRATUM Issue #4 / Phase 0: battery-aware RTL Point-of-No-Return decision countdown.
+    RTLPointOfNoReturnEstimator {
+        id:      rtlPnrEstimator
+        vehicle: _root._activeVehicle
+    }
+
+    RTLDecisionCountdownPanel {
+        id:                     rtlPnrPanel
+        estimator:              rtlPnrEstimator
+        anchors.left:           parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.leftMargin:     _toolsMargin
+        z:                      QGroundControl.zOrderWidgets
+        visible:                rtlPnrEstimator.connected && _root.panelExpanded && !QGroundControl.videoManager.fullScreen
+    }
+
     VehicleWarnings {
         anchors.centerIn:   parent
         z:                  QGroundControl.zOrderTopMost
