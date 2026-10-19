@@ -52,7 +52,9 @@ Rectangle {
         return (meters === undefined || isNaN(meters)) ? "--" : (meters / 1000).toFixed(1) + " km"
     }
     function _kw(watts) {
-        return (watts === undefined || isNaN(watts)) ? "--" : (watts / 1000).toFixed(1) + " kW"
+        if (watts === undefined || isNaN(watts))
+            return "--"
+        return watts < 1000 ? Math.round(watts) + " W" : (watts / 1000).toFixed(1) + " kW"
     }
     function _kmh(ms) {
         return (ms === undefined || isNaN(ms)) ? "--" : Math.round(ms * 3.6) + " km/h"
