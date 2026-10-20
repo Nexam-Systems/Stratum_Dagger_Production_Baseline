@@ -363,6 +363,8 @@ Item {
     RTLDecisionCountdownPanel {
         id:                       rtlPnrPanel
         estimator:                rtlPnrEstimator
+        vehicle:                  _root._activeVehicle
+        standoffController:       _root.standoffController
         anchors.top:              parent.top
         anchors.topMargin:        _toolsMargin
         anchors.horizontalCenter: parent.horizontalCenter
