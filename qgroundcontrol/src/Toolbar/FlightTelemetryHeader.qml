@@ -52,7 +52,7 @@ Item {
         rowSpacing: root.compact ? 6 : 8
         width: parent.width - (root.compact ? 4 : 16)
         x: root.compact ? 2 : 8
-        y: 6
+        y: root.compact ? Math.max(0, (parent.height - implicitHeight) / 2) : 6
 
         Group {
             iconSource: "/InstrumentValueIcons/airplane.svg"
