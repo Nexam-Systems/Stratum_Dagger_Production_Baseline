@@ -19,9 +19,9 @@ Rectangle {
     readonly property string _reason:   estimator ? estimator.pnrReason : "NONE"
     readonly property bool   _hasTimer: _seconds >= 0
 
-    readonly property color _normalColor:  "#79CBE8"
-    readonly property color _warnColor:     "#F2C200"
-    readonly property color _criticalColor: "#EF5350"
+    readonly property color _normalColor:   panelPalette.highContrast ? panelPalette.text : "#79CBE8"
+    readonly property color _warnColor:     panelPalette.colorOrange
+    readonly property color _criticalColor: panelPalette.colorRed
     readonly property color _accentColor: {
         if (_status === "PNR_REACHED" || estimator && estimator.batteryCritical) return _criticalColor
         if (!_hasTimer) return _normalColor
