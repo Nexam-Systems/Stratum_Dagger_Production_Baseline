@@ -21,6 +21,8 @@ Item {
     property var vehicle: null
     property bool videoLive: false
 
+    readonly property color indicatorColor: headerPalette.highContrast ? headerPalette.text : "#79CBE8"
+
     function duration(fact) {
         if (!fact || !isFinite(Number(fact.rawValue)))
             return "--:--:--";
@@ -136,14 +138,14 @@ Item {
                     height: width
                     sourceSize.height: height
                     source: parent.parent.parent.iconSource
-                    color: headerPalette.highContrast ? headerPalette.buttonBorder : "#79CBE8"
+                    color: root.indicatorColor
                     visible: root.compact
                 }
 
                 QGCLabel {
                     id: titleLabel
 
-                    color: headerPalette.highContrast ? headerPalette.buttonBorder : "#79CBE8"
+                    color: root.indicatorColor
                     font.pointSize: root.compact ? ScreenTools.smallFontPointSize * 0.95 : ScreenTools.smallFontPointSize
                     text: parent.parent.parent.title
                     width: root.compact ? parent.width - 14 : parent.width
@@ -164,14 +166,14 @@ Item {
                     fillMode: Image.PreserveAspectFit
                     sourceSize.height: height
                     source: parent.parent.parent.iconSource
-                    color: headerPalette.highContrast ? headerPalette.buttonBorder : "#79CBE8"
+                    color: root.indicatorColor
                 }
 
                 QGCLabel {
                     id: compactValueLabel
 
                     Accessible.name: parent.parent.parent.title + ": " + parent.parent.parent.value
-                    color: headerPalette.highContrast ? headerPalette.text : "#79CBE8"
+                    color: root.indicatorColor
                     font.family: ScreenTools.normalFontFamily
                     font.pointSize: ScreenTools.smallFontPointSize
                     verticalAlignment: Text.AlignVCenter
