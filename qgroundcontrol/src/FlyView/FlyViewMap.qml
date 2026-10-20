@@ -1139,6 +1139,43 @@ FlightMap {
         z:              QGroundControl.zOrderMapItems
     }
 
+    // STRATUM (KAN-13): Home -> Standoff reference line + distance label. Mint line
+    // from the vehicle launch (home) position to the committed standoff point, labelled
+    // with the horizontal great-circle distance in the app's distance units. The mint
+    // colour is deliberately distinct from the crimson standoff visuals and the future
+    // vehicle -> standoff line. Hidden unless home and standoff are both set.
+    readonly property var  _homeStandoffHome:     (_activeVehicle && _activeVehicle.homePosition && _activeVehicle.homePosition.isValid) ? _activeVehicle.homePosition : QtPositioning.coordinate()
+    readonly property bool _homeStandoffValid:    standoffController._standoffActive && _homeStandoffHome.isValid && standoffController._targetCoordinate.isValid
+    readonly property real _homeStandoffDistance: _homeStandoffValid ? _homeStandoffHome.distanceTo(standoffController._targetCoordinate) : Number.NaN
+    readonly property var  _homeStandoffMidpoint: _homeStandoffValid ? _homeStandoffHome.atDistanceAndAzimuth(_homeStandoffDistance / 2, _homeStandoffHome.azimuthTo(standoffController._targetCoordinate)) : QtPositioning.coordinate()
+
+    MapPolyline {
+        id:         homeStandoffLine
+        line.width: 3
+        line.color: "#1DE9B6"
+        opacity:    0.9
+        z:          QGroundControl.zOrderMapItems
+        visible:    _root._homeStandoffValid
+        path:       visible ? [_root._homeStandoffHome, standoffController._targetCoordinate] : []
+    }
+
+    MapQuickItem {
+        id:             homeStandoffLabel
+        coordinate:     _root._homeStandoffMidpoint
+        visible:        _root._homeStandoffValid
+        anchorPoint.x:  sourceItem.width / 2
+        anchorPoint.y:  sourceItem.height / 2
+        z:              QGroundControl.zOrderMapItems + 1
+
+        sourceItem: QGCMapLabel {
+            map:            _root
+            text:           _root._homeStandoffValid
+                                ? QGroundControl.unitsConversion.metersToAppSettingsHorizontalDistanceUnits(_root._homeStandoffDistance).toFixed(0) + " " + QGroundControl.unitsConversion.appSettingsHorizontalDistanceUnitsString
+                                : ""
+            font.pointSize: ScreenTools.smallFontPointSize
+        }
+    }
+
     // STRATUM: target markers. A simple "T" in a circle whose CENTRE anchors exactly
     // on the coordinate; the monochrome SVG is tinted per state through QGCColoredImage.
     // BLUE = target being set (panel open, valid coordinate, OK not yet pressed).
