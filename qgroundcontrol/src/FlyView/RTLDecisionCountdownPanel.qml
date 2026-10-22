@@ -11,6 +11,8 @@ Rectangle {
     id: root
 
     property var estimator
+    property var vehicle
+    property var standoffController
     property int warnSeconds:     120
     property int criticalSeconds: 60
 
@@ -18,6 +20,21 @@ Rectangle {
     readonly property string _status:   estimator ? estimator.pnrStatus : "UNKNOWN"
     readonly property string _reason:   estimator ? estimator.pnrReason : "NONE"
     readonly property bool   _hasTimer: _seconds >= 0
+
+    // Home -> Standoff horizontal (great-circle) distance, shown in app distance units.
+    readonly property var  _soHome:  (vehicle && vehicle.homePosition && vehicle.homePosition.isValid) ? vehicle.homePosition : null
+    readonly property bool _soValid: !!_soHome && !!standoffController && standoffController._standoffActive === true
+                                     && standoffController._targetCoordinate && standoffController._targetCoordinate.isValid
+    readonly property real _homeStandoffM: _soValid ? _soHome.distanceTo(standoffController._targetCoordinate) : Number.NaN
+
+    // Vehicle -> Standoff horizontal (great-circle) distance, shown in app distance units.
+    readonly property var  _vehCoord: (vehicle && vehicle.coordinate && vehicle.coordinate.isValid) ? vehicle.coordinate : null
+    readonly property bool _vehSoValid: !!_vehCoord && !!standoffController && standoffController._standoffActive === true
+                                        && standoffController._targetCoordinate && standoffController._targetCoordinate.isValid
+    readonly property real _vehStandoffM: _vehSoValid ? _vehCoord.distanceTo(standoffController._targetCoordinate) : Number.NaN
+
+    // Home -> Vehicle horizontal (great-circle) distance, shown in app distance units.
+    readonly property real _homeVehM: (_soHome && _vehCoord) ? _soHome.distanceTo(vehicle.coordinate) : Number.NaN
 
     readonly property color _normalColor:   panelPalette.highContrast ? panelPalette.text : "#79CBE8"
     readonly property color _warnColor:     panelPalette.colorOrange
@@ -50,6 +67,11 @@ Rectangle {
     }
     function _km(meters) {
         return (meters === undefined || isNaN(meters)) ? "--" : (meters / 1000).toFixed(1) + " km"
+    }
+    function _dist(meters) {
+        if (meters === undefined || isNaN(meters))
+            return "--"
+        return QGroundControl.unitsConversion.metersToAppSettingsHorizontalDistanceUnits(meters).toFixed(0) + " " + QGroundControl.unitsConversion.appSettingsHorizontalDistanceUnitsString
     }
     function _kw(watts) {
         if (watts === undefined || isNaN(watts))
@@ -116,6 +138,19 @@ Rectangle {
         Field { key: qsTr("RTL");    value: estimator ? root._clock(estimator.rtlEstimatedTimeSeconds) : "--" }
         Field { key: qsTr("MARGIN"); value: estimator ? root._wh(estimator.energyMarginWh) : "--" }
         Field { key: qsTr("MAX");    value: estimator ? root._km(estimator.totalDistanceLimitM) : "--" }
+
+        Rectangle {
+            Layout.preferredWidth: 1
+            Layout.fillHeight:     true
+            Layout.topMargin:      3
+            Layout.bottomMargin:   3
+            color:                 panelPalette.groupBorder
+        }
+
+        // Standoff / distance section: home -> standoff, vehicle -> standoff, home -> vehicle.
+        Field { key: qsTr("HOME->STDF"); value: root._dist(root._homeStandoffM) }
+        Field { key: qsTr("VEH->STDF");  value: root._dist(root._vehStandoffM) }
+        Field { key: qsTr("HOME->VEH");  value: root._dist(root._homeVehM) }
 
         QGCLabel {
             objectName: "pnrBatteryWarning"

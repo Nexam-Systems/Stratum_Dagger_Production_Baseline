@@ -363,9 +363,13 @@ Item {
     RTLDecisionCountdownPanel {
         id:                       rtlPnrPanel
         estimator:                rtlPnrEstimator
+        vehicle:                  _root._activeVehicle
+        standoffController:       _root.standoffController
         anchors.top:              parent.top
         anchors.topMargin:        _toolsMargin
         anchors.horizontalCenter: parent.horizontalCenter
+        // Centre within the area left of the mission panel so the bar never overlaps it.
+        anchors.horizontalCenterOffset: _root.panelExpanded ? -(_root.commandPanelWidth / 2 + _toolsMargin) : 0
         z:                        QGroundControl.zOrderWidgets
         visible:                  rtlPnrEstimator.connected && !QGroundControl.videoManager.fullScreen
                                       && !(_root.mapControl && _root.mapControl._aopEditMode)
