@@ -33,6 +33,9 @@ Rectangle {
                                         && standoffController._targetCoordinate && standoffController._targetCoordinate.isValid
     readonly property real _vehStandoffM: _vehSoValid ? _vehCoord.distanceTo(standoffController._targetCoordinate) : Number.NaN
 
+    // Home -> Vehicle horizontal (great-circle) distance, shown in app distance units.
+    readonly property real _homeVehM: (_soHome && _vehCoord) ? _soHome.distanceTo(vehicle.coordinate) : Number.NaN
+
     readonly property color _normalColor:   panelPalette.highContrast ? panelPalette.text : "#79CBE8"
     readonly property color _warnColor:     panelPalette.colorOrange
     readonly property color _criticalColor: panelPalette.colorRed
@@ -144,9 +147,10 @@ Rectangle {
             color:                 panelPalette.groupBorder
         }
 
-        // Standoff-distance section: home -> standoff and vehicle -> standoff.
+        // Standoff / distance section: home -> standoff, vehicle -> standoff, home -> vehicle.
         Field { key: qsTr("HOME->STDF"); value: root._dist(root._homeStandoffM) }
         Field { key: qsTr("VEH->STDF");  value: root._dist(root._vehStandoffM) }
+        Field { key: qsTr("HOME->VEH");  value: root._dist(root._homeVehM) }
 
         QGCLabel {
             objectName: "pnrBatteryWarning"
