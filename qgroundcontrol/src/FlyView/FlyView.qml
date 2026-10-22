@@ -228,7 +228,7 @@ Item {
             engagementController:   engagementController
             cameraMaximized:        _cameraMaximized
             standoffController:     mapControl.standoffCmdController
-            panelExpanded:          _root._showRightPanel
+            panelExpanded:          true
             visible:                !QGroundControl.videoManager.fullScreen
         }
 
