@@ -42,6 +42,7 @@ Item {
     readonly property int    pnrCountdownSeconds: _pnrCountdownSeconds
     readonly property string pnrStatus:           _pnrStatus
     readonly property string pnrReason:           _pnrReason
+    readonly property string pnrUnknownReason:    _pnrUnknownReason
     readonly property real   batteryVoltageV:     _voltageV
     readonly property real   batteryCurrentA:     _currentA
     readonly property real   filteredPowerW:      _filteredPowerW
@@ -59,6 +60,7 @@ Item {
     property int    _pnrCountdownSeconds: -1
     property string _pnrStatus: "UNKNOWN"
     property string _pnrReason: "NONE"
+    property string _pnrUnknownReason: "NO_VEHICLE"
     property real   _voltageV: Number.NaN
     property real   _currentA: Number.NaN
     property real   _filteredPowerW: 0
@@ -74,6 +76,9 @@ Item {
     property real   _homeRadialRateMS: 0
     property real   _prevHomeDistM: Number.NaN
     property double _lastTickMs: 0
+    property bool   _flownValid: false   // flown-distance track trusted since a verified takeoff
+    property bool   _sawGround: false    // observed on-ground on the live link this session
+    property bool   _wasAirborne: false
 
     readonly property bool connected: !!vehicle && vehicle.initialConnectComplete === true
         && (!vehicle.vehicleLinkManager || vehicle.vehicleLinkManager.communicationLost !== true)
@@ -108,6 +113,23 @@ Item {
         if (!(dt > 0) || dt > 10)   // reject non-positive / stale gaps
             dt = 0
 
+        // Issue #4 / Phase 0 guardrail: reset the flown-distance track ONLY on a verified
+        // takeoff observed on a live link; never zero it on (re)connection. A reconnect
+        // while airborne without a fresh ground->takeoff leaves the track untrusted.
+        if (!connected) {
+            _sawGround = false
+            _flownValid = false
+            _wasAirborne = false
+        } else {
+            if (!airborne)
+                _sawGround = true
+            if (airborne && !_wasAirborne && _sawGround) {
+                resetFlight()
+                _flownValid = true
+            }
+            _wasAirborne = airborne
+        }
+
         _voltageV = _battery ? _num(_battery.voltage) : Number.NaN
         _currentA = _battery ? _num(_battery.current) : Number.NaN
         _groundSpeedMS = _facts ? _num(_facts.groundSpeed) : Number.NaN
@@ -133,8 +155,8 @@ Item {
                 _consumedEnergyWh += power * dt / 3600   // unfiltered integration
         }
 
-        // Track distance flown only while airborne.
-        if (dt > 0 && airborne && !isNaN(_groundSpeedMS) && _groundSpeedMS >= 0)
+        // Track distance flown only while connected and airborne.
+        if (dt > 0 && connected && airborne && !isNaN(_groundSpeedMS) && _groundSpeedMS >= 0)
             distanceFlownM += _groundSpeedMS * dt
 
         // Signed radial rate of home distance (away = +).
@@ -176,17 +198,20 @@ Item {
     // Forward simulation: find the earliest future second at which initiating RTL would
     // breach the energy-after-reserve margin or the total-distance budget.
     function _recompute(pct) {
-        var valid = connected
-            && _battery !== null
-            && !isNaN(_remainingEnergyWh)
-            && !isNaN(_distanceFromHomeM)
-            && !isNaN(_groundSpeedMS)
-            && _filteredPowerW > 0
-            && returnSpeedMS > 0
+        var unknownReason = ""
+        if (!connected)                      unknownReason = "NO_VEHICLE"
+        else if (_battery === null)          unknownReason = "NO_BATTERY"
+        else if (!(_filteredPowerW > 0))     unknownReason = "NO_POWER"
+        else if (isNaN(_remainingEnergyWh))  unknownReason = "NO_ENERGY_BASELINE"
+        else if (isNaN(_distanceFromHomeM))  unknownReason = "NO_HOME"
+        else if (isNaN(_groundSpeedMS))      unknownReason = "NO_VELOCITY"
+        else if (airborne && !_flownValid)   unknownReason = "MISSING_FLOWN_DISTANCE"
+        else if (!(returnSpeedMS > 0))       unknownReason = "NO_RETURN_MODEL"
 
-        if (!valid) {
+        if (unknownReason !== "") {
             _pnrStatus = "UNKNOWN"
             _pnrReason = "NONE"
+            _pnrUnknownReason = unknownReason
             _pnrCountdownSeconds = -1
             _rtlRequiredEnergyWh = Number.NaN
             _rtlEstimatedTimeSeconds = Number.NaN
@@ -194,6 +219,7 @@ Item {
             _predictedTotalDistanceM = Number.NaN
             return
         }
+        _pnrUnknownReason = ""
 
         var reserveWh = reserveFraction * packNominalEnergyWh
         var retPow = _returnPowerW()
