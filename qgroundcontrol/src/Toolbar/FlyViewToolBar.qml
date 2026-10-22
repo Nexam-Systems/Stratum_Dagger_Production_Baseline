@@ -128,6 +128,7 @@ Item {
                             objectName:         "toolbar_mainStatusIndicator"
                             Layout.fillHeight:  true
                             ribbonTextColor:    _ribbonTextColor
+                            visible:            false
                         }
                     }
 
@@ -141,7 +142,7 @@ Item {
                     FlightModeIndicator {
                         objectName:         "toolbar_flightModeIndicator"
                         Layout.fillHeight:  true
-                        visible:            _activeVehicle
+                        visible:            false
                         ribbonTextColor:    _ribbonTextColor
                     }
                 }
@@ -151,21 +152,22 @@ Item {
                 width:  Math.max(0, control.width - (leftPanel.width + rightPanel.width))
                 height: parent.height
 
-                FlightTelemetryHeader {
-                    id: telemetryHeader
+                StratumStatusBar {
+                    id: stratumStatusBar
                     anchors.fill: parent
-                    compact: true
                     vehicle: control._activeVehicle
                     pendingTarget: control.pendingTarget
                     designatedTarget: control.designatedTarget
                     videoLive: QGroundControl.videoManager.decoding
+                    ribbonTextColor: _ribbonTextColor
                 }
             }
 
             Item {
-                id:     rightPanel
-                width:  flyViewIndicators.width
-                height: parent.height
+                id:      rightPanel
+                width:   0
+                height:  parent.height
+                visible: false
 
                 FlyViewToolBarIndicators {
                     id:                 flyViewIndicators
