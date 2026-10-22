@@ -201,6 +201,62 @@ class RTLPointOfNoReturnTest(unittest.TestCase):
         self.assertEqual(self.est.property("totalDistanceLimitM"), 15000)
         self.assertAlmostEqual(self.est.property("reserveFraction"), 0.20, places=3)
 
+    def _configure_flightworthy(self):
+        # Valid in-flight inputs so the estimate computes once a verified takeoff occurs.
+        self.set_est(powerFilterTauSec=0.0, energyRemainingOverrideWh=300.0,
+                     returnPowerOverrideW=2000.0, homeRadialRateOverrideMS=0.0,
+                     reserveFraction=0.20, packNominalEnergyWh=570.0, rtlOverheadWh=20.0,
+                     returnSpeedMS=27.78, totalDistanceLimitM=15000.0)
+        self.set_harness(inVoltage=22.8, inCurrent=87.72, inGroundSpeed=20.0,
+                         inDistanceToHome=3000.0, inConnected=True)
+
+    def test_takeoff_resets_flown_distance(self):
+        self._configure_flightworthy()
+        self.set_est(distanceFlownM=1234.0)             # stale value from a previous session
+        self.set_harness(inArmed=True, inFlying=False)
+        self.advance()                                  # on ground -> ground seen
+        self.set_harness(inGroundSpeed=0.0, inFlying=True)
+        self.advance()                                  # verified takeoff -> reset
+        self.assertLess(self.est.property("distanceFlownM"), 50.0)
+        self.assertEqual(self.est.property("pnrStatus"), "UNCALIBRATED")
+
+    def test_reconnect_midflight_does_not_zero_flown_and_is_unknown(self):
+        self._configure_flightworthy()
+        self.set_harness(inArmed=True, inFlying=False)
+        self.advance()                                  # ground
+        self.set_harness(inFlying=True)
+        self.advance()                                  # takeoff
+        self.advance()
+        self.advance()                                  # accumulate flown distance
+        self.assertGreater(self.est.property("distanceFlownM"), 0.0)
+        self.assertEqual(self.est.property("pnrStatus"), "UNCALIBRATED")
+        # Lose the link mid-flight, then reconnect while still airborne.
+        self.set_harness(inConnected=False)
+        self.advance()
+        self.set_harness(inConnected=True)
+        self.advance()
+        self.assertEqual(self.est.property("pnrStatus"), "UNKNOWN")
+        self.assertEqual(self.est.property("pnrUnknownReason"), "MISSING_FLOWN_DISTANCE")
+        self.assertGreater(self.est.property("distanceFlownM"), 0.0)   # never silently zeroed
+
+    def test_startup_while_airborne_is_unknown(self):
+        self._configure_flightworthy()
+        self.set_harness(inArmed=True, inFlying=True)   # connect to an already-flying vehicle
+        self.advance()
+        self.assertEqual(self.est.property("pnrStatus"), "UNKNOWN")
+        self.assertEqual(self.est.property("pnrUnknownReason"), "MISSING_FLOWN_DISTANCE")
+
+    def test_fresh_takeoff_recovers_trusted_track(self):
+        self._configure_flightworthy()
+        self.set_harness(inArmed=True, inFlying=True)   # startup airborne -> unknown
+        self.advance()
+        self.assertEqual(self.est.property("pnrUnknownReason"), "MISSING_FLOWN_DISTANCE")
+        self.set_harness(inFlying=False)
+        self.advance()                                  # ground seen on the live link
+        self.set_harness(inFlying=True)
+        self.advance()                                  # verified new-flight takeoff
+        self.assertEqual(self.est.property("pnrStatus"), "UNCALIBRATED")
+
     def test_no_engine_warnings(self):
         self.configure_worked_example()
         self.advance()
