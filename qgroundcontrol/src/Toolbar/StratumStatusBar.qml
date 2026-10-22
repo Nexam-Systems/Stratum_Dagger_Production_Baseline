@@ -4,10 +4,12 @@ import QtQuick.Layouts
 import QGroundControl
 import QGroundControl.Controls
 
-// STRATUM KAN-17 (test UI): unified top status bar. A single rounded-border strip of
-// label/value cells (STRATUM wordmark, UAV, STATE, MODE, positions, ALT/GS/VS, TIME,
-// VIDEO, GNSS, LINK, BATT). Experimental layout to preview styling; the NX logo button
-// stays in FlyViewToolBar. All data comes from the active vehicle.
+// STRATUM KAN-17 (test UI): unified top status bar. A borderless strip of divider-
+// separated label/value cells (STRATUM wordmark, UAV, STATE, MODE, positions,
+// ALT/GS/VS, TIME, VIDEO, GNSS, LINK, BATT) that reads as part of the toolbar ribbon.
+// STATE / GNSS / LINK / BATT are clickable and open the standard QGC info drawers; the
+// far-right edge hides the 7-tap admin entry. The NX logo button stays in
+// FlyViewToolBar. All data comes from the active vehicle.
 Item {
     id: root
 
@@ -24,8 +26,20 @@ Item {
     readonly property bool _live:   !!vehicle && (!vehicle.vehicleLinkManager || !vehicle.vehicleLinkManager.communicationLost)
     readonly property var  _target: (pendingTarget && pendingTarget.isValid) ? pendingTarget : designatedTarget
 
-    readonly property color _accent: qgcPal.highContrast ? qgcPal.text : "#79CBE8"
-    readonly property color _labelColor: Qt.rgba(qgcPal.text.r, qgcPal.text.g, qgcPal.text.b, 0.6)
+    // Exposed as _activeVehicle so reused toolbar drawer pages (GPSIndicatorPage,
+    // VehicleMessageList) resolve the active vehicle from this component's scope.
+    readonly property var  _activeVehicle: vehicle
+
+    // Theme-aware palette matching the two approved mockups:
+    //   - Normal theme:        cyan accent. Labels/dividers cyan, data values white.
+    //   - High-contrast theme: neon-green accent. Labels white, data values green.
+    // Status values (STATE / LINK / BATT) and VIDEO carry their own health colours
+    // in both themes.
+    readonly property bool  _hc:         qgcPal.highContrast
+    readonly property color _accent:     _hc ? "#2EE62E" : "#79CBE8"
+    readonly property color _labelColor: _hc ? qgcPal.text : _accent
+    readonly property color _valueColor: _hc ? _accent : qgcPal.text
+    readonly property color _dimColor:   Qt.rgba(qgcPal.text.r, qgcPal.text.g, qgcPal.text.b, 0.55)
 
     QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
@@ -77,33 +91,79 @@ Item {
     function _batteryText() {
         return (_batt && _batt.percentRemaining && isFinite(Number(_batt.percentRemaining.rawValue))) ? (Math.round(_batt.percentRemaining.rawValue) + "%") : "--"
     }
+    function _factText(fact, suffix, decimals) {
+        if (!fact || !isFinite(Number(fact.rawValue)))
+            return "--"
+        var d = (decimals === undefined) ? 1 : decimals
+        return Number(fact.rawValue).toFixed(d) + (suffix ? suffix : "")
+    }
+    function _battColor() {
+        if (!_batt || !_batt.percentRemaining || !isFinite(Number(_batt.percentRemaining.rawValue)))
+            return _valueColor
+        var p = Number(_batt.percentRemaining.rawValue)
+        if (p <= 15) return qgcPal.colorRed
+        if (p <= 30) return qgcPal.colorOrange
+        return qgcPal.colorGreen
+    }
+    function _linkColor() {
+        if (!_radio || !_radio.lrssi || !isFinite(Number(_radio.lrssi.rawValue)))
+            return _valueColor
+        var r = Number(_radio.lrssi.rawValue)
+        if (r >= -90)  return qgcPal.colorGreen
+        if (r >= -100) return qgcPal.colorOrange
+        return qgcPal.colorRed
+    }
 
-    // One label-over-value cell.
-    component Cell: ColumnLayout {
+    // One label-over-value cell. Optionally clickable (opens an info drawer) with a
+    // small down-chevron affordance, matching the chevron next to the NX menu mark.
+    component Cell: Item {
         id: cell
         property string label: ""
         property string value: ""
-        property color valueColor: root._accent
+        property color valueColor: root._valueColor
+        property bool clickable: false
+        property bool showChevron: false
+        signal cellClicked()
         Layout.fillWidth: true
         Layout.fillHeight: true
-        spacing: 2
 
-        Item { Layout.fillHeight: true }
-        QGCLabel {
-            Layout.alignment: Qt.AlignHCenter
-            text: cell.label
-            color: root._labelColor
-            font.pointSize: ScreenTools.smallFontPointSize * 0.85
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 2
+            Item { Layout.fillHeight: true }
+            QGCLabel {
+                Layout.alignment: Qt.AlignHCenter
+                text: cell.label
+                color: root._labelColor
+                font.pointSize: ScreenTools.smallFontPointSize * 0.85
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 3
+                QGCLabel {
+                    horizontalAlignment: Text.AlignHCenter
+                    text: cell.value
+                    color: cell.valueColor
+                    font.bold: true
+                    font.pointSize: ScreenTools.smallFontPointSize
+                }
+                QGCLabel {
+                    visible: cell.showChevron
+                    text: "\u25BE"
+                    color: cell.valueColor
+                    opacity: 0.85
+                    font.pointSize: ScreenTools.smallFontPointSize * 0.9
+                }
+            }
+            Item { Layout.fillHeight: true }
         }
-        QGCLabel {
-            Layout.alignment: Qt.AlignHCenter
-            horizontalAlignment: Text.AlignHCenter
-            text: cell.value
-            color: cell.valueColor
-            font.bold: true
-            font.pointSize: ScreenTools.smallFontPointSize
+
+        MouseArea {
+            anchors.fill: parent
+            enabled: cell.clickable
+            cursorShape: cell.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: cell.cellClicked()
         }
-        Item { Layout.fillHeight: true }
     }
 
     component Divider: Rectangle {
@@ -112,18 +172,20 @@ Item {
         Layout.bottomMargin: 6
         Layout.fillHeight: true
         color: root._accent
-        opacity: 0.35
+        opacity: 0.5
     }
 
+    // STRATUM: no enclosing capsule/border -- the cells read as part of the same
+    // toolbar ribbon rather than a separate floating pill. Just a transparent
+    // container that supplies the inner margins for the cell row.
     Rectangle {
         id: frame
         anchors.fill: parent
         anchors.topMargin: 4
         anchors.bottomMargin: 6
-        radius: height * 0.28
+        radius: 0
         color: "transparent"
-        border.color: root._accent
-        border.width: 2
+        border.width: 0
 
         RowLayout {
             anchors.fill: parent
@@ -138,14 +200,22 @@ Item {
                 spacing: 0
                 Item { Layout.fillHeight: true }
                 QGCLabel { text: "STRATUM"; color: root.ribbonTextColor; font.bold: true; font.pointSize: ScreenTools.mediumFontPointSize; font.letterSpacing: 2 }
-                QGCLabel { text: QGroundControl.qgcVersion; color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.85 }
+                QGCLabel { text: QGroundControl.qgcVersion; color: root._dimColor; font.pointSize: ScreenTools.smallFontPointSize * 0.85 }
                 Item { Layout.fillHeight: true }
             }
 
             Divider {}
             Cell { label: qsTr("UAV");     value: root._uavName() }
             Divider {}
-            Cell { label: qsTr("STATE");   value: root._stateText();  valueColor: root._stateColor() }
+            Cell {
+                id: stateCell
+                label: qsTr("STATE")
+                value: root._stateText()
+                valueColor: root._stateColor()
+                clickable: true
+                showChevron: true
+                onCellClicked: mainWindow.showIndicatorDrawer(stateDrawerComponent, stateCell)
+            }
             Divider {}
             Cell { label: qsTr("MODE");    value: vehicle ? vehicle.flightMode : "--" }
             Divider {}
@@ -164,32 +234,179 @@ Item {
             Cell { label: qsTr("VIDEO");   value: root.videoLive ? qsTr("LIVE") : qsTr("WAITING"); valueColor: root.videoLive ? qgcPal.colorGreen : qgcPal.colorOrange }
             Divider {}
 
-            // GNSS cell: label + three compact rows.
-            ColumnLayout {
+            // GNSS cell: label + three compact rows (clickable -> GPS details drawer).
+            Item {
+                id: gnssCell
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 1
-                Item { Layout.fillHeight: true }
-                QGCLabel { Layout.alignment: Qt.AlignHCenter; text: qsTr("GNSS"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.85 }
-                GridLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    columns: 2
-                    rowSpacing: 0
-                    columnSpacing: 4
-                    QGCLabel { text: qsTr("HD");   color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
-                    QGCLabel { text: root._meters(_gps ? _gps.horizontalAccuracy : null); color: root._accent; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
-                    QGCLabel { text: qsTr("VACC"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
-                    QGCLabel { text: root._meters(_gps ? _gps.verticalAccuracy : null); color: root._accent; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
-                    QGCLabel { text: qsTr("NSAT"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
-                    QGCLabel { text: (_gps && _gps.count) ? _gps.count.valueString : "--"; color: root._accent; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 1
+                    Item { Layout.fillHeight: true }
+                    QGCLabel { Layout.alignment: Qt.AlignHCenter; text: qsTr("GNSS"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.85 }
+                    GridLayout {
+                        Layout.alignment: Qt.AlignHCenter
+                        columns: 2
+                        rowSpacing: 0
+                        columnSpacing: 4
+                        QGCLabel { text: qsTr("HD");   color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
+                        QGCLabel { text: root._meters(_gps ? _gps.horizontalAccuracy : null); color: root._valueColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
+                        QGCLabel { text: qsTr("VACC"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
+                        QGCLabel { text: root._meters(_gps ? _gps.verticalAccuracy : null); color: root._valueColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
+                        QGCLabel { text: qsTr("NSAT"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
+                        QGCLabel { text: (_gps && _gps.count) ? _gps.count.valueString : "--"; color: root._valueColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
+                    }
+                    Item { Layout.fillHeight: true }
                 }
-                Item { Layout.fillHeight: true }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mainWindow.showIndicatorDrawer(gnssDrawerComponent, gnssCell)
+                }
             }
 
             Divider {}
-            Cell { label: qsTr("LINK"); value: root._link() }
+            Cell {
+                id: linkCell
+                label: qsTr("LINK")
+                value: root._link()
+                valueColor: root._linkColor()
+                clickable: true
+                onCellClicked: mainWindow.showIndicatorDrawer(linkDrawerComponent, linkCell)
+            }
             Divider {}
-            Cell { label: qsTr("BATT"); value: root._batteryText() }
+            Cell {
+                id: battCell
+                label: qsTr("BATT")
+                value: root._batteryText()
+                valueColor: root._battColor()
+                clickable: true
+                onCellClicked: mainWindow.showIndicatorDrawer(battDrawerComponent, battCell)
+            }
+
+            // STRATUM: hidden admin entry at the far-right edge of the status bar.
+            // Seven quick taps open the password-protected admin settings dialog.
+            // Deliberately unlabeled so it is discoverable only to operators who know.
+            Item {
+                id: adminTapZone
+                Layout.fillHeight: true
+                Layout.leftMargin: ScreenTools.defaultFontPixelWidth
+                Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 2
+
+                property int  _tapCount: 0
+                property real _firstTapMs: 0
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.ArrowCursor
+                    onClicked: {
+                        var nowMs = Date.now()
+                        if (adminTapZone._tapCount === 0 || (nowMs - adminTapZone._firstTapMs) > 3000) {
+                            adminTapZone._tapCount = 1
+                            adminTapZone._firstTapMs = nowMs
+                            return
+                        }
+                        adminTapZone._tapCount += 1
+                        if (adminTapZone._tapCount >= 7) {
+                            adminTapZone._tapCount = 0
+                            adminTapZone._firstTapMs = 0
+                            adminDialogFactory.open()
+                        }
+                    }
+                }
+
+                QGCPopupDialogFactory {
+                    id:              adminDialogFactory
+                    dialogComponent: adminDialogComponent
+                }
+
+                Component {
+                    id: adminDialogComponent
+                    AdminSettingsDialog { }
+                }
+            }
+        }
+    }
+
+    // ---- Click-through info drawers (reuse the standard QGC indicator drawer) ----
+
+    Component {
+        id: stateDrawerComponent
+        ToolIndicatorPage {
+            showExpand: false
+            contentComponent: ColumnLayout {
+                spacing: ScreenTools.defaultFontPixelHeight / 2
+
+                SettingsGroupLayout {
+                    heading: qsTr("Vehicle State")
+
+                    RowLayout {
+                        spacing: ScreenTools.defaultFontPixelWidth
+                        visible: root.vehicle
+                        QGCDelayButton {
+                            text: (root.vehicle && root.vehicle.armed) ? qsTr("Disarm") : qsTr("Arm")
+                            onActivated: {
+                                if (root.vehicle)
+                                    root.vehicle.armed = !root.vehicle.armed
+                                mainWindow.closeIndicatorDrawer()
+                            }
+                        }
+                    }
+                    QGCLabel {
+                        visible: !root.vehicle
+                        text:    qsTr("No vehicle connected")
+                    }
+                }
+
+                SettingsGroupLayout {
+                    heading: qsTr("Vehicle Messages")
+
+                    Loader {
+                        id:              stateMsgLoader
+                        active:          !!root.vehicle
+                        sourceComponent: VehicleMessageList { visible: !noMessages }
+                    }
+                    QGCLabel {
+                        text:    qsTr("No new vehicle messages")
+                        visible: !stateMsgLoader.item || stateMsgLoader.item.noMessages
+                    }
+                }
+            }
+        }
+    }
+
+    Component {
+        id: gnssDrawerComponent
+        GPSIndicatorPage { }
+    }
+
+    Component {
+        id: battDrawerComponent
+        ToolIndicatorPage {
+            showExpand: false
+            contentComponent: SettingsGroupLayout {
+                heading: qsTr("Battery Status")
+                LabelledLabel { label: qsTr("Charge:");   labelText: root._batteryText() }
+                LabelledLabel { label: qsTr("Voltage:");  labelText: root._factText(root._batt ? root._batt.voltage : null, " V") }
+                LabelledLabel { label: qsTr("Current:");  labelText: root._factText(root._batt ? root._batt.current : null, " A") }
+                LabelledLabel { label: qsTr("Consumed:"); labelText: root._factText(root._batt ? root._batt.mahConsumed : null, " mAh", 0) }
+            }
+        }
+    }
+
+    Component {
+        id: linkDrawerComponent
+        ToolIndicatorPage {
+            showExpand: false
+            contentComponent: SettingsGroupLayout {
+                heading: qsTr("Link / Telemetry RSSI")
+                LabelledLabel { label: qsTr("Local RSSI:");   labelText: root._factText(root._radio ? root._radio.lrssi : null, " dBm", 0) }
+                LabelledLabel { label: qsTr("Remote RSSI:");  labelText: root._factText(root._radio ? root._radio.rrssi : null, " dBm", 0) }
+                LabelledLabel { label: qsTr("RX Errors:");    labelText: root._factText(root._radio ? root._radio.rxErrors : null, "", 0) }
+                LabelledLabel { label: qsTr("Errors Fixed:"); labelText: root._factText(root._radio ? root._radio.fixed : null, "", 0) }
+            }
         }
     }
 }
