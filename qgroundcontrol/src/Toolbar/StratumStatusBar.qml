@@ -41,6 +41,11 @@ Item {
     readonly property color _valueColor: _hc ? _accent : qgcPal.text
     readonly property color _dimColor:   Qt.rgba(qgcPal.text.r, qgcPal.text.g, qgcPal.text.b, 0.55)
 
+    // Larger, tightly-packed cell typography (KAN-17 feedback).
+    readonly property real  _labelFontSize: ScreenTools.smallFontPointSize
+    readonly property real  _valueFontSize: ScreenTools.defaultFontPointSize
+    readonly property real  _cellPadding:   ScreenTools.defaultFontPixelWidth * 0.75
+
     QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
     function _num(fact) {
@@ -54,9 +59,9 @@ Item {
     }
     function _duration(fact) {
         if (!fact || !isFinite(Number(fact.rawValue)))
-            return "--:--:--"
+            return "--:--"
         var s = Math.max(0, Math.floor(Number(fact.rawValue)))
-        return String(Math.floor(s / 3600)).padStart(2, "0") + ":" + String(Math.floor(s / 60) % 60).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0")
+        return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0")
     }
     function _uavName() {
         if (!vehicle)
@@ -124,18 +129,19 @@ Item {
         property bool clickable: false
         property bool showChevron: false
         signal cellClicked()
-        Layout.fillWidth: true
         Layout.fillHeight: true
+        implicitWidth: cellCol.implicitWidth + root._cellPadding * 2
+        implicitHeight: cellCol.implicitHeight
 
         ColumnLayout {
-            anchors.fill: parent
-            spacing: 2
-            Item { Layout.fillHeight: true }
+            id: cellCol
+            anchors.centerIn: parent
+            spacing: 1
             QGCLabel {
                 Layout.alignment: Qt.AlignHCenter
                 text: cell.label
                 color: root._labelColor
-                font.pointSize: ScreenTools.smallFontPointSize * 0.85
+                font.pointSize: root._labelFontSize
             }
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
@@ -145,17 +151,16 @@ Item {
                     text: cell.value
                     color: cell.valueColor
                     font.bold: true
-                    font.pointSize: ScreenTools.smallFontPointSize
+                    font.pointSize: root._valueFontSize
                 }
                 QGCLabel {
                     visible: cell.showChevron
                     text: "\u25BE"
                     color: cell.valueColor
                     opacity: 0.85
-                    font.pointSize: ScreenTools.smallFontPointSize * 0.9
+                    font.pointSize: root._valueFontSize * 0.85
                 }
             }
-            Item { Layout.fillHeight: true }
         }
 
         MouseArea {
@@ -193,19 +198,56 @@ Item {
             anchors.rightMargin: 12
             spacing: 0
 
-            // STRATUM wordmark
-            ColumnLayout {
+            // STRATUM wordmark -- also the hidden admin entry: seven quick taps open
+            // the password-protected admin settings dialog.
+            Item {
+                id: wordmarkCell
                 Layout.fillHeight: true
                 Layout.rightMargin: 6
-                spacing: 0
-                Item { Layout.fillHeight: true }
-                QGCLabel { text: "STRATUM"; color: root.ribbonTextColor; font.bold: true; font.pointSize: ScreenTools.mediumFontPointSize; font.letterSpacing: 2 }
-                QGCLabel { text: QGroundControl.qgcVersion; color: root._dimColor; font.pointSize: ScreenTools.smallFontPointSize * 0.85 }
-                Item { Layout.fillHeight: true }
+                Layout.leftMargin: root._cellPadding
+                implicitWidth: wordmarkCol.implicitWidth
+                implicitHeight: wordmarkCol.implicitHeight
+
+                property int  _tapCount: 0
+                property real _firstTapMs: 0
+
+                ColumnLayout {
+                    id: wordmarkCol
+                    anchors.centerIn: parent
+                    spacing: 0
+                    QGCLabel { text: "STRATUM"; color: root.ribbonTextColor; font.bold: true; font.pointSize: ScreenTools.mediumFontPointSize; font.letterSpacing: 2 }
+                    QGCLabel { text: QGroundControl.qgcVersion; color: root._dimColor; font.pointSize: ScreenTools.smallFontPointSize * 0.85 }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.ArrowCursor
+                    onClicked: {
+                        var nowMs = Date.now()
+                        if (wordmarkCell._tapCount === 0 || (nowMs - wordmarkCell._firstTapMs) > 3000) {
+                            wordmarkCell._tapCount = 1
+                            wordmarkCell._firstTapMs = nowMs
+                            return
+                        }
+                        wordmarkCell._tapCount += 1
+                        if (wordmarkCell._tapCount >= 7) {
+                            wordmarkCell._tapCount = 0
+                            wordmarkCell._firstTapMs = 0
+                            adminDialogFactory.open()
+                        }
+                    }
+                }
+
+                QGCPopupDialogFactory {
+                    id:              adminDialogFactory
+                    dialogComponent: adminDialogComponent
+                }
+                Component {
+                    id: adminDialogComponent
+                    AdminSettingsDialog { }
+                }
             }
 
-            Divider {}
-            Cell { label: qsTr("UAV");     value: root._uavName() }
             Divider {}
             Cell {
                 id: stateCell
@@ -231,33 +273,31 @@ Item {
             Divider {}
             Cell { label: qsTr("TIME");    value: root._duration(_facts ? _facts.flightTime : null) }
             Divider {}
-            Cell { label: qsTr("VIDEO");   value: root.videoLive ? qsTr("LIVE") : qsTr("WAITING"); valueColor: root.videoLive ? qgcPal.colorGreen : qgcPal.colorOrange }
-            Divider {}
 
             // GNSS cell: label + three compact rows (clickable -> GPS details drawer).
             Item {
                 id: gnssCell
-                Layout.fillWidth: true
                 Layout.fillHeight: true
+                implicitWidth: gnssCol.implicitWidth + root._cellPadding * 2
+                implicitHeight: gnssCol.implicitHeight
 
                 ColumnLayout {
-                    anchors.fill: parent
+                    id: gnssCol
+                    anchors.centerIn: parent
                     spacing: 1
-                    Item { Layout.fillHeight: true }
-                    QGCLabel { Layout.alignment: Qt.AlignHCenter; text: qsTr("GNSS"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.85 }
+                    QGCLabel { Layout.alignment: Qt.AlignHCenter; text: qsTr("GNSS"); color: root._labelColor; font.pointSize: root._labelFontSize }
                     GridLayout {
                         Layout.alignment: Qt.AlignHCenter
                         columns: 2
                         rowSpacing: 0
                         columnSpacing: 4
-                        QGCLabel { text: qsTr("HD");   color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
-                        QGCLabel { text: root._meters(_gps ? _gps.horizontalAccuracy : null); color: root._valueColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
-                        QGCLabel { text: qsTr("VACC"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
-                        QGCLabel { text: root._meters(_gps ? _gps.verticalAccuracy : null); color: root._valueColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
-                        QGCLabel { text: qsTr("NSAT"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
-                        QGCLabel { text: (_gps && _gps.count) ? _gps.count.valueString : "--"; color: root._valueColor; font.pointSize: ScreenTools.smallFontPointSize * 0.8 }
+                        QGCLabel { text: qsTr("HD");   color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize }
+                        QGCLabel { text: root._meters(_gps ? _gps.horizontalAccuracy : null); color: root._valueColor; font.pointSize: ScreenTools.smallFontPointSize }
+                        QGCLabel { text: qsTr("VACC"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize }
+                        QGCLabel { text: root._meters(_gps ? _gps.verticalAccuracy : null); color: root._valueColor; font.pointSize: ScreenTools.smallFontPointSize }
+                        QGCLabel { text: qsTr("NSAT"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize }
+                        QGCLabel { text: (_gps && _gps.count) ? _gps.count.valueString : "--"; color: root._valueColor; font.pointSize: ScreenTools.smallFontPointSize }
                     }
-                    Item { Layout.fillHeight: true }
                 }
 
                 MouseArea {
@@ -286,47 +326,8 @@ Item {
                 onCellClicked: mainWindow.showIndicatorDrawer(battDrawerComponent, battCell)
             }
 
-            // STRATUM: hidden admin entry at the far-right edge of the status bar.
-            // Seven quick taps open the password-protected admin settings dialog.
-            // Deliberately unlabeled so it is discoverable only to operators who know.
-            Item {
-                id: adminTapZone
-                Layout.fillHeight: true
-                Layout.leftMargin: ScreenTools.defaultFontPixelWidth
-                Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 2
-
-                property int  _tapCount: 0
-                property real _firstTapMs: 0
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.ArrowCursor
-                    onClicked: {
-                        var nowMs = Date.now()
-                        if (adminTapZone._tapCount === 0 || (nowMs - adminTapZone._firstTapMs) > 3000) {
-                            adminTapZone._tapCount = 1
-                            adminTapZone._firstTapMs = nowMs
-                            return
-                        }
-                        adminTapZone._tapCount += 1
-                        if (adminTapZone._tapCount >= 7) {
-                            adminTapZone._tapCount = 0
-                            adminTapZone._firstTapMs = 0
-                            adminDialogFactory.open()
-                        }
-                    }
-                }
-
-                QGCPopupDialogFactory {
-                    id:              adminDialogFactory
-                    dialogComponent: adminDialogComponent
-                }
-
-                Component {
-                    id: adminDialogComponent
-                    AdminSettingsDialog { }
-                }
-            }
+            // Absorb any leftover width so the cells stay left-packed and tight.
+            Item { Layout.fillWidth: true; Layout.fillHeight: true }
         }
     }
 
