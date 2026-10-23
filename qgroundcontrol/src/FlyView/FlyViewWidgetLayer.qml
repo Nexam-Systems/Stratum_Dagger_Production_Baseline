@@ -354,6 +354,27 @@ Item {
         onAopRequested: _root.startAOP()
     }
 
+    // STRATUM Issue #4 / Phase 0: battery-aware RTL Point-of-No-Return decision countdown.
+    RTLPointOfNoReturnEstimator {
+        id:      rtlPnrEstimator
+        vehicle: _root._activeVehicle
+    }
+
+    RTLDecisionCountdownPanel {
+        id:                       rtlPnrPanel
+        estimator:                rtlPnrEstimator
+        vehicle:                  _root._activeVehicle
+        standoffController:       _root.standoffController
+        anchors.top:              parent.top
+        anchors.topMargin:        _toolsMargin
+        anchors.horizontalCenter: parent.horizontalCenter
+        // Centre within the area left of the mission panel so the bar never overlaps it.
+        anchors.horizontalCenterOffset: _root.panelExpanded ? -(_root.commandPanelWidth / 2 + _toolsMargin) : 0
+        z:                        QGroundControl.zOrderWidgets
+        visible:                  rtlPnrEstimator.connected && !QGroundControl.videoManager.fullScreen
+                                      && !(_root.mapControl && _root.mapControl._aopEditMode)
+    }
+
     VehicleWarnings {
         anchors.centerIn:   parent
         z:                  QGroundControl.zOrderTopMost

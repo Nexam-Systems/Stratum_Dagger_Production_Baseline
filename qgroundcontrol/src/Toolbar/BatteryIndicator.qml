@@ -456,6 +456,12 @@ Item {
                     }
 
                     LabelledLabel {
+                        label:      qsTr("Current")
+                        labelText:  object.current.valueString + " " + object.current.units
+                        visible:    batteryValuesAvailable.currentAvailable
+                    }
+
+                    LabelledLabel {
                         label:      qsTr("Consumed")
                         labelText:  object.mahConsumed.valueString + " " + object.mahConsumed.units
                         visible:    batteryValuesAvailable.mahConsumedAvailable
