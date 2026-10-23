@@ -132,25 +132,10 @@ Rectangle {
         }
 
         Field { key: qsTr("LIMIT");  value: root._reason }
-        Field { key: qsTr("HOME");   value: estimator ? root._km(estimator.distanceFromHomeM) : "--" }
         Field { key: qsTr("POWER");  value: estimator ? root._kw(estimator.filteredPowerW) : "--" }
-        Field { key: qsTr("SPEED");  value: estimator ? root._kmh(estimator.groundSpeedMS) : "--" }
         Field { key: qsTr("RTL");    value: estimator ? root._clock(estimator.rtlEstimatedTimeSeconds) : "--" }
         Field { key: qsTr("MARGIN"); value: estimator ? root._wh(estimator.energyMarginWh) : "--" }
         Field { key: qsTr("MAX");    value: estimator ? root._km(estimator.totalDistanceLimitM) : "--" }
-
-        Rectangle {
-            Layout.preferredWidth: 1
-            Layout.fillHeight:     true
-            Layout.topMargin:      3
-            Layout.bottomMargin:   3
-            color:                 panelPalette.groupBorder
-        }
-
-        // Standoff / distance section: home -> standoff, vehicle -> standoff, home -> vehicle.
-        Field { key: qsTr("HOME->STDF"); value: root._dist(root._homeStandoffM) }
-        Field { key: qsTr("VEH->STDF");  value: root._dist(root._vehStandoffM) }
-        Field { key: qsTr("HOME->VEH");  value: root._dist(root._homeVehM) }
 
         QGCLabel {
             objectName: "pnrBatteryWarning"

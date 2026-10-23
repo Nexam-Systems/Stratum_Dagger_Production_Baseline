@@ -320,6 +320,7 @@ Item {
         }
 
         Rectangle {
+            id: holdConfirmBox
             anchors.top: parent.top
             anchors.topMargin: toolbar.height + 8
             anchors.horizontalCenter: flightSurface.horizontalCenter
@@ -327,14 +328,36 @@ Item {
             height: 60
             z: QGroundControl.zOrderTopMost + 2
             visible: widgetLayer.holdCommand !== ""
+
+            // STRATUM: theme-aware accent (cyan normal / neon-green high-contrast),
+            // matching the top status bar.
+            readonly property color _holdAccent: qgcPal.highContrast ? "#2EE62E" : "#79CBE8"
+
             color: qgcPal.window
-            border.color: qgcPal.warningText
+            border.color: _holdAccent
             border.width: 2
+            radius: ScreenTools.defaultBorderRadius
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 8
-                QGCLabel { text: widgetLayer.holdComplete ? qsTr("%1 request sent").arg(widgetLayer.holdCommand) : qsTr("Hold to %1").arg(widgetLayer.holdCommand) }
-                ProgressBar { Layout.fillWidth: true; value: widgetLayer.holdProgress }
+                spacing: 4
+                QGCLabel {
+                    text: widgetLayer.holdComplete ? qsTr("%1 request sent").arg(widgetLayer.holdCommand) : qsTr("Hold to %1").arg(widgetLayer.holdCommand)
+                    color: holdConfirmBox._holdAccent
+                    font.bold: true
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 8
+                    radius: 4
+                    color: Qt.rgba(qgcPal.text.r, qgcPal.text.g, qgcPal.text.b, 0.2)
+                    Rectangle {
+                        height: parent.height
+                        width: parent.width * Math.max(0, Math.min(1, widgetLayer.holdProgress))
+                        radius: parent.radius
+                        color: holdConfirmBox._holdAccent
+                    }
+                }
             }
         }
 
@@ -491,6 +514,7 @@ Item {
         visible:            !QGroundControl.videoManager.fullScreen
         pendingTarget:      mapControl._standoffPendingCoordinate
         designatedTarget:   mapControl.standoffCmdController._targetCoordinate
+        standoffController: mapControl.standoffCmdController
 
         // STRATUM: AOP / standoff entry commands relocated to the ribbon centre; route
         // them to the widget layer that owns the standoff panel and the AOP map editor.

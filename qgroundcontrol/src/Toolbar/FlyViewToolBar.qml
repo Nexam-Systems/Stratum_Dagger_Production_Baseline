@@ -15,6 +15,7 @@ Item {
     height: ScreenTools.toolbarHeight
     property var pendingTarget: null
     property var designatedTarget: null
+    property var standoffController: null
 
     // STRATUM: the standoff / AOP entry commands now live in the centre of this ribbon
     // (moved off the left command strip). The handlers are wired in FlyView.qml, which
@@ -128,6 +129,7 @@ Item {
                             objectName:         "toolbar_mainStatusIndicator"
                             Layout.fillHeight:  true
                             ribbonTextColor:    _ribbonTextColor
+                            visible:            false
                         }
                     }
 
@@ -141,7 +143,7 @@ Item {
                     FlightModeIndicator {
                         objectName:         "toolbar_flightModeIndicator"
                         Layout.fillHeight:  true
-                        visible:            _activeVehicle
+                        visible:            false
                         ribbonTextColor:    _ribbonTextColor
                     }
                 }
@@ -151,21 +153,23 @@ Item {
                 width:  Math.max(0, control.width - (leftPanel.width + rightPanel.width))
                 height: parent.height
 
-                FlightTelemetryHeader {
-                    id: telemetryHeader
+                StratumStatusBar {
+                    id: stratumStatusBar
                     anchors.fill: parent
-                    compact: true
                     vehicle: control._activeVehicle
                     pendingTarget: control.pendingTarget
                     designatedTarget: control.designatedTarget
+                    standoffController: control.standoffController
                     videoLive: QGroundControl.videoManager.decoding
+                    ribbonTextColor: _ribbonTextColor
                 }
             }
 
             Item {
-                id:     rightPanel
-                width:  flyViewIndicators.width
-                height: parent.height
+                id:      rightPanel
+                width:   0
+                height:  parent.height
+                visible: false
 
                 FlyViewToolBarIndicators {
                     id:                 flyViewIndicators
