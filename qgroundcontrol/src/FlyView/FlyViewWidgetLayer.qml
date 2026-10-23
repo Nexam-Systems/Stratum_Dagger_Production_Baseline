@@ -380,7 +380,18 @@ Item {
         readonly property bool _takeoffStarted: rtlPnrEstimator.airborne
                                  || (!!_root._activeVehicle && _root._activeVehicle.armed === true
                                      && _root._activeVehicle.flightMode === qsTr("Takeoff"))
-        readonly property int  _seconds:  rtlPnrEstimator.pnrCountdownSeconds
+        // Use the estimator's countdown when it has a real crossing. When there is plenty
+        // of energy the crossing is beyond the estimator's forward-sim horizon (reported
+        // BEYOND_HORIZON); fall back to an analytic energy-only estimate so the clock counts
+        // from takeoff instead of sitting at --:-- until the pack drains into the horizon.
+        readonly property int  _seconds: {
+            if (rtlPnrEstimator.pnrCountdownSeconds >= 0)
+                return rtlPnrEstimator.pnrCountdownSeconds
+            if (rtlPnrEstimator.pnrStatus === "BEYOND_HORIZON"
+                    && rtlPnrEstimator.energyMarginWh > 0 && rtlPnrEstimator.filteredPowerW > 0)
+                return Math.min(Math.round(3600 * rtlPnrEstimator.energyMarginWh / rtlPnrEstimator.filteredPowerW), 99 * 60 + 59)
+            return -1
+        }
         readonly property bool _hasTimer: _seconds >= 0
         readonly property color _accent: {
             if (rtlPnrEstimator.pnrStatus === "PNR_REACHED" || rtlPnrEstimator.batteryCritical) return clockPal.colorRed
