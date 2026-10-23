@@ -229,6 +229,20 @@ class StratumMissionStateTest(unittest.TestCase):
                    inStandoffHeight=200, inVehAltRel=80)
         self.assertEqual(self.key(), "TRANSIT_STDOFF")
 
+    def test_hold_over_home_with_active_standoff_is_on_station(self):
+        # After RTL to home the standoff may still be "active"; Hold over home must read
+        # ON STATION, not TRANSIT (reported KAN-18 bug).
+        self.armed("Hold", inStandoffActive=True, inVehLat=24.0, inVehLon=67.0,
+                   inHomeLat=24.0, inHomeLon=67.0, inStdLat=24.02, inStdLon=67.02)
+        self.assertEqual(self.key(), "ON_STATION")
+
+    def test_hold_established_at_standoff_is_at_standoff(self):
+        # Parked on the standoff orbit in Hold (PX4 switched out of Standoff mode).
+        self.armed("Hold", inStandoffActive=True, inVehLat=24.5, inVehLon=67.5,
+                   inStdLat=24.5, inStdLon=67.5, inStandoffDistance=0,
+                   inStandoffHeight=80, inVehAltRel=80)
+        self.assertEqual(self.key(), "AT_STDOFF")
+
     def test_fallback_armed(self):
         self.armed("Hold", inVehLat=24.5, inVehLon=67.5)  # away from home, no standoff
         self.assertEqual(self.key(), "ARMED")

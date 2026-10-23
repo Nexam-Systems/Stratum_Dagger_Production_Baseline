@@ -70,9 +70,15 @@ Item {
         if (_isManualMode(mode))                                                return "MANUAL"
         if (mode === qsTr("Takeoff"))                                           return "FLYING"
         if (vehicle.landing)                                                    return "LANDING"
-        if (standoffController && standoffController._standoffActive === true)
+        // Standoff maneuver actively flown by PX4 (transit out, or orbiting the target).
+        if (mode === qsTr("Standoff"))
             return _standoffEstablished() ? "AT_STDOFF" : "TRANSIT_STDOFF"
+        // Hold-class: directly over home is On Station; parked on the standoff orbit is At
+        // Standoff. A lingering standoff commitment must NOT read as transit once the vehicle
+        // is no longer flying the standoff mode (e.g. after RTL + Hold over home).
         if (_overHome())                                                        return "ON_STATION"
+        if (standoffController && standoffController._standoffActive === true && _standoffEstablished())
+            return "AT_STDOFF"
         return "ARMED"
     }
 
