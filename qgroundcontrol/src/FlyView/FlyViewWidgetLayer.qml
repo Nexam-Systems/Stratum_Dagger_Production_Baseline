@@ -372,9 +372,14 @@ Item {
         width:               clockFrame.width
         height:              clockFrame.height
         z:                   QGroundControl.zOrderWidgets
-        visible:             rtlPnrEstimator.connected && !QGroundControl.videoManager.fullScreen
+        // Start the RTL-PNR clock at takeoff: appear once the vehicle is airborne (or in
+        // the Takeoff mode), then keep counting through the flight / recovery.
+        visible:             _takeoffStarted && !QGroundControl.videoManager.fullScreen
                                  && !(_root.mapControl && _root.mapControl._aopEditMode)
 
+        readonly property bool _takeoffStarted: rtlPnrEstimator.airborne
+                                 || (!!_root._activeVehicle && _root._activeVehicle.armed === true
+                                     && _root._activeVehicle.flightMode === qsTr("Takeoff"))
         readonly property int  _seconds:  rtlPnrEstimator.pnrCountdownSeconds
         readonly property bool _hasTimer: _seconds >= 0
         readonly property color _accent: {
