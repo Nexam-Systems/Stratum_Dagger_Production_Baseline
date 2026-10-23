@@ -385,7 +385,7 @@ Item {
 
                 QGCLabel {
                     Layout.alignment:       Qt.AlignHCenter
-                    font.pointSize:         _showBoth ? ScreenTools.defaultFontPointSize : ScreenTools.mediumFontPointSize
+                    font.pointSize:         ScreenTools.smallFontPointSize
                     color:                  control.indicatorColor
                     text:                   getBatteryVoltageText()
                     visible:                _showBoth || _showVoltage
