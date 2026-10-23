@@ -243,9 +243,10 @@ class StratumMissionStateTest(unittest.TestCase):
                    inStandoffHeight=80, inVehAltRel=80)
         self.assertEqual(self.key(), "AT_STDOFF")
 
-    def test_fallback_armed(self):
+    def test_hold_fallback_is_holding(self):
         self.armed("Hold", inVehLat=24.5, inVehLon=67.5)  # away from home, no standoff
-        self.assertEqual(self.key(), "ARMED")
+        self.assertEqual(self.key(), "HOLDING")
+        self.assertEqual(self.text(), "HOLDING")
 
 
 if __name__ == "__main__":

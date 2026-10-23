@@ -79,7 +79,7 @@ Item {
         if (_overHome())                                                        return "ON_STATION"
         if (standoffController && standoffController._standoffActive === true && _standoffEstablished())
             return "AT_STDOFF"
-        return "ARMED"
+        return "HOLDING"   // any other armed state (Hold, loiter, unmatched) -- never "ARMED"
     }
 
     readonly property string text: {
@@ -97,7 +97,7 @@ Item {
         case "RTL":            return qsTr("RETURNING TO HOME")
         case "MANUAL":         return qsTr("MANUAL")
         case "LANDING":        return qsTr("LANDING")
-        default:               return qsTr("ARMED")
+        default:               return qsTr("HOLDING")
         }
     }
 }
