@@ -60,6 +60,13 @@ Item {
 
     QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
+    // Mission-lifecycle STATE classifier (KAN-18); theme colour mapped in _stateColor().
+    StratumMissionState {
+        id: missionState
+        vehicle: root.vehicle
+        standoffController: root.standoffController
+    }
+
     function _num(fact) {
         return (fact && isFinite(Number(fact.rawValue))) ? (Number(fact.value).toFixed(1) + " " + fact.units) : "--"
     }
@@ -86,26 +93,20 @@ Item {
         return "UAV-" + (vehicle.id < 10 ? "0" + vehicle.id : vehicle.id)
     }
     function _stateText() {
-        if (!vehicle)   return qsTr("DISCONNECTED")
-        if (!_live)     return qsTr("COMMS LOST")
-        if (!vehicle.armed) {
-            if (vehicle.readyToFlyAvailable && !vehicle.readyToFly) return qsTr("NOT READY")
-            if (!vehicle.allSensorsHealthy)                         return qsTr("NOT READY")
-            return qsTr("READY")
-        }
-        var mode = vehicle.flightMode
-        if (mode === qsTr("Abort")) return qsTr("ABORT")
-        if (mode === qsTr("Engagement") || mode === qsTr("Vision Engagement")) return qsTr("ENGAGING")
-        if (vehicle.landing) return qsTr("LANDING")
-        if (vehicle.flying)  return qsTr("FLYING")
-        return qsTr("ARMED")
+        return missionState.text
     }
     function _stateColor() {
-        var s = _stateText()
-        if (s === qsTr("ABORT") || s === qsTr("COMMS LOST") || s === qsTr("DISCONNECTED")) return qgcPal.colorRed
-        if (s === qsTr("ENGAGING")) return qgcPal.colorOrange
-        if (s === qsTr("NOT READY")) return qgcPal.colorYellow
-        return qgcPal.colorGreen
+        switch (missionState.key) {
+        case "DISCONNECTED":
+        case "COMMS_LOST":
+        case "ABORTING":       return qgcPal.colorRed
+        case "NOT_READY":      return qgcPal.colorYellow
+        case "ENGAGING":
+        case "RTL":
+        case "LANDING":        return qgcPal.colorOrange
+        case "TRANSIT_STDOFF": return _accent
+        default:               return qgcPal.colorGreen
+        }
     }
     function _batteryText() {
         return (_batt && _batt.percentRemaining && isFinite(Number(_batt.percentRemaining.rawValue))) ? (Math.round(_batt.percentRemaining.rawValue) + "%") : "--"
