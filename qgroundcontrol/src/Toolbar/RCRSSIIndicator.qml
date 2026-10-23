@@ -17,7 +17,7 @@ Item {
     property bool showIndicator: _activeVehicle && _activeVehicle.supports && _activeVehicle.supports.radio
 
     property var    _activeVehicle:     QGroundControl.multiVehicleManager.activeVehicle
-    readonly property color indicatorColor: qgcPal.highContrast ? qgcPal.buttonText : "#79CBE8"
+    readonly property color indicatorColor: qgcPal.highContrast ? qgcPal.text : "#79CBE8"
     property bool   _rcRSSIAvailable:   _activeVehicle && _activeVehicle.rcRSSI && Number(_activeVehicle.rcRSSI.rawValue) > 0 && Number(_activeVehicle.rcRSSI.rawValue) <= 100
     readonly property string _rcRSSIText: {
         if (!_activeVehicle || !_activeVehicle.rcRSSI) return qsTr("--")
@@ -64,8 +64,6 @@ Item {
             text:                   _rcRSSIText
             color:                  control.indicatorColor
             font.pointSize:         ScreenTools.smallFontPointSize
-            font.bold:              true
-            font.family:            ScreenTools.demiboldFontFamily
         }
 
         SignalStrength {

@@ -21,6 +21,8 @@ Item {
     property var vehicle: null
     property bool videoLive: false
 
+    readonly property color indicatorColor: headerPalette.highContrast ? headerPalette.text : "#79CBE8"
+
     function duration(fact) {
         if (!fact || !isFinite(Number(fact.rawValue)))
             return "--:--:--";
@@ -50,7 +52,7 @@ Item {
         rowSpacing: root.compact ? 6 : 8
         width: parent.width - (root.compact ? 4 : 16)
         x: root.compact ? 2 : 8
-        y: 6
+        y: root.compact ? Math.max(0, (parent.height - implicitHeight) / 2) : 6
 
         Group {
             iconSource: "/InstrumentValueIcons/airplane.svg"
@@ -136,14 +138,14 @@ Item {
                     height: width
                     sourceSize.height: height
                     source: parent.parent.parent.iconSource
-                    color: headerPalette.highContrast ? headerPalette.buttonBorder : "#79CBE8"
+                    color: root.indicatorColor
                     visible: root.compact
                 }
 
                 QGCLabel {
                     id: titleLabel
 
-                    color: headerPalette.highContrast ? headerPalette.buttonBorder : "#79CBE8"
+                    color: root.indicatorColor
                     font.pointSize: root.compact ? ScreenTools.smallFontPointSize * 0.95 : ScreenTools.smallFontPointSize
                     text: parent.parent.parent.title
                     width: root.compact ? parent.width - 14 : parent.width
@@ -164,14 +166,14 @@ Item {
                     fillMode: Image.PreserveAspectFit
                     sourceSize.height: height
                     source: parent.parent.parent.iconSource
-                    color: headerPalette.highContrast ? headerPalette.buttonBorder : "#79CBE8"
+                    color: root.indicatorColor
                 }
 
                 QGCLabel {
                     id: compactValueLabel
 
                     Accessible.name: parent.parent.parent.title + ": " + parent.parent.parent.value
-                    color: headerPalette.highContrast ? headerPalette.text : "#79CBE8"
+                    color: root.indicatorColor
                     font.family: ScreenTools.normalFontFamily
                     font.pointSize: ScreenTools.smallFontPointSize
                     verticalAlignment: Text.AlignVCenter
