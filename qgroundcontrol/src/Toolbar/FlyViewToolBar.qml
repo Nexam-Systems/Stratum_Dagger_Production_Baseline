@@ -15,6 +15,7 @@ Item {
     height: ScreenTools.toolbarHeight
     property var pendingTarget: null
     property var designatedTarget: null
+    property var standoffController: null
 
     // STRATUM: the standoff / AOP entry commands now live in the centre of this ribbon
     // (moved off the left command strip). The handlers are wired in FlyView.qml, which
@@ -158,6 +159,7 @@ Item {
                     vehicle: control._activeVehicle
                     pendingTarget: control.pendingTarget
                     designatedTarget: control.designatedTarget
+                    standoffController: control.standoffController
                     videoLive: QGroundControl.videoManager.decoding
                     ribbonTextColor: _ribbonTextColor
                 }

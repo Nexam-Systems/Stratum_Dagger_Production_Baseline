@@ -16,8 +16,22 @@ Item {
     property var  vehicle
     property var  pendingTarget: null
     property var  designatedTarget: null
+    property var  standoffController: null
     property bool videoLive: false
     property color ribbonTextColor: qgcPal.text
+
+    // Standoff distance cells (moved into the ribbon's right region, KAN-17). Matches the
+    // gating used by RTLDecisionCountdownPanel: only valid while standoff is active and the
+    // target coordinate is valid. Values are shown in the app's horizontal distance units.
+    readonly property var  _soHome:  (vehicle && vehicle.homePosition && vehicle.homePosition.isValid) ? vehicle.homePosition : null
+    readonly property bool _soValid: !!_soHome && !!standoffController && standoffController._standoffActive === true
+                                     && standoffController._targetCoordinate && standoffController._targetCoordinate.isValid
+    readonly property real _homeStandoffM: _soValid ? _soHome.distanceTo(standoffController._targetCoordinate) : Number.NaN
+    readonly property var  _vehCoord: (vehicle && vehicle.coordinate && vehicle.coordinate.isValid) ? vehicle.coordinate : null
+    readonly property bool _vehSoValid: !!_vehCoord && !!standoffController && standoffController._standoffActive === true
+                                        && standoffController._targetCoordinate && standoffController._targetCoordinate.isValid
+    readonly property real _vehStandoffM: _vehSoValid ? _vehCoord.distanceTo(standoffController._targetCoordinate) : Number.NaN
+    readonly property real _homeVehM: (_soHome && _vehCoord) ? _soHome.distanceTo(vehicle.coordinate) : Number.NaN
 
     readonly property var  _facts:  vehicle ? vehicle.vehicle : null
     readonly property var  _gps:    vehicle ? vehicle.gps : null
@@ -53,6 +67,16 @@ Item {
     }
     function _meters(fact) {
         return (fact && isFinite(Number(fact.rawValue))) ? (Number(fact.value).toFixed(2) + " m") : "--"
+    }
+    function _dist(meters) {
+        if (meters === undefined || isNaN(meters))
+            return "--"
+        return QGroundControl.unitsConversion.metersToAppSettingsHorizontalDistanceUnits(meters).toFixed(0) + " " + QGroundControl.unitsConversion.appSettingsHorizontalDistanceUnitsString
+    }
+    function _gnssText() {
+        var sat  = (_gps && _gps.count && isFinite(Number(_gps.count.rawValue))) ? _gps.count.valueString : "--"
+        var hacc = (_gps && _gps.horizontalAccuracy && isFinite(Number(_gps.horizontalAccuracy.rawValue))) ? (Number(_gps.horizontalAccuracy.value).toFixed(1) + " m") : "--"
+        return sat + " \u00b7 " + hacc
     }
     function _coord(c) {
         return (c && c.isValid) ? (c.latitude.toFixed(6) + "\u00b0\n" + c.longitude.toFixed(6) + "\u00b0") : "--"
@@ -128,9 +152,12 @@ Item {
         property color valueColor: root._valueColor
         property bool clickable: false
         property bool showChevron: false
+        // Optional stable content width (in px). Numeric cells (ALT/GS/VS) use this so a
+        // sign flip (negative GS/VS) or digit-count change cannot reflow the whole ribbon.
+        property real minContentWidth: 0
         signal cellClicked()
         Layout.fillHeight: true
-        implicitWidth: cellCol.implicitWidth + root._cellPadding * 2
+        implicitWidth: Math.max(cellCol.implicitWidth, minContentWidth) + root._cellPadding * 2
         implicitHeight: cellCol.implicitHeight
 
         ColumnLayout {
@@ -265,46 +292,24 @@ Item {
             Divider {}
             Cell { label: qsTr("TGT POS"); value: root._coord(root._target) }
             Divider {}
-            Cell { label: qsTr("ALT");     value: root._num(_facts ? _facts.altitudeRelative : null) }
+            Cell { label: qsTr("ALT");     value: root._num(_facts ? _facts.altitudeRelative : null); minContentWidth: ScreenTools.defaultFontPixelWidth * 8 }
             Divider {}
-            Cell { label: qsTr("GS");      value: root._num(_facts ? _facts.groundSpeed : null) }
+            Cell { label: qsTr("GS");      value: root._num(_facts ? _facts.groundSpeed : null); minContentWidth: ScreenTools.defaultFontPixelWidth * 10 }
             Divider {}
-            Cell { label: qsTr("VS");      value: root._num(_facts ? _facts.climbRate : null) }
+            Cell { label: qsTr("VS");      value: root._num(_facts ? _facts.climbRate : null); minContentWidth: ScreenTools.defaultFontPixelWidth * 10 }
             Divider {}
             Cell { label: qsTr("TIME");    value: root._duration(_facts ? _facts.flightTime : null) }
             Divider {}
 
-            // GNSS cell: label + three compact rows (clickable -> GPS details drawer).
-            Item {
+            // GNSS summary cell (sat count + horizontal accuracy) at the same size/style as
+            // the other cells. Click opens the full GPS details drawer (HDOP/VDOP/sats/etc).
+            Cell {
                 id: gnssCell
-                Layout.fillHeight: true
-                implicitWidth: gnssCol.implicitWidth + root._cellPadding * 2
-                implicitHeight: gnssCol.implicitHeight
-
-                ColumnLayout {
-                    id: gnssCol
-                    anchors.centerIn: parent
-                    spacing: 1
-                    QGCLabel { Layout.alignment: Qt.AlignHCenter; text: qsTr("GNSS"); color: root._labelColor; font.pointSize: root._labelFontSize }
-                    GridLayout {
-                        Layout.alignment: Qt.AlignHCenter
-                        columns: 2
-                        rowSpacing: 0
-                        columnSpacing: 4
-                        QGCLabel { text: qsTr("HD");   color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize }
-                        QGCLabel { text: root._meters(_gps ? _gps.horizontalAccuracy : null); color: root._valueColor; font.pointSize: ScreenTools.smallFontPointSize }
-                        QGCLabel { text: qsTr("VACC"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize }
-                        QGCLabel { text: root._meters(_gps ? _gps.verticalAccuracy : null); color: root._valueColor; font.pointSize: ScreenTools.smallFontPointSize }
-                        QGCLabel { text: qsTr("NSAT"); color: root._labelColor; font.pointSize: ScreenTools.smallFontPointSize }
-                        QGCLabel { text: (_gps && _gps.count) ? _gps.count.valueString : "--"; color: root._valueColor; font.pointSize: ScreenTools.smallFontPointSize }
-                    }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: mainWindow.showIndicatorDrawer(gnssDrawerComponent, gnssCell)
-                }
+                label: qsTr("GNSS")
+                value: root._gnssText()
+                clickable: true
+                showChevron: true
+                onCellClicked: mainWindow.showIndicatorDrawer(gnssDrawerComponent, gnssCell)
             }
 
             Divider {}
@@ -326,8 +331,16 @@ Item {
                 onCellClicked: mainWindow.showIndicatorDrawer(battDrawerComponent, battCell)
             }
 
-            // Absorb any leftover width so the cells stay left-packed and tight.
+            // Flexible spacer pushes the standoff distance cells into the previously-empty
+            // right region of the ribbon so that space is used.
             Item { Layout.fillWidth: true; Layout.fillHeight: true }
+
+            Divider {}
+            Cell { label: qsTr("HOME\u2192STDF"); value: root._dist(root._homeStandoffM); minContentWidth: ScreenTools.defaultFontPixelWidth * 7 }
+            Divider {}
+            Cell { label: qsTr("VEH\u2192STDF");  value: root._dist(root._vehStandoffM); minContentWidth: ScreenTools.defaultFontPixelWidth * 7 }
+            Divider {}
+            Cell { label: qsTr("HOME\u2192VEH");  value: root._dist(root._homeVehM); minContentWidth: ScreenTools.defaultFontPixelWidth * 7 }
         }
     }
 

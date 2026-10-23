@@ -514,6 +514,7 @@ Item {
         visible:            !QGroundControl.videoManager.fullScreen
         pendingTarget:      mapControl._standoffPendingCoordinate
         designatedTarget:   mapControl.standoffCmdController._targetCoordinate
+        standoffController: mapControl.standoffCmdController
 
         // STRATUM: AOP / standoff entry commands relocated to the ribbon centre; route
         // them to the widget layer that owns the standoff panel and the AOP map editor.
