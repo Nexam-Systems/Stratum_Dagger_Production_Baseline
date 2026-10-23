@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtQuick.Effects
 
 import QtLocation
 import QtPositioning
@@ -360,19 +361,92 @@ Item {
         vehicle: _root._activeVehicle
     }
 
-    RTLDecisionCountdownPanel {
-        id:                       rtlPnrPanel
-        estimator:                rtlPnrEstimator
-        vehicle:                  _root._activeVehicle
-        standoffController:       _root.standoffController
-        anchors.top:              parent.top
-        anchors.topMargin:        _toolsMargin
-        anchors.horizontalCenter: parent.horizontalCenter
-        // Centre within the area left of the mission panel so the bar never overlaps it.
-        anchors.horizontalCenterOffset: _root.panelExpanded ? -(_root.commandPanelWidth / 2 + _toolsMargin) : 0
-        z:                        QGroundControl.zOrderWidgets
-        visible:                  rtlPnrEstimator.connected && !QGroundControl.videoManager.fullScreen
-                                      && !(_root.mapControl && _root.mapControl._aopEditMode)
+    // STRATUM KAN-17: compact glowing RTL-PNR countdown clock beside the mission panel.
+    // Replaces the old centre-map battery-aware bar; it shows only the PNR countdown and
+    // pulses so it pulls the operator's focus. Colour follows the active theme and urgency.
+    Item {
+        id:                  rtlPnrClock
+        anchors.top:         toolStrip.top
+        anchors.right:       toolStrip.left
+        anchors.rightMargin: _toolsMargin
+        width:               clockFrame.width
+        height:              clockFrame.height
+        z:                   QGroundControl.zOrderWidgets
+        visible:             rtlPnrEstimator.connected && !QGroundControl.videoManager.fullScreen
+                                 && !(_root.mapControl && _root.mapControl._aopEditMode)
+
+        readonly property int  _seconds:  rtlPnrEstimator.pnrCountdownSeconds
+        readonly property bool _hasTimer: _seconds >= 0
+        readonly property color _accent: {
+            if (rtlPnrEstimator.pnrStatus === "PNR_REACHED" || rtlPnrEstimator.batteryCritical) return clockPal.colorRed
+            if (!_hasTimer)          return clockPal.highContrast ? clockPal.text : "#79CBE8"
+            if (_seconds <= 60)      return clockPal.colorRed
+            if (_seconds <= 120)     return clockPal.colorOrange
+            return clockPal.highContrast ? clockPal.text : "#79CBE8"
+        }
+
+        function _clock(seconds) {
+            if (seconds === undefined || seconds < 0)
+                return "--:--"
+            var mm = Math.floor(seconds / 60)
+            var ss = Math.floor(seconds % 60)
+            return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss
+        }
+
+        QGCPalette { id: clockPal }
+
+        // Pulsing coloured halo behind the clock (soft glow); drawn before the frame so
+        // the frame stays crisp on top.
+        MultiEffect {
+            source:              clockFrame
+            anchors.centerIn:    clockFrame
+            width:               clockFrame.width
+            height:              clockFrame.height
+            autoPaddingEnabled:  true
+            blurMax:             32
+            shadowEnabled:       true
+            shadowColor:         rtlPnrClock._accent
+            shadowBlur:          1.0
+            shadowVerticalOffset:   0
+            shadowHorizontalOffset: 0
+            SequentialAnimation on shadowOpacity {
+                running: rtlPnrClock.visible
+                loops:   Animation.Infinite
+                NumberAnimation { from: 0.3; to: 1.0; duration: 750; easing.type: Easing.InOutSine }
+                NumberAnimation { from: 1.0; to: 0.3; duration: 750; easing.type: Easing.InOutSine }
+            }
+        }
+
+        Rectangle {
+            id:            clockFrame
+            width:         clockCol.implicitWidth + ScreenTools.defaultFontPixelWidth * 2
+            height:        clockCol.implicitHeight + ScreenTools.defaultFontPixelHeight * 0.6
+            radius:        6
+            border.width:  2
+            border.color:  rtlPnrClock._accent
+            color:         clockPal.highContrast ? clockPal.window
+                               : Qt.rgba(clockPal.window.r, clockPal.window.g, clockPal.window.b, 0.9)
+
+            ColumnLayout {
+                id:               clockCol
+                anchors.centerIn: parent
+                spacing:          0
+                QGCLabel {
+                    Layout.alignment: Qt.AlignHCenter
+                    text:             qsTr("RTL PNR")
+                    font.bold:        true
+                    font.pointSize:   ScreenTools.smallFontPointSize
+                    color:            rtlPnrClock._accent
+                }
+                QGCLabel {
+                    Layout.alignment: Qt.AlignHCenter
+                    text:             rtlPnrClock._clock(rtlPnrClock._seconds)
+                    font.bold:        true
+                    font.pointSize:   ScreenTools.largeFontPointSize
+                    color:            rtlPnrClock._accent
+                }
+            }
+        }
     }
 
     VehicleWarnings {

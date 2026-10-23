@@ -5,11 +5,11 @@ import QGroundControl
 import QGroundControl.Controls
 
 // STRATUM KAN-17 (test UI): unified top status bar. A borderless strip of divider-
-// separated label/value cells (STRATUM wordmark, UAV, STATE, MODE, positions,
-// ALT/GS/VS, TIME, VIDEO, GNSS, LINK, BATT) that reads as part of the toolbar ribbon.
-// STATE / GNSS / LINK / BATT are clickable and open the standard QGC info drawers; the
-// far-right edge hides the 7-tap admin entry. The NX logo button stays in
-// FlyViewToolBar. All data comes from the active vehicle.
+// separated label/value cells (STRATUM wordmark, STATE, MODE, positions, ALT/GS/VS,
+// GNSS, BATT, standoff distances, TIME at the far right) that reads as part of the
+// toolbar ribbon. STATE / GNSS / BATT are clickable and open the standard QGC info
+// drawers; the STRATUM wordmark hides the 7-tap admin entry. The NX logo button stays
+// in FlyViewToolBar. All data comes from the active vehicle.
 Item {
     id: root
 
@@ -35,7 +35,6 @@ Item {
 
     readonly property var  _facts:  vehicle ? vehicle.vehicle : null
     readonly property var  _gps:    vehicle ? vehicle.gps : null
-    readonly property var  _radio:  vehicle ? vehicle.radioStatus : null
     readonly property var  _batt:   (vehicle && vehicle.batteries && vehicle.batteries.count > 0) ? vehicle.batteries.get(0) : null
     readonly property bool _live:   !!vehicle && (!vehicle.vehicleLinkManager || !vehicle.vehicleLinkManager.communicationLost)
     readonly property var  _target: (pendingTarget && pendingTarget.isValid) ? pendingTarget : designatedTarget
@@ -47,8 +46,7 @@ Item {
     // Theme-aware palette matching the two approved mockups:
     //   - Normal theme:        cyan accent. Labels/dividers cyan, data values white.
     //   - High-contrast theme: neon-green accent. Labels white, data values green.
-    // Status values (STATE / LINK / BATT) and VIDEO carry their own health colours
-    // in both themes.
+    // Status values (STATE / BATT) carry their own health colours in both themes.
     readonly property bool  _hc:         qgcPal.highContrast
     readonly property color _accent:     _hc ? "#2EE62E" : "#79CBE8"
     readonly property color _labelColor: _hc ? qgcPal.text : _accent
@@ -109,11 +107,11 @@ Item {
         if (s === qsTr("NOT READY")) return qgcPal.colorYellow
         return qgcPal.colorGreen
     }
-    function _link() {
-        return (_radio && _radio.lrssi && isFinite(Number(_radio.lrssi.rawValue))) ? (_radio.lrssi.rawValue + " dBm") : "--"
-    }
     function _batteryText() {
         return (_batt && _batt.percentRemaining && isFinite(Number(_batt.percentRemaining.rawValue))) ? (Math.round(_batt.percentRemaining.rawValue) + "%") : "--"
+    }
+    function _batteryVoltage() {
+        return (_batt && _batt.voltage && isFinite(Number(_batt.voltage.rawValue))) ? (Number(_batt.voltage.value).toFixed(1) + " V") : "--"
     }
     function _factText(fact, suffix, decimals) {
         if (!fact || !isFinite(Number(fact.rawValue)))
@@ -128,14 +126,6 @@ Item {
         if (p <= 15) return qgcPal.colorRed
         if (p <= 30) return qgcPal.colorOrange
         return qgcPal.colorGreen
-    }
-    function _linkColor() {
-        if (!_radio || !_radio.lrssi || !isFinite(Number(_radio.lrssi.rawValue)))
-            return _valueColor
-        var r = Number(_radio.lrssi.rawValue)
-        if (r >= -90)  return qgcPal.colorGreen
-        if (r >= -100) return qgcPal.colorOrange
-        return qgcPal.colorRed
     }
 
     // One label-over-value cell. Optionally clickable (opens an info drawer) with a
@@ -294,8 +284,6 @@ Item {
             Divider {}
             Cell { label: qsTr("VS");      value: root._num(_facts ? _facts.climbRate : null); minContentWidth: ScreenTools.defaultFontPixelWidth * 10 }
             Divider {}
-            Cell { label: qsTr("TIME");    value: root._duration(_facts ? _facts.flightTime : null) }
-            Divider {}
 
             // GNSS cell: "GNSS" label over a horizontal HD / VACC / NSAT readout, using the
             // same label+value sizes and colours as the other cells (click -> GPS drawer).
@@ -321,7 +309,7 @@ Item {
                         spacing: root._cellPadding
                         RowLayout {
                             spacing: 3
-                            QGCLabel { text: qsTr("HD"); color: root._labelColor; font.pointSize: root._labelFontSize }
+                            QGCLabel { text: qsTr("HACC"); color: root._labelColor; font.pointSize: root._labelFontSize }
                             QGCLabel { text: root._meters(_gps ? _gps.horizontalAccuracy : null); color: root._valueColor; font.bold: true; font.pointSize: root._valueFontSize }
                         }
                         RowLayout {
@@ -345,22 +333,39 @@ Item {
             }
 
             Divider {}
-            Cell {
-                id: linkCell
-                label: qsTr("LINK")
-                value: root._link()
-                valueColor: root._linkColor()
-                clickable: true
-                onCellClicked: mainWindow.showIndicatorDrawer(linkDrawerComponent, linkCell)
-            }
-            Divider {}
-            Cell {
+
+            // BATT cell: percentage (health colour) + pack voltage, shown directly on the
+            // ribbon (LINK removed). Click opens the standard battery drawer.
+            Item {
                 id: battCell
-                label: qsTr("BATT")
-                value: root._batteryText()
-                valueColor: root._battColor()
-                clickable: true
-                onCellClicked: mainWindow.showIndicatorDrawer(battDrawerComponent, battCell)
+                Layout.fillHeight: true
+                Layout.fillWidth: true
+                implicitWidth: battCol.implicitWidth + root._cellPadding * 2
+                implicitHeight: battCol.implicitHeight
+
+                ColumnLayout {
+                    id: battCol
+                    anchors.centerIn: parent
+                    spacing: 1
+                    QGCLabel {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: qsTr("BATT")
+                        color: root._labelColor
+                        font.pointSize: root._labelFontSize
+                    }
+                    RowLayout {
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: root._cellPadding
+                        QGCLabel { text: root._batteryText(); color: root._battColor(); font.bold: true; font.pointSize: root._valueFontSize }
+                        QGCLabel { text: root._batteryVoltage(); color: root._valueColor; font.bold: true; font.pointSize: root._valueFontSize }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mainWindow.showIndicatorDrawer(battDrawerComponent, battCell)
+                }
             }
 
             Divider {}
@@ -369,6 +374,8 @@ Item {
             Cell { label: qsTr("VEH\u2192STDF");  value: root._dist(root._vehStandoffM); minContentWidth: ScreenTools.defaultFontPixelWidth * 7 }
             Divider {}
             Cell { label: qsTr("HOME\u2192VEH");  value: root._dist(root._homeVehM); minContentWidth: ScreenTools.defaultFontPixelWidth * 7 }
+            Divider {}
+            Cell { label: qsTr("TIME");    value: root._duration(_facts ? _facts.flightTime : null) }
         }
     }
 
@@ -434,20 +441,6 @@ Item {
                 LabelledLabel { label: qsTr("Voltage:");  labelText: root._factText(root._batt ? root._batt.voltage : null, " V") }
                 LabelledLabel { label: qsTr("Current:");  labelText: root._factText(root._batt ? root._batt.current : null, " A") }
                 LabelledLabel { label: qsTr("Consumed:"); labelText: root._factText(root._batt ? root._batt.mahConsumed : null, " mAh", 0) }
-            }
-        }
-    }
-
-    Component {
-        id: linkDrawerComponent
-        ToolIndicatorPage {
-            showExpand: false
-            contentComponent: SettingsGroupLayout {
-                heading: qsTr("Link / Telemetry RSSI")
-                LabelledLabel { label: qsTr("Local RSSI:");   labelText: root._factText(root._radio ? root._radio.lrssi : null, " dBm", 0) }
-                LabelledLabel { label: qsTr("Remote RSSI:");  labelText: root._factText(root._radio ? root._radio.rrssi : null, " dBm", 0) }
-                LabelledLabel { label: qsTr("RX Errors:");    labelText: root._factText(root._radio ? root._radio.rxErrors : null, "", 0) }
-                LabelledLabel { label: qsTr("Errors Fixed:"); labelText: root._factText(root._radio ? root._radio.fixed : null, "", 0) }
             }
         }
     }
