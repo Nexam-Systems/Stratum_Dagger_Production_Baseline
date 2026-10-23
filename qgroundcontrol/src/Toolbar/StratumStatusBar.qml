@@ -73,11 +73,6 @@ Item {
             return "--"
         return QGroundControl.unitsConversion.metersToAppSettingsHorizontalDistanceUnits(meters).toFixed(0) + " " + QGroundControl.unitsConversion.appSettingsHorizontalDistanceUnitsString
     }
-    function _gnssText() {
-        var sat  = (_gps && _gps.count && isFinite(Number(_gps.count.rawValue))) ? _gps.count.valueString : "--"
-        var hacc = (_gps && _gps.horizontalAccuracy && isFinite(Number(_gps.horizontalAccuracy.rawValue))) ? (Number(_gps.horizontalAccuracy.value).toFixed(1) + " m") : "--"
-        return sat + " \u00b7 " + hacc
-    }
     function _coord(c) {
         return (c && c.isValid) ? (c.latitude.toFixed(6) + "\u00b0\n" + c.longitude.toFixed(6) + "\u00b0") : "--"
     }
@@ -157,6 +152,7 @@ Item {
         property real minContentWidth: 0
         signal cellClicked()
         Layout.fillHeight: true
+        Layout.fillWidth: true
         implicitWidth: Math.max(cellCol.implicitWidth, minContentWidth) + root._cellPadding * 2
         implicitHeight: cellCol.implicitHeight
 
@@ -301,15 +297,51 @@ Item {
             Cell { label: qsTr("TIME");    value: root._duration(_facts ? _facts.flightTime : null) }
             Divider {}
 
-            // GNSS summary cell (sat count + horizontal accuracy) at the same size/style as
-            // the other cells. Click opens the full GPS details drawer (HDOP/VDOP/sats/etc).
-            Cell {
+            // GNSS cell: "GNSS" label over a horizontal HD / VACC / NSAT readout, using the
+            // same label+value sizes and colours as the other cells (click -> GPS drawer).
+            Item {
                 id: gnssCell
-                label: qsTr("GNSS")
-                value: root._gnssText()
-                clickable: true
-                showChevron: true
-                onCellClicked: mainWindow.showIndicatorDrawer(gnssDrawerComponent, gnssCell)
+                Layout.fillHeight: true
+                Layout.fillWidth: true
+                implicitWidth: gnssCol.implicitWidth + root._cellPadding * 2
+                implicitHeight: gnssCol.implicitHeight
+
+                ColumnLayout {
+                    id: gnssCol
+                    anchors.centerIn: parent
+                    spacing: 1
+                    QGCLabel {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: qsTr("GNSS")
+                        color: root._labelColor
+                        font.pointSize: root._labelFontSize
+                    }
+                    RowLayout {
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: root._cellPadding
+                        RowLayout {
+                            spacing: 3
+                            QGCLabel { text: qsTr("HD"); color: root._labelColor; font.pointSize: root._labelFontSize }
+                            QGCLabel { text: root._meters(_gps ? _gps.horizontalAccuracy : null); color: root._valueColor; font.bold: true; font.pointSize: root._valueFontSize }
+                        }
+                        RowLayout {
+                            spacing: 3
+                            QGCLabel { text: qsTr("VACC"); color: root._labelColor; font.pointSize: root._labelFontSize }
+                            QGCLabel { text: root._meters(_gps ? _gps.verticalAccuracy : null); color: root._valueColor; font.bold: true; font.pointSize: root._valueFontSize }
+                        }
+                        RowLayout {
+                            spacing: 3
+                            QGCLabel { text: qsTr("NSAT"); color: root._labelColor; font.pointSize: root._labelFontSize }
+                            QGCLabel { text: (_gps && _gps.count) ? _gps.count.valueString : "--"; color: root._valueColor; font.bold: true; font.pointSize: root._valueFontSize }
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mainWindow.showIndicatorDrawer(gnssDrawerComponent, gnssCell)
+                }
             }
 
             Divider {}
@@ -330,10 +362,6 @@ Item {
                 clickable: true
                 onCellClicked: mainWindow.showIndicatorDrawer(battDrawerComponent, battCell)
             }
-
-            // Flexible spacer pushes the standoff distance cells into the previously-empty
-            // right region of the ribbon so that space is used.
-            Item { Layout.fillWidth: true; Layout.fillHeight: true }
 
             Divider {}
             Cell { label: qsTr("HOME\u2192STDF"); value: root._dist(root._homeStandoffM); minContentWidth: ScreenTools.defaultFontPixelWidth * 7 }
