@@ -12,6 +12,7 @@ ToolStripActionList {
     property var engagementController    // STRATUM: engagement/abort safety-loop controller
     property bool cameraMaximized: false // STRATUM: true when the video is the maximized window
     property var standoffController      // STRATUM: supplies the standoff target for the drop safety check
+    property var rtlAbortGate            // STRATUM #42: Layer-1 gate -> grays RTL (Safe Recovery) / Abort
 
     // STRATUM: active vehicle profile (1 = Dropper, 2 = Dagger) read straight from the
     // settings singleton so it resolves regardless of QML id scope.
@@ -91,10 +92,16 @@ ToolStripActionList {
         // STRATUM: Flight-mode picker (replaces the top-ribbon dropdown, which is
         // now a read-only mode display). Opens a drop panel listing the whitelisted
         // modes; each entry confirms then writes Vehicle.flightMode.
-        FlyViewFlightModeAction { },
+        FlyViewFlightModeAction {
+            // STRATUM #42: gray the RTL (Safe Recovery/Return) and Abort entries when the gate says stop.
+            rtlAllowed:   !_root.rtlAbortGate || _root.rtlAbortGate.rtlAllowed
+            abortAllowed: !_root.rtlAbortGate || _root.rtlAbortGate.abortAllowed
+        },
         // Dagger: Abort flight mode (DO_SET_MODE sub=22), hold-to-confirm.
         GuidedActionAbort {
             visible: _root._stratumIsDagger
+            // STRATUM #42: Layer-1 abort budget / feasibility gate.
+            enabled: !!QGroundControl.multiVehicleManager.activeVehicle && (!_root.rtlAbortGate || _root.rtlAbortGate.abortAllowed)
         },
         // Dagger: Engagement flight mode (sub=21), armed-on-engage via the controller.
         EngageAction {

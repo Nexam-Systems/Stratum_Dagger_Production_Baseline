@@ -327,6 +327,7 @@ Item {
         engagementController: _root.engagementController
         cameraMaximized: _root.cameraMaximized
         standoffController: _root.standoffController
+        rtlAbortGate: rtlAbortGate
         onDisplayPreFlightChecklist: {
             preFlightChecklistLoader.active = true
             preFlightChecklistLoader.item.open()
@@ -359,6 +360,14 @@ Item {
     RTLPointOfNoReturnEstimator {
         id:      rtlPnrEstimator
         vehicle: _root._activeVehicle
+    }
+
+    // STRATUM Issue #42 / Block-1: Layer 1 RTL & Abort gating layered on the estimator.
+    // Read-only -- computes rtlAllowed / abortAllowed that gray the controls; never commands.
+    RTLAbortGate {
+        id:        rtlAbortGate
+        estimator: rtlPnrEstimator
+        vehicle:   _root._activeVehicle
     }
 
     // STRATUM KAN-17: compact glowing RTL-PNR countdown clock beside the mission panel.

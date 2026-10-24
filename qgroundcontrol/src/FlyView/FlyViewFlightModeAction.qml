@@ -20,6 +20,13 @@ ToolStripAction {
     visible:    true
     enabled:    !!QGroundControl.multiVehicleManager.activeVehicle
 
+    // STRATUM #42: Layer-1 gate. When false the RTL (Safe Recovery/Return) resp. Abort
+    // entries render grayed/disabled in the picker. Default true = available.
+    property bool rtlAllowed:   true
+    property bool abortAllowed: true
+
+    function _isRtlMode(mode) { return mode === qsTr("Safe Recovery") || mode === qsTr("Return") }
+
     // Empty list = show every mode reported by the firmware plugin.
     readonly property var _allowedModes: [
         qsTr("Takeoff"), qsTr("Land"),
@@ -82,6 +89,9 @@ ToolStripAction {
                     Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 18
                     text:                   _root._displayLabel(modelData)
                     highlighted:            panelColumn._vehicle && panelColumn._vehicle.flightMode === modelData
+                    // STRATUM #42: gray RTL / Abort entries when the Layer-1 gate says stop.
+                    enabled:                (!_root._isRtlMode(modelData) || _root.rtlAllowed)
+                                                && (modelData !== qsTr("Abort") || _root.abortAllowed)
 
                     onClicked: {
                         var mode = modelData
