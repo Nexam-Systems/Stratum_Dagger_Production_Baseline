@@ -162,11 +162,51 @@ void AudioOutput::_applyEngineSettings()
         _engine->setLocale(defaultLocale);
     }
 
-    // Pin an explicit voice so output doesn't depend on the engine's per-OS default.
+    // STRATUM #52: pin a natural, clear MALE voice rather than the engine's first
+    // default (which read as "Microsoft David" and sounded unclear). Preference is
+    // ordered toward the more natural / intelligible male voices; names are inherently
+    // male so they are matched regardless of the (often "Unknown") gender metadata.
+    // Fall back to the first male-gender voice, then to the first available voice.
     const QList<QVoice> voices = _engine->availableVoices();
     if (!voices.isEmpty()) {
-        _engine->setVoice(voices.constFirst());
+        static const char *const kPreferredMaleNames[] = {
+            "Guy", "Ryan", "Christopher", "Eric", "Steffan", "Mark", "David"
+        };
+
+        QVoice chosen = voices.constFirst();
+        bool found = false;
+
+        for (const char *name : kPreferredMaleNames) {
+            for (const QVoice &voice : voices) {
+                if (voice.name().contains(QLatin1String(name), Qt::CaseInsensitive)) {
+                    chosen = voice;
+                    found = true;
+                    break;
+                }
+            }
+            if (found) {
+                break;
+            }
+        }
+
+        if (!found) {
+            for (const QVoice &voice : voices) {
+                if (voice.gender() == QVoice::Male) {
+                    chosen = voice;
+                    break;
+                }
+            }
+        }
+
+        _engine->setVoice(chosen);
+        qCDebug(AudioOutputLog) << "AudioOutput voice:" << chosen.name();
     }
+
+    // STRATUM #52: a mild pitch drop adds depth/"bass" and a slightly slower rate aids
+    // clarity, while staying natural -- heavy pitch-shifting makes the voice robotic.
+    // Range for both is -1.0 .. 1.0 (0.0 = engine default).
+    _engine->setPitch(-0.25);
+    _engine->setRate(-0.10);
 
     _speakCapable = _engine->engineCapabilities().testFlag(QTextToSpeech::Capability::Speak);
 }
