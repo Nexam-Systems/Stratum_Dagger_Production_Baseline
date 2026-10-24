@@ -327,6 +327,7 @@ Item {
         engagementController: _root.engagementController
         cameraMaximized: _root.cameraMaximized
         standoffController: _root.standoffController
+        rtlAbortGate: rtlAbortGate
         onDisplayPreFlightChecklist: {
             preFlightChecklistLoader.active = true
             preFlightChecklistLoader.item.open()
@@ -359,6 +360,14 @@ Item {
     RTLPointOfNoReturnEstimator {
         id:      rtlPnrEstimator
         vehicle: _root._activeVehicle
+    }
+
+    // STRATUM Issue #42 / Block-1: Layer 1 RTL & Abort gating layered on the estimator.
+    // Read-only -- computes rtlAllowed / abortAllowed that gray the controls; never commands.
+    RTLAbortGate {
+        id:        rtlAbortGate
+        estimator: rtlPnrEstimator
+        vehicle:   _root._activeVehicle
     }
 
     // STRATUM KAN-17: compact glowing RTL-PNR countdown clock beside the mission panel.
@@ -449,6 +458,17 @@ Item {
                     font.bold:        true
                     font.pointSize:   ScreenTools.largeFontPointSize
                     color:            rtlPnrClock._accent
+                }
+                // STRATUM #42: abort-budget tries, shown right below the PNR countdown
+                // (Dagger only -- Abort is a Dagger feature).
+                QGCLabel {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: ScreenTools.defaultFontPixelHeight * 0.15
+                    visible:          QGroundControl.settingsManager.appSettings.stratumProfile.rawValue === 2
+                    text:             qsTr("ABORTS %1/%2").arg(rtlAbortGate.abortsRemaining).arg(rtlAbortGate.maxAborts)
+                    font.bold:        true
+                    font.pointSize:   ScreenTools.smallFontPointSize
+                    color:            rtlAbortGate.abortsRemaining === 0 ? clockPal.colorRed : clockPal.text
                 }
             }
         }

@@ -13,6 +13,7 @@ qt_add_qml_module(FlyViewModule
         MissionHoldButton.qml
         RightMissionPanel.qml
         RTLPointOfNoReturnEstimator.qml
+        RTLAbortGate.qml
         RTLDecisionCountdownPanel.qml
         ConnectPodAction.qml
         CustomGuidedActionsController.qml
