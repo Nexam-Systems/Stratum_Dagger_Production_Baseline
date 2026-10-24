@@ -9,6 +9,11 @@
             "pageDefinition": "General.SettingsUI.json"
         },
         {
+            "name": "Voice",
+            "qml": "VoiceSettings.qml",
+            "icon": "qrc:/InstrumentValueIcons/conversation.svg"
+        },
+        {
             "name": "Fly View",
             "qml": "FlyViewSettings.qml",
             "icon": "qrc:/qmlimages/PaperPlane.svg",

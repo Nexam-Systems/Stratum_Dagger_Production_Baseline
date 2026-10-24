@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QPointF>
+#include <QtCore/QStringList>
 #include <QtCore/QTimer>
 #include <QtPositioning/QGeoCoordinate>
 #include <QtQml/QJSValue>
@@ -151,6 +152,16 @@ public:
 
     // Test audio output
     Q_INVOKABLE void testAudioOutput();
+
+    // --- STRATUM #52 TEMPORARY voice tuning (removed once values are fixed) ---
+    Q_INVOKABLE QStringList availableVoiceNames();
+    Q_INVOKABLE void setVoicePitch(double pitch);
+    Q_INVOKABLE void setVoiceRate(double rate);
+    Q_INVOKABLE void setVoiceName(const QString &name);
+    Q_INVOKABLE double voicePitch();
+    Q_INVOKABLE double voiceRate();
+    Q_INVOKABLE QString voiceName();
+    Q_INVOKABLE void sayVoiceTest(const QString &text);
 
     /// Copy text to the system clipboard
     Q_INVOKABLE static void copyToClipboard(const QString& text);
