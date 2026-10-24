@@ -459,6 +459,17 @@ Item {
                     font.pointSize:   ScreenTools.largeFontPointSize
                     color:            rtlPnrClock._accent
                 }
+                // STRATUM #42: abort-budget tries, shown right below the PNR countdown
+                // (Dagger only -- Abort is a Dagger feature).
+                QGCLabel {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: ScreenTools.defaultFontPixelHeight * 0.15
+                    visible:          QGroundControl.settingsManager.appSettings.stratumProfile.rawValue === 2
+                    text:             qsTr("ABORTS %1/%2").arg(rtlAbortGate.abortsRemaining).arg(rtlAbortGate.maxAborts)
+                    font.bold:        true
+                    font.pointSize:   ScreenTools.smallFontPointSize
+                    color:            rtlAbortGate.abortsRemaining === 0 ? clockPal.colorRed : clockPal.text
+                }
             }
         }
     }
