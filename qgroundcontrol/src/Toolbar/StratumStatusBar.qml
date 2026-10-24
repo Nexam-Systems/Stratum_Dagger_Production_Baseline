@@ -239,8 +239,8 @@ Item {
     Rectangle {
         id: frame
         anchors.fill: parent
-        anchors.topMargin: 4
-        anchors.bottomMargin: 6
+        anchors.topMargin: 2
+        anchors.bottomMargin: 3
         radius: 0
         color: "transparent"
         border.width: 0
