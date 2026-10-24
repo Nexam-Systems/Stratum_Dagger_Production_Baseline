@@ -3,6 +3,7 @@ import QtQuick.Layouts
 
 import QGroundControl
 import QGroundControl.Controls
+import QGroundControl.FlyView
 
 // STRATUM KAN-17 (test UI): unified top status bar. A borderless strip of divider-
 // separated label/value cells (STRATUM wordmark, STATE, MODE, positions, ALT/GS/VS,
@@ -65,6 +66,44 @@ Item {
         id: missionState
         vehicle: root.vehicle
         standoffController: root.standoffController
+    }
+
+    // STRATUM KAN-21: the RTL-PNR countdown and the abort-budget counter were moved off
+    // the map onto this top status bar. Read-only estimator + gate instances compute the
+    // values straight from the active vehicle (no side effects, no commands); they mirror
+    // the instances the fly-view widget layer uses to gray the RTL / Abort controls.
+    RTLPointOfNoReturnEstimator {
+        id:      rtlPnrEstimator
+        vehicle: root.vehicle
+    }
+    RTLAbortGate {
+        id:        rtlAbortGate
+        estimator: rtlPnrEstimator
+        vehicle:   root.vehicle
+    }
+
+    // Appear at takeoff: once airborne (or in the Takeoff mode), then keep counting.
+    readonly property bool  _pnrStarted:  rtlPnrEstimator.airborne
+                                 || (!!vehicle && vehicle.armed === true && vehicle.flightMode === qsTr("Takeoff"))
+    readonly property int   _pnrSeconds:  rtlPnrEstimator.pnrCountdownSeconds
+    readonly property bool  _pnrHasTimer: _pnrSeconds >= 0
+    readonly property bool  _isDagger:    QGroundControl.settingsManager.appSettings.stratumProfile.rawValue === 2
+    // Distinct amber stand-out colour so RTL PNR / ABORTS read apart from the cyan /
+    // neon-green telemetry, in both the normal and high-contrast themes.
+    readonly property color _standoutColor: _hc ? "#FFD54A" : "#FFB300"
+    readonly property color _pnrColor: {
+        if (rtlPnrEstimator.pnrStatus === "PNR_REACHED" || rtlPnrEstimator.batteryCritical) return qgcPal.colorRed
+        if (!_pnrHasTimer)      return _standoutColor
+        if (_pnrSeconds <= 60)  return qgcPal.colorRed
+        if (_pnrSeconds <= 120) return qgcPal.colorOrange
+        return _standoutColor
+    }
+    function _clock(seconds) {
+        if (seconds === undefined || seconds < 0)
+            return "--:--"
+        var mm = Math.floor(seconds / 60)
+        var ss = Math.floor(seconds % 60)
+        return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss
     }
 
     function _num(fact) {
@@ -305,9 +344,12 @@ Item {
                         color: root._labelColor
                         font.pointSize: root._labelFontSize
                     }
-                    RowLayout {
+                    // STRATUM KAN-21: HACC / VACC / NSAT listed vertically (one per row)
+                    // instead of a single stretched horizontal line. Same label/value
+                    // sizes and colours; each row keeps its label left of the value.
+                    ColumnLayout {
                         Layout.alignment: Qt.AlignHCenter
-                        spacing: root._cellPadding
+                        spacing: 1
                         RowLayout {
                             spacing: 3
                             QGCLabel { text: qsTr("HACC"); color: root._labelColor; font.pointSize: root._labelFontSize }
@@ -375,6 +417,88 @@ Item {
             Cell { label: qsTr("VEH\u2192STDF");  value: root._dist(root._vehStandoffM); minContentWidth: ScreenTools.defaultFontPixelWidth * 7 }
             Divider {}
             Cell { label: qsTr("HOME\u2192VEH");  value: root._dist(root._homeVehM); minContentWidth: ScreenTools.defaultFontPixelWidth * 7 }
+
+            // STRATUM KAN-21: RTL-PNR countdown, relocated from the map. Amber stand-out
+            // colour (red/orange as the deadline nears) with a pulsing "heartbeat" glow.
+            Divider { visible: pnrStatusCell.visible }
+            Item {
+                id: pnrStatusCell
+                Layout.fillHeight: true
+                Layout.fillWidth: true
+                visible: root._pnrStarted
+                implicitWidth: pnrCol.implicitWidth + root._cellPadding * 2
+                implicitHeight: pnrCol.implicitHeight
+
+                // Pulsing coloured halo behind the readout (heartbeat: fades out, returns).
+                Rectangle {
+                    anchors.centerIn: pnrCol
+                    width:  pnrCol.implicitWidth + root._cellPadding * 2
+                    height: pnrCol.implicitHeight + ScreenTools.defaultFontPixelHeight * 0.4
+                    radius: 5
+                    color:  Qt.rgba(root._pnrColor.r, root._pnrColor.g, root._pnrColor.b, 0.35)
+                    border.width: 1
+                    border.color: root._pnrColor
+                    SequentialAnimation on opacity {
+                        running: pnrStatusCell.visible
+                        loops:   Animation.Infinite
+                        NumberAnimation { from: 0.25; to: 1.0; duration: 750; easing.type: Easing.InOutSine }
+                        NumberAnimation { from: 1.0; to: 0.25; duration: 750; easing.type: Easing.InOutSine }
+                    }
+                }
+
+                ColumnLayout {
+                    id: pnrCol
+                    anchors.centerIn: parent
+                    spacing: 1
+                    QGCLabel {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: qsTr("RTL PNR")
+                        color: root._pnrColor
+                        font.bold: true
+                        font.pointSize: root._labelFontSize
+                    }
+                    QGCLabel {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: root._clock(root._pnrSeconds)
+                        color: root._pnrColor
+                        font.bold: true
+                        font.pointSize: root._valueFontSize
+                    }
+                }
+            }
+
+            // STRATUM KAN-21: remaining abort budget (Dagger only), relocated from the map.
+            Divider { visible: abortsStatusCell.visible }
+            Item {
+                id: abortsStatusCell
+                Layout.fillHeight: true
+                Layout.fillWidth: true
+                visible: root._pnrStarted && root._isDagger
+                implicitWidth: abortsCol.implicitWidth + root._cellPadding * 2
+                implicitHeight: abortsCol.implicitHeight
+
+                readonly property color _abortColor: rtlAbortGate.abortsRemaining === 0 ? qgcPal.colorRed : root._standoutColor
+
+                ColumnLayout {
+                    id: abortsCol
+                    anchors.centerIn: parent
+                    spacing: 1
+                    QGCLabel {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: qsTr("ABORTS")
+                        color: abortsStatusCell._abortColor
+                        font.pointSize: root._labelFontSize
+                    }
+                    QGCLabel {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: rtlAbortGate.abortsRemaining + "/" + rtlAbortGate.maxAborts
+                        color: abortsStatusCell._abortColor
+                        font.bold: true
+                        font.pointSize: root._valueFontSize
+                    }
+                }
+            }
+
             Divider {}
             Cell { label: qsTr("TIME");    value: root._duration(_facts ? _facts.flightTime : null) }
         }

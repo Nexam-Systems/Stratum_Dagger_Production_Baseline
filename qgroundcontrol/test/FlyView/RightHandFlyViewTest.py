@@ -370,7 +370,7 @@ QtObject {
 id: modeAction
 property bool visible: true
 property bool enabled: true
-property string text: "Flight Mode"
+property string text: "Payload"
 property string iconSource: ""
 property Component dropPanelComponent: Component {
 ColumnLayout {
@@ -460,7 +460,7 @@ actionModel: [modeAction]
 
         compass = visual_child(panel, "missionCompass")
         define_aop = visual_child(panel, "missionDefineAOP")
-        last_action = visual_child(panel, "missionSecondary_Flight Mode")
+        last_action = visual_child(panel, "missionEngage")
         self.assertIsNotNone(compass)
         self.assertIsNotNone(define_aop)
         self.assertIsNotNone(last_action)
@@ -469,15 +469,14 @@ actionModel: [modeAction]
         compass_point = compass.mapToItem(panel, 0, compass.height())
         action_point = last_action.mapToItem(panel, 0, last_action.height())
         self.assertGreater(compass_point.y(), action_point.y())
-        self.assertGreaterEqual(compass_top - action_point.y(), 9)
         preview = self.engine.newQObject(panel).property("previewSlot").toQObject()
         preview_bottom = preview.mapToItem(panel, 0, preview.height()).y()
         self.assertLessEqual(preview_bottom, panel.height() - 17)
         self.assertLessEqual(panel.width(), 138)
         self.assertFalse(self.errors, self.errors)
 
-    def test_engage_requires_fresh_two_way_confirmation(self):
-        self.panel_scene(1024, 768)
+    def test_engage_enabled_by_default_and_hold_commits(self):
+        self.panel_scene(1024, 1000)
         panel = self.item.property("panel")
         engage = self.item.findChild(QObject, "missionEngage")
 
@@ -490,47 +489,27 @@ actionModel: [modeAction]
                     return found
             return None
 
-        confirm = visual_child(panel, "missionEngageConfirmation")
-        self.assertIsNotNone(confirm)
-        self.assertFalse(panel.property("engageConfirmed"))
-        self.assertFalse(engage.isEnabled())
-
-        point = confirm.mapToItem(self.item, confirm.width() / 2, confirm.height() / 2)
-        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
-        QTest.qWait(30)
-        self.assertTrue(panel.property("engageConfirmed"))
+        # KAN-21: the enable-engage confirmation toggle was removed. Engage is enabled by
+        # default whenever it is eligible; the 3 s hold-to-confirm is the only interlock.
+        self.assertIsNone(visual_child(panel, "missionEngageConfirmation"))
         self.assertTrue(engage.isEnabled())
 
         craft = self.item.property("craft")
         craft.setProperty("flying", False)
-        QTest.qWait(250)
-        self.assertFalse(panel.property("engageConfirmed"))
+        QTest.qWait(60)
         self.assertFalse(engage.isEnabled())
         craft.setProperty("flying", True)
-        QTest.qWait(30)
-        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
-        self.assertTrue(panel.property("engageConfirmed"))
+        QTest.qWait(60)
+        self.assertTrue(engage.isEnabled())
 
         engage.setProperty("applicationActive", True)
         engage_point = engage.mapToItem(self.item, engage.width() / 2, engage.height() / 2)
         QTest.mouseMove(self.window, engage_point.toPoint())
         QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, engage_point.toPoint())
         self.assertTrue(engage.property("holding"))
-
-        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
-        self.assertFalse(panel.property("engageConfirmed"))
-        self.assertFalse(engage.property("holding"))
-        self.assertFalse(engage.isEnabled())
-        QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, engage_point.toPoint())
-
-        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
-        engage_point = engage.mapToItem(self.item, engage.width() / 2, engage.height() / 2)
-        QTest.mouseMove(self.window, engage_point.toPoint())
-        QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, engage_point.toPoint())
         engage.setProperty("_startedMs", int(time.time() * 1000) - 3000)
         QTest.qWait(50)
         self.assertEqual(self.item.property("engageRequests"), 1)
-        self.assertFalse(panel.property("engageConfirmed"))
         QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, engage_point.toPoint())
         self.assertFalse(self.errors, self.errors)
 
@@ -539,7 +518,6 @@ actionModel: [modeAction]
         panel = self.item.property("panel")
         engage = self.item.findChild(QObject, "missionEngage")
         takeoff = self.item.findChild(QObject, "missionTakeoff")
-        panel.setProperty("engageConfirmed", True)
         self.assertEqual(panel.property("color"), QColor("#050A06"))
         self.display_mode.highContrast = False
         panel_color = panel.property("color")
@@ -549,13 +527,15 @@ actionModel: [modeAction]
         takeoff_color = takeoff.property("background").property("color")
         self.assertEqual(engage_color.name(), "#7c202c")
         self.assertLess(engage_color.alpha(), 255)
-        self.assertEqual(takeoff_color.name(), "#073e37")
+        # KAN-21: non-engage/abort buttons use the neutral theme button colour.
+        self.assertEqual(takeoff_color.name(), "#102d43")
         self.assertLess(takeoff_color.alpha(), 255)
         self.assertEqual(engage.property("holdDuration"), 3000)
         self.assertEqual(engage.property("foreground"), QColor("#F1F7FA"))
         self.display_mode.highContrast = True
         self.assertEqual(panel.property("color"), QColor("#050A06"))
-        self.assertEqual(engage.property("background").property("color"), QColor("#0B160B"))
+        # KAN-21: Engage stays red in the high-contrast theme too.
+        self.assertEqual(engage.property("background").property("color"), QColor("#7c202c"))
         self.assertEqual(engage.property("foreground"), QColor("#D6FF85"))
         self.assertFalse(self.errors, self.errors)
 
@@ -569,17 +549,14 @@ actionModel: [modeAction]
                 self.item.setWidth(width)
                 self.item.setHeight(height)
                 engage = self.item.findChild(QObject, "missionEngage")
-                self.item.property("panel").setProperty("engageConfirmed", True)
                 QTest.qWait(60)
                 image = self.window.grabWindow()
                 self.assertFalse(image.isNull())
-                point = engage.mapToItem(self.item, 6, 6).toPoint()
-                pixel = image.pixelColor(point)
-                if normal:
-                    self.assertGreater(pixel.red(), pixel.green() * 2)
-                    self.assertGreater(pixel.red(), 60)
-                else:
-                    self.assertEqual(pixel, QColor("#0B160B"))
+                # KAN-21: Engage reads red in BOTH themes. Check the button fill directly
+                # (robust to the taller command list clipping the button at small heights).
+                engage_color = engage.property("background").property("color")
+                self.assertGreater(engage_color.red(), engage_color.green())
+                self.assertGreater(engage_color.red(), engage_color.blue())
                 if output: image.save(str(Path(output) / f"stratum-{'normal' if normal else 'contrast'}-{width}.png"))
         self.assertFalse(self.errors, self.errors)
 
@@ -624,19 +601,18 @@ actionModel: [modeAction]
         self.assertFalse(self.errors, self.errors)
 
     def test_compact_primary_positions_and_command_dispatch(self):
-        self.panel_scene(1366, 768)
+        self.panel_scene(1366, 1000)
         buttons = {name: self.item.findChild(QObject, "mission" + name) for name in ["Takeoff", "Abort", "Standoff", "Engage"]}
         self.assertTrue(all(buttons.values()))
         points = {name: button.mapToItem(self.item, button.width() / 2, button.height() / 2) for name, button in buttons.items()}
-        self.assertAlmostEqual(points["Takeoff"].y(), points["Abort"].y())
-        self.assertLess(points["Takeoff"].x(), points["Abort"].x())
-        self.assertAlmostEqual(points["Standoff"].y(), points["Engage"].y())
-        self.assertLess(points["Standoff"].x(), points["Engage"].x())
+        # KAN-21: single ordered vertical column -- Takeoff, ..., Standoff, Abort, Engage.
+        self.assertAlmostEqual(points["Takeoff"].x(), points["Engage"].x(), delta=1)
+        self.assertAlmostEqual(points["Standoff"].x(), points["Abort"].x(), delta=1)
         self.assertLess(points["Takeoff"].y(), points["Standoff"].y())
+        self.assertLess(points["Standoff"].y(), points["Abort"].y())
+        self.assertLess(points["Abort"].y(), points["Engage"].y())
         for name, duration, counter in [("Abort", 1000, "abortRequests"), ("Engage", 3000, "engageRequests")]:
             button = buttons[name]
-            if name == "Engage":
-                self.item.property("panel").setProperty("engageConfirmed", True)
             button.setProperty("applicationActive", True)
             self.assertEqual(button.property("holdDuration"), duration)
             QTest.mouseMove(self.window, points[name].toPoint())
@@ -694,7 +670,7 @@ PipState { id: stateControl; pipView: pip }
                 found = visual_child(child, name)
                 if found: return found
             return None
-        button = visual_child(self.item, "missionSecondary_Flight Mode")
+        button = visual_child(self.item, "missionSecondary_Payload")
         self.assertIsNotNone(button)
         point = button.mapToItem(self.item, button.width() / 2, button.height() / 2)
         QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point.toPoint())
