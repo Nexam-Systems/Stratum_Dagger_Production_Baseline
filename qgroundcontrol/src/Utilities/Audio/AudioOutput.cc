@@ -202,11 +202,11 @@ void AudioOutput::_applyEngineSettings()
         qCDebug(AudioOutputLog) << "AudioOutput voice:" << chosen.name();
     }
 
-    // STRATUM #52: a mild pitch drop adds depth/"bass" and a slightly slower rate aids
-    // clarity, while staying natural -- heavy pitch-shifting makes the voice robotic.
-    // Range for both is -1.0 .. 1.0 (0.0 = engine default).
+    // STRATUM #52: fixed voice styling (no user-facing option). A mild pitch drop adds
+    // depth/"bass" while staying natural; a clearly slower rate makes announcements
+    // easier to follow. Range for both is -1.0 .. 1.0 (0.0 = engine default).
     _engine->setPitch(-0.25);
-    _engine->setRate(-0.10);
+    _engine->setRate(-0.35);
 
     _speakCapable = _engine->engineCapabilities().testFlag(QTextToSpeech::Capability::Speak);
 }
