@@ -164,7 +164,9 @@ Item {
             // If using physical sizing takes up too much of the vertical real estate fall back to font based sizing
             minTouchPixels      = defaultFontPixelHeight * 3
         }
-        toolbarHeight           = defaultFontPixelHeight * 3
+        // STRATUM KAN-21: taller top bar so the vertically-stacked GNSS readout (GNSS /
+        // HACC / VACC / NSAT) fits without clipping. Content below offsets by this value.
+        toolbarHeight           = defaultFontPixelHeight * 4.4
         toolbarHeight           = toolbarHeight * QGroundControl.corePlugin.options.toolbarHeightMultiplier
     }
 
