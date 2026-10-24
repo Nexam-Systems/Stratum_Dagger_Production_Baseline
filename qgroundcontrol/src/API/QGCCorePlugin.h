@@ -48,6 +48,8 @@ class QGCCorePlugin : public QObject
     Q_PROPERTY(QString showAdvancedUIMessage            READ showAdvancedUIMessage                                          CONSTANT)
     Q_PROPERTY(QVariantList analyzePages                READ analyzePages                                                   CONSTANT)
     Q_PROPERTY(QVariantList toolBarIndicators           READ toolBarIndicators                                              CONSTANT)
+    // STRATUM: compile-time developer-build flag. QML gates the operator-hidden views on it.
+    Q_PROPERTY(bool stratumDevBuild                     READ stratumDevBuild                                                CONSTANT)
 
 public:
     explicit QGCCorePlugin(QObject *parent = nullptr);
@@ -208,7 +210,15 @@ public:
     Q_INVOKABLE QVariantList firstRunPromptsToShow();
 
     bool showTouchAreas() const { return _showTouchAreas; }
+#ifdef STRATUM_DEV_BUILD
+    // STRATUM dev build: advanced settings/parameters are always available and the hidden
+    // views are exposed.
+    bool showAdvancedUI() const { return true; }
+    bool stratumDevBuild() const { return true; }
+#else
     bool showAdvancedUI() const { return _showAdvancedUI; }
+    bool stratumDevBuild() const { return false; }
+#endif
 
     // Standard first run prompt ids
     static constexpr int kInitialSetupPromptId = 3;

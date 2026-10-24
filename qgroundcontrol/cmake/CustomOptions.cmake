@@ -10,6 +10,16 @@ include(BuildConfig)
 
 set(QGC_CUSTOM_DIR "custom" CACHE STRING "Custom build overlay directory, relative to the source root")
 
+# STRATUM: developer build variant. ON re-enables the operator-hidden UI (Analyze view,
+# full Vehicle Setup / all parameters, advanced settings) so developers can inspect and
+# change any STRATUM setting/parameter. OFF (default) ships the locked-down client UI
+# unchanged. Surfaced to QML via QGroundControl.corePlugin.stratumDevBuild.
+option(STRATUM_DEV_BUILD "Build the STRATUM developer variant with the operator-hidden UI re-enabled" OFF)
+if(STRATUM_DEV_BUILD)
+    add_compile_definitions(STRATUM_DEV_BUILD)
+    message(STATUS "STRATUM: DEV build variant -- Analyze / Configure / advanced settings re-enabled")
+endif()
+
 # ============================================================================
 # Application Metadata
 # ============================================================================

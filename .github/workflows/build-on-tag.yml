@@ -22,6 +22,10 @@ jobs:
   build-windows:
     runs-on: windows-2022          # ships Visual Studio 2022 (v143)
     timeout-minutes: 120           # QGC is a large tree; first configure is slow
+    strategy:
+      fail-fast: false             # a dev failure must not cancel the client build
+      matrix:
+        variant: [client, dev]     # client = shipping UI; dev = operator-hidden UI re-enabled
 
     steps:
       - name: Checkout
@@ -73,6 +77,7 @@ jobs:
           "%QT_ROOT_DIR%\bin\qt-cmake.bat" -B build -G Ninja
           -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
           -DQGC_BUILD_TESTING=OFF
+          -DSTRATUM_DEV_BUILD=${{ matrix.variant == 'dev' && 'ON' || 'OFF' }}
 
       - name: Build
         working-directory: qgroundcontrol
@@ -80,41 +85,25 @@ jobs:
         run: cmake --build build --parallel
 
       # The build succeeding IS the verification. The steps below deploy all Qt
-      # dependencies, package both installer formats (NSIS .exe + .msi), and
-      # publish the bare exe plus both installers.
-      - name: Package (deploy + NSIS + MSI)
+      # dependencies and package the variant MSI, then publish it.
+      - name: Package (deploy + MSI)
         id: package
         uses: ./.github/actions/package-windows
         with:
           source-dir: qgroundcontrol
           build-dir: build
-
-      - name: Upload bare executable
-        uses: actions/upload-artifact@v4
-        with:
-          name: STRATUM-exe-${{ github.ref_name }}
-          path: ${{ steps.package.outputs.exe-path }}
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload NSIS installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: STRATUM-installer-nsis-${{ github.ref_name }}
-          path: ${{ steps.package.outputs.nsis-path }}
-          if-no-files-found: error
-          retention-days: 14
+          variant: ${{ matrix.variant }}
 
       - name: Upload MSI installer
         uses: actions/upload-artifact@v4
         with:
-          name: STRATUM-installer-msi-${{ github.ref_name }}
+          name: STRATUM-${{ matrix.variant }}-msi-${{ github.ref_name }}
           path: ${{ steps.package.outputs.msi-path }}
           if-no-files-found: error
           retention-days: 14
 
-      # Attach the bare exe and both installers to the GitHub Release, if one exists.
-      - name: Attach artifacts to Release
+      # Attach the variant MSI to the GitHub Release, if one exists.
+      - name: Attach MSI to Release
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         env:
@@ -123,10 +112,7 @@ jobs:
           $tag = "${{ github.ref_name }}"
           $exists = gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag `
-              "${{ steps.package.outputs.exe-path }}" `
-              "${{ steps.package.outputs.nsis-path }}" `
-              "${{ steps.package.outputs.msi-path }}" --clobber
+            gh release upload $tag "${{ steps.package.outputs.msi-path }}" --clobber
           } else {
-            Write-Host "No Release for $tag (tag pushed without --release). Artifacts still available under Actions."
+            Write-Host "No Release for $tag (tag pushed without --release). MSI still available under Actions."
           }

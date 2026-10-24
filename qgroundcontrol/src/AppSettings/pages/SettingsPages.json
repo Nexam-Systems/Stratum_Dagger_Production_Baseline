@@ -19,14 +19,14 @@
             "qml": "Viewer3DSettings.qml",
             "icon": "qrc:/qml/QGroundControl/Viewer3D/City3DMapIcon.svg",
             "pageDefinition": "Viewer3D.SettingsUI.json",
-            "visible": "false"
+            "visible": "QGroundControl.corePlugin.stratumDevBuild"
         },
         {
             "name": "Plan View",
             "qml": "PlanViewSettings.qml",
             "icon": "qrc:/qmlimages/Plan.svg",
             "pageDefinition": "PlanView.SettingsUI.json",
-            "visible": "false"
+            "visible": "QGroundControl.corePlugin.stratumDevBuild"
         },
         {
             "divider": true
@@ -36,7 +36,7 @@
             "qml": "ADSBServerSettings.qml",
             "icon": "qrc:/InstrumentValueIcons/airplane.svg",
             "pageDefinition": "ADSBVehicleManager.SettingsUI.json",
-            "visible": "false"
+            "visible": "QGroundControl.corePlugin.stratumDevBuild"
         },
         {
             "name": "Comm Links",
@@ -49,13 +49,13 @@
             "qml": "LoggingSettings.qml",
             "icon": "qrc:/InstrumentValueIcons/conversation.svg",
             "pageDefinition": "Logging.SettingsUI.json",
-            "visible": "false"
+            "visible": "QGroundControl.corePlugin.stratumDevBuild"
         },
         {
             "name": "App Log Viewer",
             "qml": "AppLogging.qml",
             "icon": "qrc:/InstrumentValueIcons/conversation.svg",
-            "visible": "false"
+            "visible": "QGroundControl.corePlugin.stratumDevBuild"
         },
         {
             "name": "Maps",
@@ -67,14 +67,14 @@
             "name": "NTRIP/RTK",
             "qml": "NTRIPSettings.qml",
             "icon": "qrc:/InstrumentValueIcons/globe.svg",
-            "visible": "false",
+            "visible": "QGroundControl.corePlugin.stratumDevBuild",
             "pageDefinition": "NTRIP.SettingsUI.json"
         },
         {
             "name": "PX4 Log Transfer",
             "qml": "PX4LogTransferSettings.qml",
             "icon": "qrc:/InstrumentValueIcons/inbox-download.svg",
-            "visible": "false",
+            "visible": "QGroundControl.corePlugin.stratumDevBuild",
             "pageDefinition": "PX4LogTransfer.SettingsUI.json"
         },
         {
@@ -82,14 +82,14 @@
             "qml": "RemoteIDSettings.qml",
             "icon": "qrc:/qmlimages/RidIconManNoID.svg",
             "pageDefinition": "RemoteID.SettingsUI.json",
-            "visible": "false"
+            "visible": "QGroundControl.corePlugin.stratumDevBuild"
         },
         {
             "name": "Telemetry",
             "qml": "TelemetrySettings.qml",
             "icon": "qrc:/InstrumentValueIcons/drone.svg",
             "pageDefinition": "Telemetry.SettingsUI.json",
-            "visible": "false"
+            "visible": "QGroundControl.corePlugin.stratumDevBuild"
         },
         {
             "name": "Video",
@@ -113,19 +113,19 @@
             "name": "Mock Link",
             "qml": "MockLink.qml",
             "icon": "qrc:/InstrumentValueIcons/drone.svg",
-            "visible": "ScreenTools.isDebug"
+            "visible": "ScreenTools.isDebug || QGroundControl.corePlugin.stratumDevBuild"
         },
         {
             "name": "Debug",
             "qml": "DebugWindow.qml",
             "icon": "qrc:/InstrumentValueIcons/bug.svg",
-            "visible": "ScreenTools.isDebug"
+            "visible": "ScreenTools.isDebug || QGroundControl.corePlugin.stratumDevBuild"
         },
         {
             "name": "Palette Test",
             "qml": "QmlTest.qml",
             "icon": "qrc:/InstrumentValueIcons/photo.svg",
-            "visible": "ScreenTools.isDebug"
+            "visible": "ScreenTools.isDebug || QGroundControl.corePlugin.stratumDevBuild"
         }
     ]
 }
