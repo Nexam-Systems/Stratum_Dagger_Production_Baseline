@@ -157,20 +157,27 @@ void AudioOutput::_applyEngineSettings()
         return;
     }
 
-    const QLocale defaultLocale("en_US");
-    if (_engine->availableLocales().contains(defaultLocale)) {
-        _engine->setLocale(defaultLocale);
+    // STRATUM #52: aim for a JARVIS-style calm, refined BRITISH male voice. Prefer a
+    // UK English locale (en_GB) for the accent, falling back to US English. (We can only
+    // use voices installed on the OS -- there is no literal "Paul Bettany" voice.)
+    const QLocale ukLocale(QLocale::English, QLocale::UnitedKingdom);
+    const QLocale usLocale(QLocale::English, QLocale::UnitedStates);
+    const QList<QLocale> availableLocales = _engine->availableLocales();
+    if (availableLocales.contains(ukLocale)) {
+        _engine->setLocale(ukLocale);
+    } else if (availableLocales.contains(usLocale)) {
+        _engine->setLocale(usLocale);
     }
 
-    // STRATUM #52: pin a natural, clear MALE voice rather than the engine's first
-    // default (which read as "Microsoft David" and sounded unclear). Preference is
-    // ordered toward the more natural / intelligible male voices; names are inherently
-    // male so they are matched regardless of the (often "Unknown") gender metadata.
-    // Fall back to the first male-gender voice, then to the first available voice.
+    // Pin a natural, clear male voice. British male voices (Ryan/Thomas/George/Daniel/
+    // Oliver) are preferred first for the JARVIS accent, then natural US male voices,
+    // then any male-gender voice, then the first available. Names are inherently male so
+    // they are matched regardless of the (often "Unknown") gender metadata.
     const QList<QVoice> voices = _engine->availableVoices();
     if (!voices.isEmpty()) {
         static const char *const kPreferredMaleNames[] = {
-            "Guy", "Ryan", "Christopher", "Eric", "Steffan", "Mark", "David"
+            "Ryan", "Thomas", "George", "Daniel", "Oliver",
+            "Guy", "Christopher", "Eric", "Steffan", "Mark", "David"
         };
 
         QVoice chosen = voices.constFirst();
