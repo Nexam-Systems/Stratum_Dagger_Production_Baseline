@@ -1,10 +1,10 @@
 name: 'Package STRATUM (Windows)'
 description: >-
-  Turns an already-built STRATUM tree into shippable artifacts: deploys all Qt
-  runtime dependencies via windeployqt, produces the native NSIS .exe installer
-  (QGC's existing path), and harvests the deployed tree into a true Windows
-  Installer .msi. Single source of truth for packaging so ci-build.yml and
-  build-on-tag.yml never drift.
+  Turns an already-built STRATUM tree into the shippable MSI artifact: deploys all
+  Qt runtime dependencies via windeployqt, then harvests the deployed tree into a
+  true Windows Installer .msi named for the build variant (client|dev). Single source
+  of truth for packaging so ci-build.yml and build-on-tag.yml never drift. (The NSIS
+  .exe produced as a side effect of `cmake --install` is intentionally not shipped.)
 
 # This is a composite action. It assumes the caller has already run the QGC
 # build (Configure + Build) and that qt-cmake / Qt bin are on PATH for the
@@ -19,17 +19,15 @@ inputs:
     description: 'CMake build dir, relative to source-dir.'
     required: false
     default: 'build'
+  variant:
+    description: 'Build variant label (client|dev) baked into the MSI file name.'
+    required: false
+    default: 'client'
 
 outputs:
-  exe-path:
-    description: 'Absolute path to the bare STRATUM.exe.'
-    value: ${{ steps.collect.outputs.exe_path }}
-  nsis-path:
-    description: 'Absolute path to the NSIS .exe installer.'
-    value: ${{ steps.collect.outputs.nsis_path }}
   msi-path:
     description: 'Absolute path to the .msi installer.'
-    value: ${{ steps.collect.outputs.msi_path }}
+    value: ${{ steps.msi.outputs.msi_path }}
   version:
     description: 'Normalized numeric version used for the MSI.'
     value: ${{ steps.version.outputs.version }}
@@ -129,7 +127,7 @@ runs:
         $wxs     = Join-Path $env:GITHUB_WORKSPACE 'installer\windows\stratum.wxs'
         $outDir  = Join-Path (Get-Location) 'build\msi'
         New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-        $msiOut  = Join-Path $outDir "STRATUM-$($env:APP_VERSION)-x64.msi"
+        $msiOut  = Join-Path $outDir "STRATUM-${{ inputs.variant }}-$($env:APP_VERSION)-x64.msi"
 
         # 1. Harvest the deployed payload into a component group.
         #    -srd suppress root dir, -scom/-sreg/-sfrag keep it lean,
@@ -161,29 +159,3 @@ runs:
         Write-Host "Built MSI: $msiOut"
         "msi_path=$msiOut" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-    # ------------------------------------------------------------------ #
-    # Resolve final artifact paths for the caller.
-    # ------------------------------------------------------------------ #
-    - name: Collect artifact paths
-      id: collect
-      shell: pwsh
-      working-directory: ${{ inputs.source-dir }}
-      run: |
-        $ErrorActionPreference = 'Stop'
-
-        $exe = Get-ChildItem -Path "${{ inputs.build-dir }}" -Recurse -Filter STRATUM.exe |
-               Where-Object { $_.FullName -notmatch '\\staging\\' } |
-               Select-Object -First 1
-        if (-not $exe) { Write-Error "STRATUM.exe not found"; exit 1 }
-
-        $nsis = Get-ChildItem -Path "${{ inputs.build-dir }}" -Recurse -Filter 'STRATUM-installer-*.exe' |
-                Select-Object -First 1
-        if (-not $nsis) { Write-Error "NSIS installer not found"; exit 1 }
-
-        "exe_path=$($exe.FullName)"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-        "nsis_path=$($nsis.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-        "msi_path=${{ steps.msi.outputs.msi_path }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
-        Write-Host "exe : $($exe.FullName)"
-        Write-Host "nsis: $($nsis.FullName)"
-        Write-Host "msi : ${{ steps.msi.outputs.msi_path }}"

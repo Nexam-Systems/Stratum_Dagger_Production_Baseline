@@ -54,9 +54,9 @@ ToolIndicatorPage {
                 Layout.fillWidth: true
                 text: qsTr("Analyze")
                 imageResource: "/qmlimages/Analyze.svg"
-                // STRATUM: hidden per operator UX spec. Flip to the upstream expression
-                // (QGroundControl.corePlugin.showAdvancedUI) to bring it back.
-                visible: false
+                // STRATUM: hidden in the client build; the developer build (STRATUM_DEV_BUILD)
+                // re-enables it for analysis/log work.
+                visible: QGroundControl.corePlugin.stratumDevBuild
                 onClicked: {
                     if (mainWindow.allowViewSwitch()) {
                         mainWindow.closeIndicatorDrawer()
@@ -70,16 +70,21 @@ ToolIndicatorPage {
                 objectName: "toolbar_viewConfigure"
                 implicitHeight: root._toolButtonHeight
                 Layout.fillWidth: true
-                text: qsTr("Configure Joystick")
+                text: QGroundControl.corePlugin.stratumDevBuild ? qsTr("Vehicle Setup") : qsTr("Configure Joystick")
                 imageResource: "/res/GearWithPaperPlane.svg"
                 // STRATUM: operators only need the joystick calibration page. Skip the
                 // full Vehicle Configuration tree and open the Joystick component
                 // directly (falls back to the summary page if the vehicle / autopilot
-                // plugin isn't ready yet).
+                // plugin isn't ready yet). The developer build opens the full Vehicle Setup
+                // (Parameters, Firmware, Sensors, ...) for full parameter access.
                 visible: true
                 onClicked: {
                     if (mainWindow.allowViewSwitch()) {
                         mainWindow.closeIndicatorDrawer()
+                        if (QGroundControl.corePlugin.stratumDevBuild) {
+                            mainWindow.showVehicleConfig()
+                            return
+                        }
                         var vehicle = globals.activeVehicle
                         if (vehicle && vehicle.autopilotPlugin &&
                             vehicle.autopilotPlugin.knownVehicleComponentAvailable(AutoPilotPlugin.KnownJoystickVehicleComponent)) {

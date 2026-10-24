@@ -43,6 +43,10 @@ jobs:
   build-windows:
     runs-on: windows-2022          # ships Visual Studio 2022 (v143)
     timeout-minutes: 120           # QGC is a large tree; first configure is slow
+    strategy:
+      fail-fast: false             # a dev failure must not cancel the client build
+      matrix:
+        variant: [client, dev]     # client = shipping UI; dev = operator-hidden UI re-enabled
 
     steps:
       - name: Checkout
@@ -92,6 +96,7 @@ jobs:
           "%QT_ROOT_DIR%\bin\qt-cmake.bat" -B build -G Ninja
           -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build_type || 'Release' }}
           -DQGC_BUILD_TESTING=OFF
+          -DSTRATUM_DEV_BUILD=${{ matrix.variant == 'dev' && 'ON' || 'OFF' }}
 
       - name: Build
         working-directory: qgroundcontrol
@@ -99,40 +104,24 @@ jobs:
         run: cmake --build build --parallel
 
       # The build succeeding IS the verification. Below deploys all Qt
-      # dependencies and packages both installer formats (NSIS .exe + .msi),
-      # then publishes the bare exe and both installers.
-      - name: Package (deploy + NSIS + MSI)
+      # dependencies and packages the variant MSI, then publishes it.
+      - name: Package (deploy + MSI)
         id: package
         uses: ./.github/actions/package-windows
         with:
           source-dir: qgroundcontrol
           build-dir: build
+          variant: ${{ matrix.variant }}
 
       - name: Compute safe artifact suffix
         id: names
         shell: bash
         run: echo "safe_ref=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload bare executable
-        uses: actions/upload-artifact@v4
-        with:
-          name: STRATUM-exe-${{ steps.names.outputs.safe_ref }}-${{ github.run_number }}
-          path: ${{ steps.package.outputs.exe-path }}
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload NSIS installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: STRATUM-installer-nsis-${{ steps.names.outputs.safe_ref }}-${{ github.run_number }}
-          path: ${{ steps.package.outputs.nsis-path }}
-          if-no-files-found: error
-          retention-days: 7
-
       - name: Upload MSI installer
         uses: actions/upload-artifact@v4
         with:
-          name: STRATUM-installer-msi-${{ steps.names.outputs.safe_ref }}-${{ github.run_number }}
+          name: STRATUM-${{ matrix.variant }}-msi-${{ steps.names.outputs.safe_ref }}-${{ github.run_number }}
           path: ${{ steps.package.outputs.msi-path }}
           if-no-files-found: error
           retention-days: 7
