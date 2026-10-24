@@ -89,14 +89,9 @@ ToolStripActionList {
             enabled:     !!QGroundControl.multiVehicleManager.activeVehicle
             onTriggered: _root._commandFlightMode(qsTr("Hold"))
         },
-        // STRATUM: Flight-mode picker (replaces the top-ribbon dropdown, which is
-        // now a read-only mode display). Opens a drop panel listing the whitelisted
-        // modes; each entry confirms then writes Vehicle.flightMode.
-        FlyViewFlightModeAction {
-            // STRATUM #42: gray the RTL (Safe Recovery/Return) and Abort entries when the gate says stop.
-            rtlAllowed:   !_root.rtlAbortGate || _root.rtlAbortGate.rtlAllowed
-            abortAllowed: !_root.rtlAbortGate || _root.rtlAbortGate.abortAllowed
-        },
+        // STRATUM KAN-21: the flight-mode picker was removed from the command strip.
+        // The mission panel now exposes explicit Manual and RTL (Safe Recovery) buttons
+        // alongside Land / Hold, so a combined mode dropdown is no longer needed.
         // Dagger: Abort flight mode (DO_SET_MODE sub=22), hold-to-confirm.
         GuidedActionAbort {
             visible: _root._stratumIsDagger

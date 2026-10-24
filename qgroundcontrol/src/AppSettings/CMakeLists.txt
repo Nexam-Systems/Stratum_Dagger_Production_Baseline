@@ -68,6 +68,7 @@ qt_add_qml_module(AppSettingsModule
         DebugWindow.qml
         GcsPositionStatus.qml
         HelpSettings.qml
+        JoystickSettings.qml
         LinkConfigurationManager.qml
         LogReplaySettings.qml
         MapProviderSettings.qml

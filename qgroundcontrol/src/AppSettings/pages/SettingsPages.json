@@ -45,6 +45,11 @@
             "pageDefinition": "CommLinks.SettingsUI.json"
         },
         {
+            "name": "Joystick",
+            "qml": "JoystickSettings.qml",
+            "icon": "qrc:/qmlimages/Joystick.png"
+        },
+        {
             "name": "App Logging",
             "qml": "LoggingSettings.qml",
             "icon": "qrc:/InstrumentValueIcons/conversation.svg",
