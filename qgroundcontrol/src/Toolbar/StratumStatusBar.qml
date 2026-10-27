@@ -37,6 +37,10 @@ Item {
     readonly property var  _facts:  vehicle ? vehicle.vehicle : null
     readonly property var  _gps:    vehicle ? vehicle.gps : null
     readonly property var  _batt:   (vehicle && vehicle.batteries && vehicle.batteries.count > 0) ? vehicle.batteries.get(0) : null
+    // STRATUM KAN-24: per-motor ESC telemetry. temperature is centi-celsius (raw/100 = °C),
+    // 32767 = no reading; online status is the shared info bitmask on ESC 0.
+    readonly property var  _escs:   (vehicle && vehicle.escs) ? vehicle.escs : null
+    readonly property int  _escOnlineBitmask: (_escs && _escs.count > 0) ? _escs.get(0).info.rawValue : 0
     readonly property bool _live:   !!vehicle && (!vehicle.vehicleLinkManager || !vehicle.vehicleLinkManager.communicationLost)
     readonly property var  _target: (pendingTarget && pendingTarget.isValid) ? pendingTarget : designatedTarget
 
@@ -104,6 +108,30 @@ Item {
         var mm = Math.floor(seconds / 60)
         var ss = Math.floor(seconds % 60)
         return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss
+    }
+
+    // STRATUM KAN-24: motor (ESC) temperature. A motor counts only when it is online AND
+    // reports a valid reading (raw != 32767). Raw fact value is centi-celsius.
+    function _motorOnline(i) {
+        return (_escOnlineBitmask & (1 << i)) !== 0
+    }
+    function _motorTempC(i) {
+        if (!_escs || i < 0 || i >= _escs.count || !_motorOnline(i))
+            return Number.NaN
+        var raw = Number(_escs.get(i).temperature.rawValue)
+        if (!isFinite(raw) || raw === 32767)
+            return Number.NaN
+        return raw / 100
+    }
+    function _avgMotorTempText() {
+        if (!_escs || _escs.count === 0)
+            return "--"
+        var sum = 0, n = 0
+        for (var i = 0; i < _escs.count; i++) {
+            var t = _motorTempC(i)
+            if (!isNaN(t)) { sum += t; n++ }
+        }
+        return n === 0 ? "--" : (Math.round(sum / n) + " \u00b0C")
     }
 
     function _num(fact) {
@@ -411,6 +439,18 @@ Item {
                 }
             }
 
+            // STRATUM KAN-24: average motor (ESC) temperature; click to see each motor.
+            Divider {}
+            Cell {
+                id: motTempCell
+                label: qsTr("MOT TEMP")
+                value: root._avgMotorTempText()
+                clickable: true
+                showChevron: true
+                minContentWidth: ScreenTools.defaultFontPixelWidth * 7
+                onCellClicked: mainWindow.showIndicatorDrawer(escTempDrawerComponent, motTempCell)
+            }
+
             Divider {}
             Cell { label: qsTr("HOME\u2192STDF"); value: root._dist(root._homeStandoffM); minContentWidth: ScreenTools.defaultFontPixelWidth * 7 }
             Divider {}
@@ -566,6 +606,39 @@ Item {
                 LabelledLabel { label: qsTr("Voltage:");  labelText: root._factText(root._batt ? root._batt.voltage : null, " V") }
                 LabelledLabel { label: qsTr("Current:");  labelText: root._factText(root._batt ? root._batt.current : null, " A") }
                 LabelledLabel { label: qsTr("Consumed:"); labelText: root._factText(root._batt ? root._batt.mahConsumed : null, " mAh", 0) }
+            }
+        }
+    }
+
+    // STRATUM KAN-24: per-motor ESC temperature drawer (opened from the MOT TEMP cell).
+    Component {
+        id: escTempDrawerComponent
+        ToolIndicatorPage {
+            showExpand: false
+            contentComponent: SettingsGroupLayout {
+                heading: qsTr("Motor Temperatures")
+
+                QGCLabel {
+                    visible: !root._escs || root._escs.count === 0
+                    text:    qsTr("No ESC telemetry")
+                }
+
+                Repeater {
+                    model: root._escs ? root._escs.count : 0
+                    LabelledLabel {
+                        label:     qsTr("Motor %1").arg(index + 1)
+                        labelText: {
+                            var t = root._motorTempC(index)
+                            return isNaN(t) ? qsTr("N/A") : (t.toFixed(1) + " \u00b0C")
+                        }
+                    }
+                }
+
+                LabelledLabel {
+                    visible:   root._escs && root._escs.count > 0
+                    label:     qsTr("Average:")
+                    labelText: root._avgMotorTempText()
+                }
             }
         }
     }
