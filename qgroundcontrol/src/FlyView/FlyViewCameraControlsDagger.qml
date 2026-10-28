@@ -237,7 +237,10 @@ Item {
         }
     }
 
-    // STRATUM #51: auto-stop the GCS recording 3 s after the vehicle enters Engagement.
+    // STRATUM #51: auto-stop the GCS recording 3 s after the vehicle enters Engagement,
+    // to finalize a valid MKV before the stream is lost on a committed terminal run.
+    // Leaving Engagement before the 3 s elapse (e.g. Abort/recovery) cancels the stop so
+    // the recording continues.
     Timer {
         id: engagementStopTimer
         interval: 3000
@@ -248,9 +251,11 @@ Item {
         target: root._activeVehicle
         ignoreUnknownSignals: true
         function onFlightModeChanged() {
-            if (root._activeVehicle && root._activeVehicle.flightMode === qsTr("Engagement")
-                    && QGroundControl.videoManager.recording) {
-                engagementStopTimer.restart()
+            var inEngagement = root._activeVehicle && root._activeVehicle.flightMode === qsTr("Engagement")
+            if (inEngagement && QGroundControl.videoManager.recording) {
+                engagementStopTimer.restart()   // committed run: finalize 3 s in
+            } else {
+                engagementStopTimer.stop()      // left Engagement (e.g. Abort): keep recording
             }
         }
     }
