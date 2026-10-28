@@ -24,10 +24,6 @@ Item {
 
     property bool _recActive: false
 
-    // STRATUM #51: GCS stream-recording state + the active vehicle (for the Engagement auto-stop).
-    property var           _activeVehicle: QGroundControl.multiVehicleManager.activeVehicle
-    readonly property bool _gcsRecording:  QGroundControl.videoManager.recording
-
     readonly property color _accent:    "#3DFFA6"
     readonly property color _accentDim: "#1FB97D"
     readonly property real  _btnHeight: ScreenTools.defaultFontPixelHeight * (compact ? 1.9 : 2.3)
@@ -182,23 +178,6 @@ Item {
             }
         }
 
-        // ---- GCS stream recording (STRATUM #51) ---------------------
-        // Records the live camera feed shown in STRATUM to Desktop\recording as an MKV.
-        // Distinct from the "● Rec" button above, which records to the camera's SD card.
-        QGCButton {
-            text: root._gcsRecording ? qsTr("⏹  Stop (GCS)") : qsTr("⬤  Record (GCS)")
-            implicitHeight: root._btnHeight
-            Layout.fillWidth: true
-            primary: root._gcsRecording
-            onClicked: {
-                if (QGroundControl.videoManager.recording) {
-                    QGroundControl.videoManager.stopRecording()
-                } else {
-                    QGroundControl.videoManager.startFlightRecording()
-                }
-            }
-        }
-
         // ---- Motion mode (Lock / Follow / FPV) ----------------------
         // Lock: hold earth-frame attitude (default here — prevents drift with no
         // vehicle attitude source). Follow: track drone yaw. FPV: mirror drone roll/pitch.
@@ -223,39 +202,6 @@ Item {
                 implicitHeight: root._btnHeight
                 Layout.fillWidth: true
                 onClicked: { if (root._send("mode-fpv"))    root.statusMessage(qsTr("Gimbal → FPV")) }
-            }
-        }
-    }
-
-    // STRATUM #51: single status notification on record start/stop (no popups).
-    Connections {
-        target: QGroundControl.videoManager
-        function onRecordingChanged() {
-            root.statusMessage(QGroundControl.videoManager.recording
-                ? qsTr("⬤ Recording started")
-                : qsTr("■ Recording saved to Desktop\\recording"))
-        }
-    }
-
-    // STRATUM #51: auto-stop the GCS recording 3 s after the vehicle enters Engagement,
-    // to finalize a valid MKV before the stream is lost on a committed terminal run.
-    // Leaving Engagement before the 3 s elapse (e.g. Abort/recovery) cancels the stop so
-    // the recording continues.
-    Timer {
-        id: engagementStopTimer
-        interval: 3000
-        repeat: false
-        onTriggered: if (QGroundControl.videoManager.recording) QGroundControl.videoManager.stopRecording()
-    }
-    Connections {
-        target: root._activeVehicle
-        ignoreUnknownSignals: true
-        function onFlightModeChanged() {
-            var inEngagement = root._activeVehicle && root._activeVehicle.flightMode === qsTr("Engagement")
-            if (inEngagement && QGroundControl.videoManager.recording) {
-                engagementStopTimer.restart()   // committed run: finalize 3 s in
-            } else {
-                engagementStopTimer.stop()      // left Engagement (e.g. Abort): keep recording
             }
         }
     }

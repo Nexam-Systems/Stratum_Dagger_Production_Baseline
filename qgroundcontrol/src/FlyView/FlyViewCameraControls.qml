@@ -47,6 +47,10 @@ Item {
     readonly property bool _feedIrActive: _irUrl !== "" && _vs.rtspUrl.rawValue === _irUrl
     readonly property bool _trackActive: QGroundControl.videoManager.c12TrackingActive
 
+    // STRATUM #51: GCS stream-recording state + active vehicle (for the Engagement auto-stop).
+    property var           _activeVehicle: QGroundControl.multiVehicleManager.activeVehicle
+    readonly property bool _gcsRecording:  QGroundControl.videoManager.recording
+
     property double _nowMs: Date.now()
 
     readonly property var _vehicleFacts: QGroundControl.multiVehicleManager.activeVehicle
@@ -471,6 +475,23 @@ Item {
             }
         }
 
+        // ---- GCS recording (STRATUM #51): record the live feed to Desktop\recording (MKV) ----
+        SectionLabel { text: qsTr("RECORDING"); visible: root.daggerMode }
+        QGCButton {
+            visible: root.daggerMode
+            Layout.fillWidth: true
+            implicitHeight: root._btnHeight
+            text: root._gcsRecording ? qsTr("⏹  Stop (GCS)") : qsTr("⬤  Record (GCS)")
+            primary: root._gcsRecording
+            onClicked: {
+                if (QGroundControl.videoManager.recording) {
+                    QGroundControl.videoManager.stopRecording()
+                } else {
+                    QGroundControl.videoManager.startFlightRecording()
+                }
+            }
+        }
+
         // ---- Tools: angles panel / target GPS / absolute angles ------------
         RowLayout {
             Layout.fillWidth: true
@@ -557,6 +578,38 @@ Item {
                         root.statusMessage(qsTr("Palette: %1").arg(model.get(index).text))
                     }
                 }
+            }
+        }
+    }
+
+    // STRATUM #51: single status notification on record start/stop (no popups).
+    Connections {
+        target: QGroundControl.videoManager
+        function onRecordingChanged() {
+            root.statusMessage(QGroundControl.videoManager.recording
+                ? qsTr("⬤ Recording started")
+                : qsTr("■ Recording saved to Desktop\\recording"))
+        }
+    }
+
+    // STRATUM #51: auto-stop the GCS recording 3 s after the vehicle enters Engagement,
+    // to finalize a valid MKV before the stream is lost on a committed terminal run.
+    // Leaving Engagement before the 3 s elapse (e.g. Abort/recovery) cancels it.
+    Timer {
+        id: engagementStopTimer
+        interval: 3000
+        repeat: false
+        onTriggered: if (QGroundControl.videoManager.recording) QGroundControl.videoManager.stopRecording()
+    }
+    Connections {
+        target: root._activeVehicle
+        ignoreUnknownSignals: true
+        function onFlightModeChanged() {
+            var inEngagement = root._activeVehicle && root._activeVehicle.flightMode === qsTr("Engagement")
+            if (inEngagement && QGroundControl.videoManager.recording) {
+                engagementStopTimer.restart()   // committed run: finalize 3 s in
+            } else {
+                engagementStopTimer.stop()      // left Engagement (e.g. Abort): keep recording
             }
         }
     }
