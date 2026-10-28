@@ -36,6 +36,7 @@
 #include <QtCore/QFutureWatcher>
 #include <QtCore/QPointer>
 #include <QtCore/QRunnable>
+#include <QtCore/QStandardPaths>
 #include <QtCore/QTimer>
 #include <QtCore/QUrl>
 #include <QtNetwork/QUdpSocket>
@@ -1124,6 +1125,48 @@ void VideoManager::startRecording(const QString &videoFile)
         }
         const QString videoFileName = videoFileNameTemplate.arg("");
         receiver->startRecording(videoFileName, fileFormat);
+    }
+}
+
+// STRATUM #51: GCS-side recording of the live stream to a fixed MKV under
+// Desktop/recording, independent of the user's video save path / format settings.
+// MKV is written incrementally so the file stays valid even on an abrupt stop. It
+// records the already-started "videoContent" receiver, which tees the record branch
+// off the live pipeline, so the preview keeps playing.
+void VideoManager::startFlightRecording()
+{
+    const QString desktop = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+    if (desktop.isEmpty()) {
+        QGC::showAppMessage(tr("Unable to record video. Desktop folder could not be located."));
+        return;
+    }
+
+    const QString dirPath = desktop + QStringLiteral("/recording");
+    QDir dir(dirPath);
+    if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+        QGC::showAppMessage(tr("Unable to create recording folder: %1").arg(dirPath));
+        return;
+    }
+
+    // Filesystem-safe timestamp (no ':'): Flight_YYYY-MM-DD_HH-MM-SS.mkv.
+    const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
+    const QString fileName = dirPath + QStringLiteral("/Flight_") + stamp + QStringLiteral(".mkv");
+
+    bool started = false;
+    for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
+        if (receiver->name() != QStringLiteral("videoContent")) {
+            continue;
+        }
+        if (!receiver->started()) {
+            qCDebug(VideoManagerLog) << "Video receiver is not ready.";
+            continue;
+        }
+        receiver->startRecording(fileName, VideoReceiver::FILE_FORMAT_MKV);
+        started = true;
+    }
+
+    if (!started) {
+        QGC::showAppMessage(tr("Unable to record video. No active video stream."));
     }
 }
 
