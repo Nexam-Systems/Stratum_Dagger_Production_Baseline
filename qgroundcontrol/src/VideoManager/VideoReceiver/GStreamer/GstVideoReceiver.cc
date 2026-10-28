@@ -478,7 +478,26 @@ void GstVideoReceiver::startRecording(const QString &videoFile, FILE_FORMAT form
 
     qCDebug(GstVideoReceiverLog) << "New video file:" << videoFile << _uri;
 
-    _fileSink = _makeFileSink(videoFile, format);
+    // STRATUM: detect the live codec so the file sink can insert the matching parser
+    // (h264parse/h265parse) and write codec config to the container. Without it an HEVC
+    // MKV has no CodecPrivate and plays green.
+    QString mediaType;
+    {
+        GstPad *valveSinkPad = gst_element_get_static_pad(_recorderValve, "sink");
+        if (valveSinkPad) {
+            GstCaps *caps = gst_pad_get_current_caps(valveSinkPad);
+            if (caps) {
+                const GstStructure *s = gst_caps_get_structure(caps, 0);
+                if (s) {
+                    mediaType = QString::fromUtf8(gst_structure_get_name(s));
+                }
+                gst_caps_unref(caps);
+            }
+            gst_clear_object(&valveSinkPad);
+        }
+    }
+
+    _fileSink = _makeFileSink(videoFile, format, mediaType);
     if (!_fileSink) {
         qCCritical(GstVideoReceiverLog) << "_makeFileSink() failed" << _uri;
         _dispatchSignal([this]() { emit onStartRecordingComplete(STATUS_FAIL); });
@@ -891,9 +910,10 @@ GstElement *GstVideoReceiver::_makeDecoder()
     return decoder;
 }
 
-GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMAT format)
+GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMAT format, const QString &mediaType)
 {
     GstElement *fileSink = nullptr;
+    GstElement *parser = nullptr;
     GstElement *mux = nullptr;
     GstElement *sink = nullptr;
     GstElement *bin = nullptr;
@@ -930,6 +950,18 @@ GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMA
                      "location", qPrintable(videoFile),
                      nullptr);
 
+        // STRATUM: re-parse the elementary stream so the muxer receives it as avc/hvc1
+        // (with codec_data) and writes the codec config to the container (H.264 SPS/PPS,
+        // H.265 VPS/SPS/PPS -> CodecPrivate). On GStreamer 1.28+ the source outputs
+        // byte-stream with no codec_data; without this parser the recorded H.265 MKV has
+        // no CodecPrivate and plays as a green screen on every player. If the codec is
+        // unknown or the parser is unavailable we fall back to the previous direct link.
+        if (mediaType == QLatin1String("video/x-h265")) {
+            parser = gst_element_factory_make("h265parse", nullptr);
+        } else if (mediaType == QLatin1String("video/x-h264")) {
+            parser = gst_element_factory_make("h264parse", nullptr);
+        }
+
         bin = gst_bin_new("sinkbin");
         if (!bin) {
             qCCritical(GstVideoReceiverLog) << "gst_bin_new('sinkbin') failed";
@@ -943,19 +975,40 @@ GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMA
         }
 
         // FIXME: pad handling is potentially leaking (and other similar places too!)
-        GstPad *pad = gst_element_request_pad(mux, padTemplate, nullptr, nullptr);
-        if (!pad) {
+        GstPad *muxPad = gst_element_request_pad(mux, padTemplate, nullptr, nullptr);
+        if (!muxPad) {
             qCCritical(GstVideoReceiverLog) << "gst_element_request_pad(mux) failed";
             break;
         }
 
-        gst_bin_add_many(GST_BIN(bin), mux, sink, nullptr);
+        if (parser) {
+            gst_bin_add_many(GST_BIN(bin), parser, mux, sink, nullptr);
+        } else {
+            gst_bin_add_many(GST_BIN(bin), mux, sink, nullptr);
+        }
 
         releaseElements = false;
 
-        GstPad *ghostpad = gst_ghost_pad_new("sink", pad);
+        // Ghost the bin sink from the parser input when present, otherwise from the mux pad.
+        GstPad *ghostTarget = muxPad;
+        if (parser) {
+            GstPad *parserSrc = gst_element_get_static_pad(parser, "src");
+            const bool linkOk = (parserSrc != nullptr) && (gst_pad_link(parserSrc, muxPad) == GST_PAD_LINK_OK);
+            gst_clear_object(&parserSrc);
+            if (!linkOk) {
+                qCCritical(GstVideoReceiverLog) << "Failed to link parser and mux";
+                gst_clear_object(&muxPad);
+                break;
+            }
+            ghostTarget = gst_element_get_static_pad(parser, "sink");
+        }
+
+        GstPad *ghostpad = gst_ghost_pad_new("sink", ghostTarget);
         (void) gst_element_add_pad(bin, ghostpad);
-        gst_clear_object(&pad);
+        if (parser) {
+            gst_clear_object(&ghostTarget);
+        }
+        gst_clear_object(&muxPad);
 
         if (!gst_element_link(mux, sink)) {
             qCCritical(GstVideoReceiverLog) << "gst_element_link() failed";
@@ -969,6 +1022,7 @@ GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMA
     if (releaseElements) {
         gst_clear_object(&sink);
         gst_clear_object(&mux);
+        gst_clear_object(&parser);
     }
 
     gst_clear_object(&bin);

@@ -81,7 +81,7 @@ private slots:
 private:
     GstElement *_makeSource(const QString &input);
     GstElement *_makeDecoder();
-    GstElement *_makeFileSink(const QString &videoFile, FILE_FORMAT format);
+    GstElement *_makeFileSink(const QString &videoFile, FILE_FORMAT format, const QString &mediaType = QString());
 
     void _onNewSourcePad(GstPad *pad);
     void _onNewDecoderPad(GstPad *pad);
