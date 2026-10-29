@@ -530,27 +530,33 @@ void GstVideoReceiver::startRecording(const QString &videoFile, FILE_FORMAT form
 
     GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline-with-filesink");
 
-    // Install a probe to drop buffers until the first keyframe, then offset timestamps so
-    // the file begins with a keyframe at t=0 and decoding can start immediately on playback.
-    // Prefer the encoder output (re-encode path): its first frame is an IDR with reliable
-    // keyframe flags. Otherwise use the parser output, falling back to the valve.
-    GstPad *probepad = _recordEncoder ? gst_element_get_static_pad(_recordEncoder, "src")
-                     : _recordParser  ? gst_element_get_static_pad(_recordParser, "src")
-                                      : gst_element_get_static_pad(_recorderValve, "src");
-    if (!probepad) {
-        qCCritical(GstVideoReceiverLog) << "gst_element_get_static_pad() failed" << _uri;
-        _dispatchSignal([this]() { emit onStartRecordingComplete(STATUS_FAIL); });
-        return;
-    }
+    _recordingOutput = videoFile;
 
-    _keyframeWatchId = gst_pad_add_probe(probepad, GST_PAD_PROBE_TYPE_BUFFER, _keyframeWatch, this, nullptr);
-    _keyframeWatchPad = probepad; // keep the ref so teardown removes from the same pad
+    if (_recordEncoder) {
+        // Re-encode path: the encoder emits an IDR first, so no keyframe wait is needed. A
+        // keyframe-wait probe here also set a large pad offset deep in the pipeline, which made
+        // matroskamux drop every frame (header-only, unplayable file). Let frames flow with
+        // their natural timestamps and signal the start directly.
+        _dispatchSignal([this]() { emit recordingStarted(recordingOutput()); });
+    } else {
+        // Stream-copy fallback: wait for the first keyframe and zero the start timestamp so the
+        // file begins on a keyframe at t=0 and decoding can start immediately on playback.
+        GstPad *probepad = _recordParser ? gst_element_get_static_pad(_recordParser, "src")
+                                         : gst_element_get_static_pad(_recorderValve, "src");
+        if (!probepad) {
+            qCCritical(GstVideoReceiverLog) << "gst_element_get_static_pad() failed" << _uri;
+            _dispatchSignal([this]() { emit onStartRecordingComplete(STATUS_FAIL); });
+            return;
+        }
+
+        _keyframeWatchId = gst_pad_add_probe(probepad, GST_PAD_PROBE_TYPE_BUFFER, _keyframeWatch, this, nullptr);
+        _keyframeWatchPad = probepad; // keep the ref so teardown removes from the same pad
+    }
 
     g_object_set(_recorderValve,
                  "drop", FALSE,
                  nullptr);
 
-    _recordingOutput = videoFile;
     _recording = true;
     qCDebug(GstVideoReceiverLog) << "Recording started" << _uri;
     _dispatchSignal([this]() {
