@@ -1780,7 +1780,16 @@ GstPadProbeReturn GstVideoReceiver::_keyframeWatch(GstPad *pad, GstPadProbeInfo 
     }
 
     GstBuffer *buf = gst_pad_probe_info_get_buffer(info);
-    if (GST_BUFFER_FLAG_IS_SET(buf, GST_BUFFER_FLAG_DELTA_UNIT)) {
+
+    // Prefer the upstream keyframe flag, but it is unreliable for byte-stream H.26x coming
+    // from parsebin, so confirm by inspecting the access unit's NAL types. Without this the
+    // recording can start mid-GOP (no IDR) and every player shows a green screen.
+    bool isKeyframe = !GST_BUFFER_FLAG_IS_SET(buf, GST_BUFFER_FLAG_DELTA_UNIT);
+    if (!isKeyframe) {
+        isKeyframe = _bufferContainsKeyframe(pad, buf);
+    }
+
+    if (!isKeyframe) {
         // wait for a keyframe
         return GST_PAD_PROBE_DROP;
     }
@@ -1794,6 +1803,72 @@ GstPadProbeReturn GstVideoReceiver::_keyframeWatch(GstPad *pad, GstPadProbeInfo 
     pThis->_dispatchSignal([pThis]() { emit pThis->recordingStarted(pThis->recordingOutput()); });
 
     return GST_PAD_PROBE_REMOVE;
+}
+
+bool GstVideoReceiver::_bufferContainsKeyframe(GstPad *pad, GstBuffer *buf)
+{
+    if (!pad || !buf) {
+        return false;
+    }
+
+    GstCaps *caps = gst_pad_get_current_caps(pad);
+    if (!caps) {
+        return false;
+    }
+
+    const GstStructure *s = gst_caps_get_structure(caps, 0);
+    const gchar *name = s ? gst_structure_get_name(s) : nullptr;
+    const gchar *streamFormat = s ? gst_structure_get_string(s, "stream-format") : nullptr;
+    const bool isH265 = (name != nullptr) && g_str_has_prefix(name, "video/x-h265");
+    const bool isH264 = (name != nullptr) && g_str_has_prefix(name, "video/x-h264");
+    // Only packetized (avc/hvc1, length-prefixed) access units are parsed here; that is what
+    // the muxer negotiates. Byte-stream falls back to the upstream flag handled by the caller.
+    const bool byteStream = (streamFormat != nullptr) && (g_strcmp0(streamFormat, "byte-stream") == 0);
+    gst_clear_caps(&caps);
+
+    if ((!isH265 && !isH264) || byteStream) {
+        return false;
+    }
+
+    GstMapInfo map;
+    if (!gst_buffer_map(buf, &map, GST_MAP_READ)) {
+        return false;
+    }
+
+    bool found = false;
+    gsize pos = 0;
+    while (pos + 5 <= map.size) {
+        const guint32 nalLen = (static_cast<guint32>(map.data[pos]) << 24)
+                             | (static_cast<guint32>(map.data[pos + 1]) << 16)
+                             | (static_cast<guint32>(map.data[pos + 2]) << 8)
+                             |  static_cast<guint32>(map.data[pos + 3]);
+        pos += 4;
+        if ((nalLen == 0) || (pos + nalLen > map.size)) {
+            break;
+        }
+
+        const guint8 hdr = map.data[pos];
+        if (isH265) {
+            const int type = (hdr >> 1) & 0x3F;
+            // 16-21: BLA/IDR/CRA; 32-34: VPS/SPS/PPS lead a keyframe access unit.
+            if (((type >= 16) && (type <= 21)) || (type == 32) || (type == 33) || (type == 34)) {
+                found = true;
+                break;
+            }
+        } else {
+            const int type = hdr & 0x1F;
+            // 5: IDR; 7/8: SPS/PPS lead a keyframe access unit.
+            if ((type == 5) || (type == 7) || (type == 8)) {
+                found = true;
+                break;
+            }
+        }
+
+        pos += nalLen;
+    }
+
+    gst_buffer_unmap(buf, &map);
+    return found;
 }
 
 GstVideoWorker::GstVideoWorker(QObject *parent)
