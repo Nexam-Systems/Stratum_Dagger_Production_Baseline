@@ -82,6 +82,10 @@ private:
     GstElement *_makeSource(const QString &input);
     GstElement *_makeDecoder();
     GstElement *_makeFileSink(const QString &videoFile, FILE_FORMAT format, const QString &mediaType = QString());
+    // Record branch that decodes then re-encodes to H.264 so the file is always self-contained and playable,
+    // even when the source RTSP stream has damaged references that a stream copy would preserve.
+    GstElement *_makeReencodeFileSink(const QString &videoFile, FILE_FORMAT format);
+    GstElement *_makeVideoEncoder();
 
     void _onNewSourcePad(GstPad *pad);
     void _onNewDecoderPad(GstPad *pad);
@@ -103,6 +107,7 @@ private:
 
     static gboolean _onBusMessage(GstBus *bus, GstMessage *message, gpointer user_data);
     static void _onNewPad(GstElement *element, GstPad *pad, gpointer data);
+    static void _onRecordDecodePad(GstElement *element, GstPad *pad, gpointer data);
     static void _wrapWithGhostPad(GstElement *element, GstPad *pad, gpointer data);
     static void _linkPad(GstElement *element, GstPad *pad, gpointer data);
     static gboolean _padProbe(GstElement *element, GstPad *pad, gpointer user_data);
@@ -132,6 +137,8 @@ private:
     gulong _keyframeWatchId = 0;
     GstPad *_keyframeWatchPad = nullptr;  // ref-held: the pad the keyframe-wait probe is installed on
     GstElement *_recordParser = nullptr; // record-branch parser (owned by the _fileSink bin)
+    GstElement *_recordEncoder = nullptr; // record-branch H.264 encoder (owned by the _fileSink bin)
+    GstElement *_recordConvert = nullptr; // videoconvert the record decodebin links into (owned by the _fileSink bin)
     bool _recordingStopRequested = false;
 
     QString _decoderName;
