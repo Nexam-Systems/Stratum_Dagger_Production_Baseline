@@ -128,6 +128,8 @@ private:
     gulong _eosProbeId = 0;
     GstPad *_eosProbePad = nullptr;  // ref-held: probe install pad, kept so removal targets the right pad regardless of _decoder lifecycle
     gulong _keyframeWatchId = 0;
+    GstPad *_keyframeWatchPad = nullptr;  // ref-held: the pad the keyframe-wait probe is installed on
+    GstElement *_recordParser = nullptr; // record-branch parser (owned by the _fileSink bin)
     bool _recordingStopRequested = false;
 
     QString _decoderName;

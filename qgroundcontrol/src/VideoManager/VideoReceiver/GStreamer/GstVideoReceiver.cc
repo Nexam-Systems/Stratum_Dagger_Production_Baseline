@@ -523,7 +523,13 @@ void GstVideoReceiver::startRecording(const QString &videoFile, FILE_FORMAT form
     // Install a probe on the recording branch to drop buffers until we hit our first keyframe
     // When we hit our first keyframe, we can offset the timestamps appropriately according to the first keyframe time
     // This will ensure the first frame is a keyframe at t=0, and decoding can begin immediately on playback
-    GstPad *probepad = gst_element_get_static_pad(_recorderValve, "src");
+    // Install a probe to drop buffers until the first keyframe, then offset timestamps so
+    // the file begins with a keyframe at t=0 and decoding can start immediately on playback.
+    // Use the parser output (correct keyframe flags) when present: parsebin's byte-stream
+    // buffers don't reliably flag keyframes, which made recording start mid-GOP with no IDR
+    // (undecodable -> green). Fall back to the valve if there is no parser.
+    GstPad *probepad = _recordParser ? gst_element_get_static_pad(_recordParser, "src")
+                                     : gst_element_get_static_pad(_recorderValve, "src");
     if (!probepad) {
         qCCritical(GstVideoReceiverLog) << "gst_element_get_static_pad() failed" << _uri;
         _dispatchSignal([this]() { emit onStartRecordingComplete(STATUS_FAIL); });
@@ -531,7 +537,7 @@ void GstVideoReceiver::startRecording(const QString &videoFile, FILE_FORMAT form
     }
 
     _keyframeWatchId = gst_pad_add_probe(probepad, GST_PAD_PROBE_TYPE_BUFFER, _keyframeWatch, this, nullptr);
-    gst_clear_object(&probepad);
+    _keyframeWatchPad = probepad; // keep the ref so teardown removes from the same pad
 
     g_object_set(_recorderValve,
                  "drop", FALSE,
@@ -918,6 +924,7 @@ GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMA
     GstElement *sink = nullptr;
     GstElement *bin = nullptr;
     bool releaseElements = true;
+    _recordParser = nullptr;
 
     do {
         if (!isValidFileFormat(format)) {
@@ -1017,6 +1024,7 @@ GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMA
 
         fileSink = bin;
         bin = nullptr;
+        _recordParser = parser; // valid while the returned bin lives; cleared on stop
     } while(0);
 
     if (releaseElements) {
@@ -1410,19 +1418,18 @@ void GstVideoReceiver::_shutdownDecodingBranch()
 
 void GstVideoReceiver::_shutdownRecordingBranch()
 {
-    if (_keyframeWatchId != 0 && _recorderValve) {
-        GstPad *probepad = gst_element_get_static_pad(_recorderValve, "src");
-        if (probepad) {
-            gst_pad_remove_probe(probepad, _keyframeWatchId);
-            gst_clear_object(&probepad);
-        }
+    if (_keyframeWatchId != 0 && _keyframeWatchPad) {
+        // Remove from the exact pad the probe was installed on (parser src or valve src).
+        gst_pad_remove_probe(_keyframeWatchPad, _keyframeWatchId);
         _keyframeWatchId = 0;
     }
+    gst_clear_object(&_keyframeWatchPad);
 
     gst_bin_remove(GST_BIN(_pipeline), _fileSink);
     gst_element_set_state(_fileSink, GST_STATE_NULL);
     (void) gst_element_get_state(_fileSink, nullptr, nullptr, GST_CLOCK_TIME_NONE);
     gst_clear_object(&_fileSink);
+    _recordParser = nullptr; // was owned by the now-destroyed _fileSink bin
 
     _removingRecorder = false;
 
