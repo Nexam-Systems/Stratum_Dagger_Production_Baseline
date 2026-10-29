@@ -20,6 +20,7 @@
 #include "QGCLoggingCategory.h"
 
 #include <QtCore/QDateTime>
+#include <QtCore/QStringList>
 #include <QtCore/QUrl>
 #include <QtQuick/QQuickItem>
 
@@ -1045,34 +1046,70 @@ GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMA
     return fileSink;
 }
 
-GstElement *GstVideoReceiver::_makeVideoEncoder()
+GstElement *GstVideoReceiver::_makeVideoEncoder(QString *parserFactory)
 {
-    // Prefer a hardware H.264 encoder (near-zero CPU); fall back to software x264enc.
-    static const char *const kEncoders[] = { "nvh264enc", "qsvh264enc", "mfh264enc", "d3d11h264enc", "x264enc", nullptr };
+    // Discover any available H.264 (preferred) or H.265 video encoder in this GStreamer build
+    // rather than guessing element names — the bundled plugin set varies between machines.
+    GList *factories = gst_element_factory_list_get_elements(GST_ELEMENT_FACTORY_TYPE_VIDEO_ENCODER, GST_RANK_NONE);
 
-    for (int i = 0; kEncoders[i] != nullptr; ++i) {
-        GstElement *encoder = gst_element_factory_make(kEncoders[i], nullptr);
-        if (!encoder) {
-            continue;
-        }
+    const struct { const char *media; const char *parser; } wanted[] = {
+        { "video/x-h264", "h264parse" },
+        { "video/x-h265", "h265parse" },
+    };
 
-        if (g_strcmp0(kEncoders[i], "x264enc") == 0) {
-            gst_util_set_object_arg(G_OBJECT(encoder), "speed-preset", "superfast");
-            gst_util_set_object_arg(G_OBJECT(encoder), "tune", "zerolatency");
-        }
-        // ~1 keyframe/sec at 30fps so playback can start quickly and seeking works.
-        if (g_object_class_find_property(G_OBJECT_GET_CLASS(encoder), "key-int-max")) {
-            g_object_set(encoder, "key-int-max", 30, nullptr);
-        } else if (g_object_class_find_property(G_OBJECT_GET_CLASS(encoder), "gop-size")) {
-            g_object_set(encoder, "gop-size", 30, nullptr);
-        }
+    GstElement *encoder = nullptr;
+    const char *parser = nullptr;
 
-        qCDebug(GstVideoReceiverLog) << "Record encoder:" << kEncoders[i] << _uri;
-        return encoder;
+    for (size_t w = 0; (w < G_N_ELEMENTS(wanted)) && !encoder; ++w) {
+        GstCaps *caps = gst_caps_new_empty_simple(wanted[w].media);
+        for (GList *l = factories; l != nullptr; l = l->next) {
+            GstElementFactory *factory = GST_ELEMENT_FACTORY(l->data);
+            if (!gst_element_factory_can_src_any_caps(factory, caps)) {
+                continue;
+            }
+            encoder = gst_element_factory_create(factory, nullptr);
+            if (!encoder) {
+                continue;
+            }
+            parser = wanted[w].parser;
+            qCDebug(GstVideoReceiverLog) << "Record encoder:" << GST_OBJECT_NAME(factory) << wanted[w].media << _uri;
+            break;
+        }
+        gst_caps_unref(caps);
     }
 
-    qCCritical(GstVideoReceiverLog) << "No H.264 encoder available for re-encode recording" << _uri;
-    return nullptr;
+    if (!encoder) {
+        // Log what encoders DO exist so a missing-codec build is diagnosable from the field.
+        QStringList names;
+        for (GList *l = factories; l != nullptr; l = l->next) {
+            names << QString::fromUtf8(GST_OBJECT_NAME(GST_ELEMENT_FACTORY(l->data)));
+        }
+        qCCritical(GstVideoReceiverLog) << "No H.264/H.265 encoder available for re-encode recording." << _uri
+                                        << "Available video encoders:" << (names.isEmpty() ? QStringLiteral("<none>") : names.join(QStringLiteral(", ")));
+        gst_plugin_feature_list_free(factories);
+        return nullptr;
+    }
+
+    gst_plugin_feature_list_free(factories);
+
+    if (parserFactory) {
+        *parserFactory = QString::fromUtf8(parser);
+    }
+
+    GObjectClass *klass = G_OBJECT_GET_CLASS(encoder);
+    // ~1 keyframe/sec at 30fps so playback starts quickly and seeking works.
+    if (g_object_class_find_property(klass, "key-int-max")) {
+        g_object_set(encoder, "key-int-max", 30, nullptr);
+    } else if (g_object_class_find_property(klass, "gop-size")) {
+        g_object_set(encoder, "gop-size", 30, nullptr);
+    }
+    // x264enc: low-latency preset with no B-frames for easy decode.
+    if (g_strcmp0(G_OBJECT_TYPE_NAME(encoder), "GstX264Enc") == 0) {
+        gst_util_set_object_arg(G_OBJECT(encoder), "speed-preset", "superfast");
+        gst_util_set_object_arg(G_OBJECT(encoder), "tune", "zerolatency");
+    }
+
+    return encoder;
 }
 
 void GstVideoReceiver::_onRecordDecodePad(GstElement * /*element*/, GstPad *pad, gpointer data)
@@ -1120,8 +1157,9 @@ GstElement *GstVideoReceiver::_makeReencodeFileSink(const QString &videoFile, FI
 
         decode = gst_element_factory_make("decodebin", nullptr);
         convert = gst_element_factory_make("videoconvert", nullptr);
-        encoder = _makeVideoEncoder();
-        parser = gst_element_factory_make("h264parse", nullptr);
+        QString parserFactory;
+        encoder = _makeVideoEncoder(&parserFactory);
+        parser = encoder ? gst_element_factory_make(qPrintable(parserFactory), nullptr) : nullptr;
         mux = gst_element_factory_make(_kFileMux[format], nullptr);
         sink = gst_element_factory_make("filesink", nullptr);
         if (!decode || !convert || !encoder || !parser || !mux || !sink) {

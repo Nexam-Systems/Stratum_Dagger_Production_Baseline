@@ -85,7 +85,7 @@ private:
     // Record branch that decodes then re-encodes to H.264 so the file is always self-contained and playable,
     // even when the source RTSP stream has damaged references that a stream copy would preserve.
     GstElement *_makeReencodeFileSink(const QString &videoFile, FILE_FORMAT format);
-    GstElement *_makeVideoEncoder();
+    GstElement *_makeVideoEncoder(QString *parserFactory);
 
     void _onNewSourcePad(GstPad *pad);
     void _onNewDecoderPad(GstPad *pad);
