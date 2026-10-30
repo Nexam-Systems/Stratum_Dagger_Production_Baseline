@@ -47,8 +47,7 @@ Item {
     readonly property bool _feedIrActive: _irUrl !== "" && _vs.rtspUrl.rawValue === _irUrl
     readonly property bool _trackActive: QGroundControl.videoManager.c12TrackingActive
 
-    // STRATUM #51: GCS stream-recording state + active vehicle (for the Engagement auto-stop).
-    property var           _activeVehicle: QGroundControl.multiVehicleManager.activeVehicle
+    // STRATUM #51: GCS stream-recording state (drives the Record/Stop button).
     readonly property bool _gcsRecording:  QGroundControl.videoManager.recording
 
     property double _nowMs: Date.now()
@@ -589,28 +588,6 @@ Item {
             root.statusMessage(QGroundControl.videoManager.recording
                 ? qsTr("⬤ Recording started")
                 : qsTr("■ Recording saved to Desktop\\recording"))
-        }
-    }
-
-    // STRATUM #51: auto-stop the GCS recording 3 s after the vehicle enters Engagement,
-    // to finalize a valid MKV before the stream is lost on a committed terminal run.
-    // Leaving Engagement before the 3 s elapse (e.g. Abort/recovery) cancels it.
-    Timer {
-        id: engagementStopTimer
-        interval: 3000
-        repeat: false
-        onTriggered: if (QGroundControl.videoManager.recording) QGroundControl.videoManager.stopRecording()
-    }
-    Connections {
-        target: root._activeVehicle
-        ignoreUnknownSignals: true
-        function onFlightModeChanged() {
-            var inEngagement = root._activeVehicle && root._activeVehicle.flightMode === qsTr("Engagement")
-            if (inEngagement && QGroundControl.videoManager.recording) {
-                engagementStopTimer.restart()   // committed run: finalize 3 s in
-            } else {
-                engagementStopTimer.stop()      // left Engagement (e.g. Abort): keep recording
-            }
         }
     }
 }
