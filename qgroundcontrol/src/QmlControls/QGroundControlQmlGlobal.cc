@@ -325,6 +325,47 @@ void QGroundControlQmlGlobal::testAudioOutput()
     AudioOutput::instance()->testAudioOutput();
 }
 
+// --- STRATUM #52 TEMPORARY voice tuning (removed once values are fixed) ---
+QStringList QGroundControlQmlGlobal::availableVoiceNames()
+{
+    return AudioOutput::instance()->availableVoiceNames();
+}
+
+void QGroundControlQmlGlobal::setVoicePitch(double pitch)
+{
+    AudioOutput::instance()->setVoicePitch(pitch);
+}
+
+void QGroundControlQmlGlobal::setVoiceRate(double rate)
+{
+    AudioOutput::instance()->setVoiceRate(rate);
+}
+
+void QGroundControlQmlGlobal::setVoiceName(const QString &name)
+{
+    AudioOutput::instance()->setVoiceByName(name);
+}
+
+double QGroundControlQmlGlobal::voicePitch()
+{
+    return AudioOutput::instance()->voicePitch();
+}
+
+double QGroundControlQmlGlobal::voiceRate()
+{
+    return AudioOutput::instance()->voiceRate();
+}
+
+QString QGroundControlQmlGlobal::voiceName()
+{
+    return AudioOutput::instance()->currentVoiceName();
+}
+
+void QGroundControlQmlGlobal::sayVoiceTest(const QString &text)
+{
+    AudioOutput::instance()->say(text);
+}
+
 void QGroundControlQmlGlobal::copyToClipboard(const QString& text)
 {
     QGuiApplication::clipboard()->setText(text);

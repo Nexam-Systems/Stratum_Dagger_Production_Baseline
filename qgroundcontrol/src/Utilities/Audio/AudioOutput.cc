@@ -157,18 +157,148 @@ void AudioOutput::_applyEngineSettings()
         return;
     }
 
-    const QLocale defaultLocale("en_US");
-    if (_engine->availableLocales().contains(defaultLocale)) {
-        _engine->setLocale(defaultLocale);
+    bool voiceSet = false;
+
+    // STRATUM #52: honor an explicit voice override from the temporary tuning UI first.
+    if (!_voiceNameOverride.isEmpty()) {
+        voiceSet = _selectVoiceByName(_voiceNameOverride);
     }
 
-    // Pin an explicit voice so output doesn't depend on the engine's per-OS default.
-    const QList<QVoice> voices = _engine->availableVoices();
-    if (!voices.isEmpty()) {
-        _engine->setVoice(voices.constFirst());
+    if (!voiceSet) {
+        // Auto: JARVIS-style calm, refined BRITISH male voice. Prefer a UK English locale
+        // (en_GB) for the accent, falling back to US English. (We can only use voices
+        // installed on the OS -- there is no literal "Paul Bettany" voice.)
+        const QLocale ukLocale(QLocale::English, QLocale::UnitedKingdom);
+        const QLocale usLocale(QLocale::English, QLocale::UnitedStates);
+        const QList<QLocale> availableLocales = _engine->availableLocales();
+        if (availableLocales.contains(ukLocale)) {
+            _engine->setLocale(ukLocale);
+        } else if (availableLocales.contains(usLocale)) {
+            _engine->setLocale(usLocale);
+        }
+
+        // British male voices first (JARVIS accent), then natural US male voices, then any
+        // male-gender voice, then the first available. Names are inherently male so they
+        // are matched regardless of the (often "Unknown") gender metadata.
+        const QList<QVoice> voices = _engine->availableVoices();
+        if (!voices.isEmpty()) {
+            static const char *const kPreferredMaleNames[] = {
+                "Ryan", "Thomas", "George", "Daniel", "Oliver",
+                "Guy", "Christopher", "Eric", "Steffan", "Mark", "David"
+            };
+
+            QVoice chosen = voices.constFirst();
+            bool found = false;
+
+            for (const char *name : kPreferredMaleNames) {
+                for (const QVoice &voice : voices) {
+                    if (voice.name().contains(QLatin1String(name), Qt::CaseInsensitive)) {
+                        chosen = voice;
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) {
+                    break;
+                }
+            }
+
+            if (!found) {
+                for (const QVoice &voice : voices) {
+                    if (voice.gender() == QVoice::Male) {
+                        chosen = voice;
+                        break;
+                    }
+                }
+            }
+
+            _engine->setVoice(chosen);
+        }
     }
+
+    // STRATUM #52: pitch/rate styling (live-overridable by the temporary tuning UI).
+    // Range for both is -1.0 .. 1.0 (0.0 = engine default).
+    _engine->setPitch(_pitch);
+    _engine->setRate(_rate);
+
+    qCDebug(AudioOutputLog) << "AudioOutput voice:" << _engine->voice().name()
+                            << "pitch:" << _pitch << "rate:" << _rate;
 
     _speakCapable = _engine->engineCapabilities().testFlag(QTextToSpeech::Capability::Speak);
+}
+
+bool AudioOutput::_selectVoiceByName(const QString &name)
+{
+    if (!_engine || name.isEmpty()) {
+        return false;
+    }
+
+    const QList<QLocale> locales = _engine->availableLocales();
+    for (const QLocale &locale : locales) {
+        _engine->setLocale(locale);
+        const QList<QVoice> voices = _engine->availableVoices();
+        for (const QVoice &voice : voices) {
+            if (voice.name().contains(name, Qt::CaseInsensitive)) {
+                _engine->setVoice(voice);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+QStringList AudioOutput::availableVoiceNames()
+{
+    QStringList names;
+    if (!_engine) {
+        return names;
+    }
+
+    // Enumerating voices is per-locale, so sweep every locale and restore the engine.
+    const QLocale savedLocale = _engine->locale();
+    const QVoice savedVoice = _engine->voice();
+    const QList<QLocale> locales = _engine->availableLocales();
+    for (const QLocale &locale : locales) {
+        _engine->setLocale(locale);
+        const QList<QVoice> voices = _engine->availableVoices();
+        for (const QVoice &voice : voices) {
+            if (!names.contains(voice.name())) {
+                names.append(voice.name());
+            }
+        }
+    }
+    _engine->setLocale(savedLocale);
+    _engine->setVoice(savedVoice);
+
+    names.sort(Qt::CaseInsensitive);
+    return names;
+}
+
+void AudioOutput::setVoicePitch(double pitch)
+{
+    _pitch = std::clamp(pitch, -1.0, 1.0);
+    if (_engine) {
+        _engine->setPitch(_pitch);
+    }
+}
+
+void AudioOutput::setVoiceRate(double rate)
+{
+    _rate = std::clamp(rate, -1.0, 1.0);
+    if (_engine) {
+        _engine->setRate(_rate);
+    }
+}
+
+void AudioOutput::setVoiceByName(const QString &name)
+{
+    _voiceNameOverride = name;
+    _applyEngineSettings();
+}
+
+QString AudioOutput::currentVoiceName() const
+{
+    return _engine ? _engine->voice().name() : QString();
 }
 
 void AudioOutput::_setVolume()
