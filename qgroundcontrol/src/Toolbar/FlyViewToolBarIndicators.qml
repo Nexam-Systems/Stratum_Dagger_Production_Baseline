@@ -28,7 +28,7 @@ Item {
                 anchors.top:        parent.top
                 anchors.bottom:     parent.bottom
                 source:             modelData
-                visible:            item.showIndicator
+                visible:            item && item.showIndicator
             }
         }
 
@@ -40,7 +40,7 @@ Item {
                 anchors.top:        parent.top
                 anchors.bottom:     parent.bottom
                 source:             modelData
-                visible:            item.showIndicator
+                visible:            item && item.showIndicator
             }
         }
 
@@ -56,10 +56,10 @@ Item {
             QGCLabel {
                 id:                 wordmarkLabel
                 anchors.centerIn:   parent
-                text:               "STRATUM"
+                text:               "STRATUM\n" + QGroundControl.qgcVersion
                 color:              ribbonTextColor
                 font.bold:          true
-                font.pointSize:     ScreenTools.mediumFontPointSize
+                font.pointSize:     ScreenTools.smallFontPointSize
                 font.letterSpacing: 2
             }
 

@@ -158,6 +158,9 @@ void VehicleFactGroup::_handleAltitude(const mavlink_message_t &message)
     _altitudeMessageAvailable = true;
     altitudeRelative()->setRawValue(altitude.altitude_relative);
     altitudeAMSL()->setRawValue(altitude.altitude_amsl);
+    _altitudeTimestampMs = std::isfinite(altitude.altitude_relative) && std::isfinite(altitude.altitude_amsl)
+                           ? QDateTime::currentMSecsSinceEpoch() : 0;
+    emit altitudeUpdated();
 
     _setTelemetryAvailable(true);
 }
@@ -218,6 +221,9 @@ void VehicleFactGroup::_handleVfrHud(const mavlink_message_t &message)
     airSpeed()->setRawValue(qIsNaN(vfrHud.airspeed) ? 0 : vfrHud.airspeed);
     groundSpeed()->setRawValue(qIsNaN(vfrHud.groundspeed) ? 0 : vfrHud.groundspeed);
     climbRate()->setRawValue(qIsNaN(vfrHud.climb) ? 0 : vfrHud.climb);
+    _motionTimestampMs = std::isfinite(vfrHud.groundspeed) && std::isfinite(vfrHud.climb)
+                        ? QDateTime::currentMSecsSinceEpoch() : 0;
+    emit motionUpdated();
     throttlePct()->setRawValue(static_cast<int16_t>(vfrHud.throttle));
     if (qIsNaN(_altitudeTuningOffset)) {
         _altitudeTuningOffset = vfrHud.alt;

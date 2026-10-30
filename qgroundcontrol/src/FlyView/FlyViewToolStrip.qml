@@ -47,6 +47,7 @@ ToolStrip {
     signal displayPreFlightChecklist
     signal defineAOP
     signal setStandoff    // STRATUM: forwarded to FlyViewWidgetLayer's standoff panel
+    signal fetchCameraTarget
 
     FlyViewToolStripActionList {
         id: flyViewToolStripActionList
@@ -57,6 +58,7 @@ ToolStrip {
         onDisplayPreFlightChecklist: _root.displayPreFlightChecklist()
         onDefineAOP:                 _root.defineAOP()
         onSetStandoff:               _root.setStandoff()
+        onFetchCameraTarget:         _root.fetchCameraTarget()
     }
 
     model: flyViewToolStripActionList.model

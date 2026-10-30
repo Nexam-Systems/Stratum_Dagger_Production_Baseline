@@ -11,8 +11,10 @@ ToolIndicatorPage {
     property real _toolButtonHeight: ScreenTools.defaultFontPixelHeight * 3
 
     contentComponent: Component {
+        // STRATUM: single-column (vertical) list of view actions rather than the
+        // upstream two-across grid, so the menu reads as a stacked list.
         GridLayout {
-            columns: 2
+            columns: 1
             columnSpacing: ScreenTools.defaultFontPixelWidth
             rowSpacing: columnSpacing
 
@@ -20,7 +22,7 @@ ToolIndicatorPage {
                 objectName: "toolbar_viewFly"
                 implicitHeight: root._toolButtonHeight
                 Layout.fillWidth: true
-                text: qsTr("Fly")
+                text: qsTr("Mission Control")
                 imageResource: "/res/FlyingPaperPlane.svg"
                 onClicked: {
                     if (mainWindow.allowViewSwitch()) {
@@ -54,9 +56,9 @@ ToolIndicatorPage {
                 Layout.fillWidth: true
                 text: qsTr("Analyze")
                 imageResource: "/qmlimages/Analyze.svg"
-                // STRATUM: hidden per operator UX spec. Flip to the upstream expression
-                // (QGroundControl.corePlugin.showAdvancedUI) to bring it back.
-                visible: false
+                // STRATUM: hidden in the client build; the developer build (STRATUM_DEV_BUILD)
+                // re-enables it for analysis/log work.
+                visible: QGroundControl.corePlugin.stratumDevBuild
                 onClicked: {
                     if (mainWindow.allowViewSwitch()) {
                         mainWindow.closeIndicatorDrawer()
@@ -70,23 +72,18 @@ ToolIndicatorPage {
                 objectName: "toolbar_viewConfigure"
                 implicitHeight: root._toolButtonHeight
                 Layout.fillWidth: true
-                text: qsTr("Configure Joystick")
+                text: qsTr("Vehicle Setup")
                 imageResource: "/res/GearWithPaperPlane.svg"
-                // STRATUM: operators only need the joystick calibration page. Skip the
-                // full Vehicle Configuration tree and open the Joystick component
-                // directly (falls back to the summary page if the vehicle / autopilot
-                // plugin isn't ready yet).
-                visible: true
+                // STRATUM: joystick calibration now lives on the Settings "Joystick"
+                // page (reachable in both builds), so the standalone "Configure
+                // Joystick" popup entry is gone. The developer build keeps a direct
+                // Vehicle Setup shortcut (Parameters, Firmware, Sensors, ...); the
+                // client build has no vehicle-setup entry in this menu.
+                visible: QGroundControl.corePlugin.stratumDevBuild
                 onClicked: {
                     if (mainWindow.allowViewSwitch()) {
                         mainWindow.closeIndicatorDrawer()
-                        var vehicle = globals.activeVehicle
-                        if (vehicle && vehicle.autopilotPlugin &&
-                            vehicle.autopilotPlugin.knownVehicleComponentAvailable(AutoPilotPlugin.KnownJoystickVehicleComponent)) {
-                            mainWindow.showKnownVehicleComponentConfigPage(AutoPilotPlugin.KnownJoystickVehicleComponent)
-                        } else {
-                            mainWindow.showVehicleConfig()
-                        }
+                        mainWindow.showVehicleConfig()
                     }
                 }
             }
@@ -121,64 +118,6 @@ ToolIndicatorPage {
                         // mission / pending parameter / active connection checks
                         // run, matching the desktop window-close behavior.
                         mainWindow.close()
-                    }
-                }
-            }
-
-            ColumnLayout {
-                id: versionColumnLayout
-                Layout.fillWidth: true
-                Layout.columnSpan: 2
-                spacing: 0
-
-                QGCLabel {
-                    id: versionLabel
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
-                    text: qsTr("%1 Version").arg(QGroundControl.appName)
-                    font.pointSize: ScreenTools.smallFontPointSize
-                    wrapMode: QGCLabel.WordWrap
-                }
-
-                QGCLabel {
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
-                    text: QGroundControl.qgcVersion
-                    font.pointSize: ScreenTools.smallFontPointSize
-                    wrapMode: QGCLabel.WrapAnywhere
-                }
-
-                QGCLabel {
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
-                    text: QGroundControl.qgcAppDate
-                    font.pointSize: ScreenTools.smallFontPointSize
-                    wrapMode: QGCLabel.WrapAnywhere
-                    visible: QGroundControl.qgcDailyBuild
-
-                    QGCMouseArea {
-                        anchors.topMargin: -(parent.y - versionLabel.y)
-                        anchors.fill: parent
-
-                        onClicked: (mouse) => {
-                            if (mouse.modifiers & Qt.ControlModifier) {
-                                QGroundControl.corePlugin.showTouchAreas = !QGroundControl.corePlugin.showTouchAreas
-                                showTouchAreasNotification.open()
-                            } else if (ScreenTools.isMobile || mouse.modifiers & Qt.ShiftModifier) {
-                                mainWindow.closeIndicatorDrawer()
-                                if (!QGroundControl.corePlugin.showAdvancedUI) {
-                                    advancedModeOnConfirmation.open()
-                                } else {
-                                    advancedModeOffConfirmation.open()
-                                }
-                            }
-                        }
-
-                        // This allows you to change this on mobile
-                        onPressAndHold: {
-                            QGroundControl.corePlugin.showTouchAreas = !QGroundControl.corePlugin.showTouchAreas
-                            showTouchAreasNotification.open()
-                        }
                     }
                 }
             }

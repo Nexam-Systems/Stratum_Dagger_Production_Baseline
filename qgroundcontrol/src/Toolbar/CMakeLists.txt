@@ -5,6 +5,7 @@ qt_add_qml_module(ToolbarModule
     VERSION 1.0
     RESOURCE_PREFIX /qml
     QML_FILES
+        FlightTelemetryHeader.qml
         AdminSettingsDialog.qml
         ArmedIndicator.qml
         BatteryIndicator.qml
@@ -32,6 +33,8 @@ qt_add_qml_module(ToolbarModule
         RTKGPSIndicator.qml
         SelectViewDropdown.qml
         SignalStrength.qml
+        StratumMissionState.qml
+        StratumStatusBar.qml
         TelemetryRSSIIndicator.qml
         VehicleGPSIndicator.qml
         VehicleMessageList.qml

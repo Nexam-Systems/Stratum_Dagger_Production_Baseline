@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 
 import QGroundControl
@@ -12,7 +11,7 @@ import QGroundControl.Controls
 //   * TV / IR feed select
 //   * Pan / Tilt cross (arrow glyphs, hold-to-move -> stop on release)
 //   * Zoom - / +
-//   * Capture / Record (toggle) / Track (toggle)
+//   * Track (toggle)
 //   * False-colour palette
 //
 // Reused in two places (FlyViewDropperPanel camera section, and the maximized
@@ -26,6 +25,10 @@ Item {
     property bool overlayMode: false
     // compact: tighter spacing / fonts for the picture-in-picture / panel context.
     property bool compact: false
+    signal motionStopped()
+    function stopMotion() { motionStopped() }
+    onVisibleChanged: if (!visible) stopMotion()
+    onEnabledChanged: if (!enabled) stopMotion()
     // daggerMode: when true (Dagger airframe with C12), TV/IR toggle drives the
     // daggerC12TvRtspUrl / daggerC12IrRtspUrl settings instead of tvRtspUrl / irRtspUrl.
     property bool daggerMode: false
@@ -42,18 +45,11 @@ Item {
     // Active feed is derived from which stored URL the live rtspUrl currently matches,
     // so the dropper panel and the video overlay always show the same TV/IR state.
     readonly property bool _feedIrActive: _irUrl !== "" && _vs.rtspUrl.rawValue === _irUrl
-    // STRATUM: derive REC/Track state directly from VideoManager so the button
-    // labels stay in sync whether recording/tracking was toggled from this
-    // control or somewhere else (e.g. tracking started by a video click).
-    readonly property bool _recActive:   QGroundControl.videoManager.recording
     readonly property bool _trackActive: QGroundControl.videoManager.c12TrackingActive
 
-    // Local recording bookkeeping — the filename VideoManager gave us on the
-    // most recent recordingStarted signal. Used to move the completed file to
-    // wherever the operator picks in the save dialog.
-    property string _pendingRecordFile: ""
-    property bool _saveDialogOpen: false
-    property bool _absoluteAnglesExpanded: false
+    // STRATUM #51: GCS stream-recording state (drives the Record/Stop button).
+    readonly property bool _gcsRecording:  QGroundControl.videoManager.recording
+
     property double _nowMs: Date.now()
 
     readonly property var _vehicleFacts: QGroundControl.multiVehicleManager.activeVehicle
@@ -67,8 +63,8 @@ Item {
         return Math.max(1, Math.min(127, Math.round(raw)))
     }
 
-    readonly property color _accent:    "#3DFFA6"
-    readonly property color _accentDim:  "#1FB97D"
+    readonly property color _accent:    btnPal.highContrast ? btnPal.buttonBorder : "#79CBE8"
+    readonly property color _accentDim:  btnPal.highContrast ? btnPal.text : "#BCD7E4"
     readonly property real  _btnHeight:  ScreenTools.defaultFontPixelHeight * (compact ? 1.9 : 2.3)
     readonly property real  _iconSize:   Math.round(_btnHeight * 0.45)
     readonly property real  _spacing:    ScreenTools.defaultFontPixelWidth * 0.7
@@ -115,20 +111,6 @@ Item {
         root.statusMessage(qsTr("%1 feed selected").arg(feed))
     }
 
-    // STRATUM: record the RTSP stream locally via VideoManager instead of asking
-    // the C12 to record to its SD card. On stop we open a save-as dialog and move
-    // the temp file to the operator-chosen path.
-    function _toggleRec() {
-        if (QGroundControl.videoManager.recording) {
-            QGroundControl.videoManager.stopRecording()
-            root.statusMessage(qsTr("■ Recording stopped — pick a save location"))
-        } else {
-            _pendingRecordFile = ""
-            QGroundControl.videoManager.startRecording()
-            root.statusMessage(qsTr("● Recording started (local)"))
-        }
-    }
-
     function _toggleTrack() {
         if (QGroundControl.videoManager.c12TrackingActive) {
             if (!QGroundControl.videoManager.sendCameraAction("track-stop")) {
@@ -169,39 +151,6 @@ Item {
         root.statusMessage(sent ? qsTr("Gimbal pitch set to −90°") : qsTr("Look down command failed"))
     }
 
-    // Remember the temp file VideoManager wrote so we can move it on stop.
-    Connections {
-        target: QGroundControl.videoManager
-        function onRecordingStarted(filename) { root._pendingRecordFile = filename }
-        function onRecordingChanged(active) {
-            if (!active && root._pendingRecordFile !== "" && !root._saveDialogOpen) {
-                root._saveDialogOpen = true
-                saveRecordingDialog.currentFile = "file:///" + root._pendingRecordFile
-                saveRecordingDialog.selectedFile = "file:///" + root._pendingRecordFile
-                saveRecordingDialog.open()
-            }
-        }
-    }
-
-    FileDialog {
-        id: saveRecordingDialog
-        title: qsTr("Save recording as…")
-        fileMode: FileDialog.SaveFile
-        nameFilters: ["Video files (*.mkv *.mp4)", "All files (*)"]
-        onAccepted: {
-            var ok = QGroundControl.videoManager.moveRecordedFile(
-                "file:///" + root._pendingRecordFile, saveRecordingDialog.selectedFile)
-            root.statusMessage(ok ? qsTr("💾 Saved") : qsTr("Save failed — recording kept at temp path"))
-            root._saveDialogOpen = false
-            root._pendingRecordFile = ""
-        }
-        onRejected: {
-            root.statusMessage(qsTr("Recording kept at: %1").arg(root._pendingRecordFile))
-            root._saveDialogOpen = false
-            root._pendingRecordFile = ""
-        }
-    }
-
     QGCPalette { id: btnPal; colorGroupEnabled: true }
 
     // Icon (or short text) button with the content centred and a hover tooltip.
@@ -211,7 +160,7 @@ Item {
         property string iconSource: ""
         property bool primary: false
         readonly property bool _highlight: enabled && (pressed || checked)
-        readonly property color _fg: _highlight ? btnPal.buttonHighlightText
+        readonly property color _fg: !enabled && btnPal.highContrast ? "#B5BDB0" : _highlight ? btnPal.buttonHighlightText
                                                 : (primary ? btnPal.primaryButtonText : btnPal.buttonText)
         hoverEnabled: !ScreenTools.isMobile
         focusPolicy: Qt.ClickFocus
@@ -223,17 +172,18 @@ Item {
         ToolTip.visible: hovered && tip !== ""
         ToolTip.text: tip
         ToolTip.delay: 400
+        Accessible.name: tip
 
         background: Rectangle {
             radius: ScreenTools.defaultBorderRadius
-            border.width: 1
+            border.width: btnPal.highContrast ? 2 : 1
             border.color: btnPal.buttonBorder
             color: iconBtn.primary ? btnPal.primaryButton : btnPal.button
             Rectangle {
                 anchors.fill: parent
                 radius: parent.radius
                 color: btnPal.buttonHighlight
-                opacity: iconBtn._highlight ? 1 : (iconBtn.enabled && iconBtn.hovered ? 0.4 : 0)
+                opacity: iconBtn._highlight ? 1 : (iconBtn.enabled && iconBtn.hovered ? (btnPal.highContrast ? 0.12 : 0.4) : 0)
             }
         }
 
@@ -286,7 +236,7 @@ Item {
             }
         }
         background: Rectangle {
-            color: Qt.rgba(0.05, 0.06, 0.07, 0.94)
+            color: btnPal.highContrast ? btnPal.window : Qt.rgba(0.05, 0.06, 0.07, 0.94)
             radius: ScreenTools.defaultBorderRadius
             border.color: root._accent
             border.width: 1
@@ -358,6 +308,13 @@ Item {
             repeat: true
             onTriggered: root._send(ptzButton.ptzAction)
         }
+        Connections {
+            target: root
+            function onMotionStopped() {
+                if (ptzHoldTimer.running) { ptzHoldTimer.stop(); root._send("stop") }
+            }
+        }
+        Component.onDestruction: if (ptzHoldTimer.running) root._send("stop")
     }
 
     Timer {
@@ -408,14 +365,10 @@ Item {
             TargetGpsEstimate {
                 implicitWidth: ScreenTools.defaultFontPixelWidth * 55
                 vehicle: QGroundControl.multiVehicleManager.activeVehicle
-                tracker: vehicle ? vehicle.targetTrack : null
                 gimbalYawDegrees: QGroundControl.videoManager.c12YawDegrees
                 gimbalPitchDegrees: QGroundControl.videoManager.c12PitchDegrees
+                gimbalRollDegrees: QGroundControl.videoManager.c12RollDegrees
                 gimbalTimestampMs: QGroundControl.videoManager.c12AttitudeTimestampMs
-                selectedCameraSource: tracker ? tracker.selectionVideoSource : -1
-                activeCameraSource: root._feedIrActive ? 1 : 0
-                selectionTimestampMs: tracker ? tracker.selectionTimestampMs : 0
-                c12TrackingActive: QGroundControl.videoManager.c12TrackingActive
             }
         }
     }
@@ -423,7 +376,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         visible: root.overlayMode
-        color: Qt.rgba(0, 0, 0, 0.72)
+        color: btnPal.highContrast ? btnPal.window : Qt.rgba(0, 0, 0, 0.72)
         radius: ScreenTools.defaultBorderRadius
         border.color: root._accent
         border.width: 1
@@ -477,21 +430,12 @@ Item {
             }
             PtzButton { iconSource: "/InstrumentValueIcons/arrow-thick-right.svg"; tip: qsTr("Gimbal right (hold)"); ptzAction: "tilt-right" }
 
-            Item { Layout.fillWidth: true; Layout.preferredHeight: root._btnHeight }
-            PtzButton { iconSource: "/InstrumentValueIcons/arrow-thick-down.svg"; tip: qsTr("Gimbal down (hold)"); ptzAction: "pan-down" }
-            Item { Layout.fillWidth: true; Layout.preferredHeight: root._btnHeight }
-        }
-
-        // ---- Zoom: out / in ------------------------------------------------
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: root._spacing
-
             IconButton {
                 iconSource: "/InstrumentValueIcons/zoom-out.svg"
                 tip: qsTr("Zoom out")
                 onClicked: { if (root._send("zoom-out")) root.statusMessage(qsTr("Zoom out")) }
             }
+            PtzButton { iconSource: "/InstrumentValueIcons/arrow-thick-down.svg"; tip: qsTr("Gimbal down (hold)"); ptzAction: "pan-down" }
             IconButton {
                 iconSource: "/InstrumentValueIcons/zoom-in.svg"
                 tip: qsTr("Zoom in")
@@ -528,19 +472,22 @@ Item {
                 tip: qsTr("Look down — set gimbal pitch to −90°")
                 onClicked: root._lookDown()
             }
-            IconButton {
-                iconSource: "/InstrumentValueIcons/camera.svg"
-                tip: qsTr("Capture photo (saved locally)")
-                onClicked: {
-                    QGroundControl.videoManager.grabImage()
-                    root.statusMessage(qsTr("📷 Photo saved locally"))
+        }
+
+        // ---- GCS recording (STRATUM #51): record the live feed to Desktop\recording (MKV) ----
+        SectionLabel { text: qsTr("RECORDING"); visible: root.daggerMode }
+        QGCButton {
+            visible: root.daggerMode
+            Layout.fillWidth: true
+            implicitHeight: root._btnHeight
+            text: root._gcsRecording ? qsTr("⏹  Stop (GCS)") : qsTr("⬤  Record (GCS)")
+            primary: root._gcsRecording
+            onClicked: {
+                if (QGroundControl.videoManager.recording) {
+                    QGroundControl.videoManager.stopRecording()
+                } else {
+                    QGroundControl.videoManager.startFlightRecording()
                 }
-            }
-            IconButton {
-                iconSource: root._recActive ? "/InstrumentValueIcons/pause-solid.svg" : "/InstrumentValueIcons/video-camera.svg"
-                tip: root._recActive ? qsTr("Stop recording and save") : qsTr("Start local video recording")
-                primary: root._recActive
-                onClicked: root._toggleRec()
             }
         }
 
@@ -561,47 +508,6 @@ Item {
                 tip: qsTr("Target GPS estimate")
                 primary: targetGpsPanel.visible
                 onClicked: targetGpsPanel.visible ? targetGpsPanel.close() : targetGpsPanel.open()
-            }
-            IconButton {
-                visible: root._c12Active && !root.compact
-                iconSource: "/InstrumentValueIcons/tuning.svg"
-                tip: qsTr("Set absolute gimbal yaw / pitch")
-                primary: root._absoluteAnglesExpanded
-                onClicked: root._absoluteAnglesExpanded = !root._absoluteAnglesExpanded
-            }
-        }
-
-        GridLayout {
-            Layout.fillWidth: true
-            columns: 3
-            visible: root._c12Active && !root.compact && root._absoluteAnglesExpanded
-            QGCLabel { text: qsTr("Yaw °") }
-            QGCTextField {
-                id: absoluteYawField
-                Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 8
-                text: "0"
-                inputMethodHints: Qt.ImhFormattedNumbersOnly
-            }
-            QGCLabel { text: qsTr("−90 to +90") }
-            QGCLabel { text: qsTr("Pitch °") }
-            QGCTextField {
-                id: absolutePitchField
-                Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 8
-                text: "-45"
-                inputMethodHints: Qt.ImhFormattedNumbersOnly
-            }
-            QGCButton {
-                text: qsTr("Go")
-                onClicked: {
-                    var yaw = Number(absoluteYawField.text)
-                    var pitch = Number(absolutePitchField.text)
-                    if (!isFinite(yaw) || !isFinite(pitch) || yaw < -90 || yaw > 90 || pitch < -90 || pitch > 90) {
-                        root.statusMessage(qsTr("Yaw and pitch must be between −90° and +90°"))
-                        return
-                    }
-                    var sent = QGroundControl.videoManager.setC12GimbalAngles(yaw, pitch, root._c12MaxSpeed)
-                    root.statusMessage(sent ? qsTr("Absolute gimbal angles sent") : qsTr("Gimbal angle command failed"))
-                }
             }
         }
 
@@ -626,14 +532,6 @@ Item {
                 }
             }
 
-            IconButton {
-                iconSource: "/InstrumentValueIcons/block.svg"
-                tip: qsTr("Force AI off (resend disable command)")
-                onClicked: {
-                    var sent = QGroundControl.videoManager.setC12AiEnabled(false)
-                    root.statusMessage(sent ? qsTr("AI disable command sent") : qsTr("AI command failed"))
-                }
-            }
         }
 
         // ---- False-colour palette -----------------------------------------
@@ -680,6 +578,16 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+    // STRATUM #51: single status notification on record start/stop (no popups).
+    Connections {
+        target: QGroundControl.videoManager
+        function onRecordingChanged() {
+            root.statusMessage(QGroundControl.videoManager.recording
+                ? qsTr("⬤ Recording started")
+                : qsTr("■ Recording saved to Desktop\\recording"))
         }
     }
 }

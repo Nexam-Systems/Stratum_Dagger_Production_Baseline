@@ -20,9 +20,6 @@ RowLayout {
     property var    _vehicleInAir:      _activeVehicle ? _activeVehicle.flying || _activeVehicle.landing : false
     property bool   _vtolInFWDFlight:   _activeVehicle ? _activeVehicle.vtolInFwdFlight : false
 
-    // STRATUM: hover + press affordance so the status readout reads as a real button.
-    property bool   _hovered:           statusHoverArea.containsMouse
-
     function dropMainStatusIndicator() {
         let overallStatusComponent = _activeVehicle ? overallStatusIndicatorPage : overallStatusOfflineIndicatorPage
         mainWindow.showIndicatorDrawer(overallStatusComponent, control)
@@ -34,39 +31,6 @@ RowLayout {
     // reads as a discrete button on the neutral tactical ribbon. The chip is scoped
     // to just the label + chevron so an adjacent VTOL mode label (when present)
     // keeps its own interactive region.
-    Rectangle {
-        anchors.left:           mainStatusLabel.left
-        anchors.right:          mainStatusChevron.right
-        anchors.top:            parent.top
-        anchors.bottom:         parent.bottom
-        anchors.topMargin:      ScreenTools.defaultFontPixelHeight * 0.15
-        anchors.bottomMargin:   ScreenTools.defaultFontPixelHeight * 0.15
-        anchors.leftMargin:     -ScreenTools.defaultFontPixelWidth * 0.35
-        anchors.rightMargin:    -ScreenTools.defaultFontPixelWidth * 0.35
-        radius:                 ScreenTools.defaultFontPixelHeight * 0.3
-        color:                  Qt.rgba(1, 1, 1, _hovered ? 0.12 : 0.06)
-        border.color:           Qt.rgba(1, 1, 1, _hovered ? 0.35 : 0.18)
-        border.width:           1
-        z:                      -1
-        Behavior on color { ColorAnimation { duration: 120 } }
-        Behavior on border.color { ColorAnimation { duration: 120 } }
-    }
-
-    MouseArea {
-        id:                 statusHoverArea
-        anchors.left:       mainStatusLabel.left
-        anchors.right:      mainStatusChevron.right
-        anchors.top:        parent.top
-        anchors.bottom:     parent.bottom
-        anchors.leftMargin: -ScreenTools.defaultFontPixelWidth * 0.35
-        anchors.rightMargin:-ScreenTools.defaultFontPixelWidth * 0.35
-        hoverEnabled:       !ScreenTools.isMobile
-        cursorShape:        Qt.PointingHandCursor
-        acceptedButtons:    Qt.LeftButton
-        onClicked:          dropMainStatusIndicator()
-        z:                  10
-    }
-
     QGCLabel {
         id:                 mainStatusLabel
         Layout.fillHeight:  true
@@ -122,6 +86,16 @@ RowLayout {
             return _armedText
         }
         color:              ribbonTextColor
+        Accessible.name:    text
+        Accessible.role:    Accessible.Button
+
+        MouseArea {
+            anchors.fill:   parent
+            acceptedButtons: Qt.LeftButton
+            cursorShape:    Qt.PointingHandCursor
+            hoverEnabled:   !ScreenTools.isMobile
+            onClicked:      control.dropMainStatusIndicator()
+        }
 
         QGCColoredImage {
             id:                     vehicleMessagesIcon
@@ -158,6 +132,15 @@ RowLayout {
         color:              ribbonTextColor
         font.pointSize:     ScreenTools.smallFontPointSize
         opacity:            0.85
+        Accessible.name:    qsTr("Vehicle status details")
+        Accessible.role:    Accessible.Button
+
+        MouseArea {
+            anchors.fill:   parent
+            acceptedButtons: Qt.LeftButton
+            cursorShape:    Qt.PointingHandCursor
+            onClicked:      control.dropMainStatusIndicator()
+        }
     }
 
     QGCLabel {

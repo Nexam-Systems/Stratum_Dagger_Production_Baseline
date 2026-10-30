@@ -16,7 +16,7 @@ import QGroundControl.FlyView
 //                         p3 = distance          [m]
 //                         p4 = height AGL        [m]
 //                         p5 = speed             [km/h]
-//                         p6 = direction         (0 = N, 1 = E, 2 = S, 3 = W)
+//                         p6 = direction         (compass bearing degrees, 0 = N, clockwise)
 //       31011 (activate): p1 = 1  -> begin orbit   (p1 = 0 -> abort)
 //     The bridge owns the orbit math and flight-mode handling.
 //
@@ -40,10 +40,16 @@ Item {
     property real   _standoffDistance:  0    // orbit distance / radius [m]
     property real   _standoffHeight:    0    // height AGL [m]
     property real   _standoffSpeed:     0    // [km/h]  (Dropper only)
-    property int    _standoffDirection: 0    // 0 = N, 1 = E, 2 = S, 3 = W
+    property real   _standoffDirection: 0    // compass bearing [deg], 0 = N, clockwise
     // True from the moment a standoff is committed until it is cancelled. Drives the
     // on-map surveillance circle (centre = target, radius = standoff distance).
     property bool   _standoffActive:    false
+    on_ActiveVehicleChanged: {
+        _targetCoordinate = QtPositioning.coordinate()
+        _standoffActive = false
+        _standoffDistance = 0
+        _standoffHeight = 0
+    }
 
     // STRATUM: bridge companion computer + standoff command ids (Dropper web UI contract).
     readonly property int _bridgeComponentId:   191
@@ -51,7 +57,7 @@ Item {
     readonly property int _cmdStandoffActivate: 31011
 
     // distanceMeters / heightMeters are in METERS, speed in KM/H (Dropper), direction is
-    // a cardinal index (0=N,1=E,2=S,3=W). targetCoordinate carries the target designated
+    // a compass bearing in DEGREES (0 = N, increasing clockwise). targetCoordinate carries the target designated
     // in the Set Standoff panel (manual lat/lon entry or crosshair map pick).
     // Returns true on commit, false if the request was rejected (bad vehicle, invalid
     // coordinate, or Vehicle::guidedModeStandoff distance check). On a false return
@@ -72,8 +78,8 @@ Item {
             // Dagger path: hand PX4 the TARGET point + geometry. guidedModeStandoff
             // range-checks against flyViewSettings.maxGoToLocationDistance and returns
             // false (with a toast) when the hold point is too far from the aircraft.
-            // Cardinal index -> compass bearing degrees (0=N,90=E,180=S,270=W).
-            var bearingDeg = (direction * 90) % 360
+            // direction is already a compass bearing in degrees (0=N, clockwise); normalise to [0,360).
+            var bearingDeg = ((direction % 360) + 360) % 360
             if (!_activeVehicle.guidedModeStandoff(target, distanceMeters, bearingDeg, heightMeters)) {
                 return false
             }

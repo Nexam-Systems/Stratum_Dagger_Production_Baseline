@@ -10,6 +10,11 @@ qt_add_qml_module(FlyViewModule
     VERSION 1.0
     RESOURCE_PREFIX /qml
     QML_FILES
+        MissionHoldButton.qml
+        RightMissionPanel.qml
+        RTLPointOfNoReturnEstimator.qml
+        RTLAbortGate.qml
+        RTLDecisionCountdownPanel.qml
         ConnectPodAction.qml
         CustomGuidedActionsController.qml
         DefaultChecklist.qml
@@ -104,6 +109,17 @@ qt_add_qml_module(FlyViewModule
         VTOLChecklist.qml
     NO_PLUGIN
 )
+
+# C++ QML types must live in the main target; FlyViewModule is QML-only (NO_PLUGIN).
+target_sources(${CMAKE_PROJECT_NAME}
+    PRIVATE
+        CameraGeolocation.cc
+        CameraGeolocation.h
+        CameraGroundRay.h
+)
+
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE GeographicLib::GeographicLib)
 
 qt_add_resources(FlyViewModule flyview_resources
     PREFIX "/res"

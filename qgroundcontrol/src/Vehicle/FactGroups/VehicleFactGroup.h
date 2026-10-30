@@ -13,6 +13,8 @@ class VehicleFactGroup : public FactGroup
     Q_PROPERTY(Fact *pitchRate              READ pitchRate              CONSTANT)
     Q_PROPERTY(Fact *yawRate                READ yawRate                CONSTANT)
     Q_PROPERTY(Fact *groundSpeed            READ groundSpeed            CONSTANT)
+    Q_PROPERTY(qint64 motionTimestampMs READ motionTimestampMs NOTIFY motionUpdated)
+    Q_PROPERTY(qint64 altitudeTimestampMs READ altitudeTimestampMs NOTIFY altitudeUpdated)
     Q_PROPERTY(Fact *airSpeed               READ airSpeed               CONSTANT)
     Q_PROPERTY(Fact *airSpeedSetpoint       READ airSpeedSetpoint       CONSTANT)
     Q_PROPERTY(Fact *climbRate              READ climbRate              CONSTANT)
@@ -24,6 +26,7 @@ class VehicleFactGroup : public FactGroup
     Q_PROPERTY(Fact *xTrackError            READ xTrackError            CONSTANT)
     Q_PROPERTY(Fact *rangeFinderDist        READ rangeFinderDist        CONSTANT)
     Q_PROPERTY(Fact *flightDistance         READ flightDistance         CONSTANT)
+    Q_PROPERTY(Fact *flightTime             READ flightTime             CONSTANT)
     Q_PROPERTY(Fact *distanceToHome         READ distanceToHome         CONSTANT)
     Q_PROPERTY(Fact *timeToHome             READ timeToHome             CONSTANT)
     Q_PROPERTY(Fact *missionItemIndex       READ missionItemIndex       CONSTANT)
@@ -51,6 +54,8 @@ public:
     Fact *airSpeed() { return &_airSpeedFact; }
     Fact *airSpeedSetpoint() { return &_airSpeedSetpointFact; }
     Fact *groundSpeed() { return &_groundSpeedFact; }
+    qint64 motionTimestampMs() const { return _motionTimestampMs; }
+    qint64 altitudeTimestampMs() const { return _altitudeTimestampMs; }
     Fact *climbRate() { return &_climbRateFact; }
     Fact *altitudeRelative() { return &_altitudeRelativeFact; }
     Fact *altitudeAMSL() { return &_altitudeAMSLFact; }
@@ -60,6 +65,7 @@ public:
     Fact *xTrackError() { return &_xTrackErrorFact; }
     Fact *rangeFinderDist() { return &_rangeFinderDistFact; }
     Fact *flightDistance() { return &_flightDistanceFact; }
+    Fact *flightTime() { return &_flightTimeFact; }
     Fact *distanceToHome() { return &_distanceToHomeFact; }
     Fact *timeToHome() { return &_timeToHomeFact; }
     Fact *missionItemIndex() { return &_missionItemIndexFact; }
@@ -81,6 +87,8 @@ public:
     void updateRCRSSI(uint8_t rssi);
 
 signals:
+    void motionUpdated();
+    void altitudeUpdated();
     void attitudeUpdated();
 
 protected:
@@ -131,6 +139,8 @@ protected:
 
 protected:
     bool _altitudeMessageAvailable = false;
+    qint64 _motionTimestampMs = 0;
+    qint64 _altitudeTimestampMs = 0;
 
 private:
     void _handleAttitudeWorker(double rollRadians, double pitchRadians, double yawRadians);

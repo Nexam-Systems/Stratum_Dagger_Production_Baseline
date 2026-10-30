@@ -107,6 +107,7 @@ class Vehicle : public VehicleFactGroup, public VehicleTypes
     Q_MOC_INCLUDE("VehicleSupports.h")
 
     friend class InitialConnectStateMachine;
+    friend class FlyViewArmedTimerTest;
     friend class VehicleLinkManager;
     friend class FactGroupListModel;                // Allow call _addFactGroup
 #ifdef QGC_UNITTEST_BUILD
@@ -148,6 +149,7 @@ public:
     Q_PROPERTY(int                  id                          READ id                                                             CONSTANT)
     Q_PROPERTY(AutoPilotPlugin*     autopilotPlugin             MEMBER _autopilotPlugin                                             CONSTANT)
     Q_PROPERTY(QGeoCoordinate       coordinate                  READ coordinate                                                     NOTIFY coordinateChanged)
+    Q_PROPERTY(qint64 positionTimestampMs READ positionTimestampMs NOTIFY positionUpdated)
     Q_PROPERTY(QGeoCoordinate       homePosition                READ homePosition                                                   NOTIFY homePositionChanged)
     Q_PROPERTY(QGeoCoordinate       armedPosition               READ armedPosition                                                  NOTIFY armedPositionChanged)
     Q_PROPERTY(bool                 armed                       READ armed                      WRITE setArmedShowError             NOTIFY armedChanged)
@@ -219,6 +221,8 @@ public:
     // The following properties relate to Orbit status
     Q_PROPERTY(bool             orbitActive     READ orbitActive        NOTIFY orbitActiveChanged)
     Q_PROPERTY(QGCMapCircle*    orbitMapCircle  READ orbitMapCircle     CONSTANT)
+
+    Q_PROPERTY(bool armedTimerSinceConnection READ armedTimerSinceConnection NOTIFY armedTimerReferenceChanged)
 
     // Vehicle state used for guided control
     Q_PROPERTY(bool     flying                  READ flying                                         NOTIFY flyingChanged)       ///< Vehicle is flying
@@ -434,6 +438,7 @@ public:
     Q_INVOKABLE QVariant expandedToolbarIndicatorSource(const QString& indicatorName);
 
     bool    isInitialConnectComplete() const;
+    bool armedTimerSinceConnection() const { return _armedTimerSinceConnection; }
     QString gotoFlightMode          () const;
 
     VehicleSupports* supports() { return _vehicleSupports; }
@@ -444,6 +449,7 @@ public:
     // Property accessors
 
     QGeoCoordinate coordinate() { return _coordinate; }
+    qint64 positionTimestampMs() const { return _positionTimestampMs; }
     QGeoCoordinate armedPosition    () { return _armedPosition; }
 
     qreal getInitialGCSPressure() const { return _initialGCSPressure; }
@@ -784,12 +790,14 @@ public slots:
 
 signals:
     void coordinateChanged              (QGeoCoordinate coordinate);
+    void positionUpdated();
     void mavlinkMessageReceived         (const mavlink_message_t& message);
     void homePositionChanged            (const QGeoCoordinate& homePosition);
     void armedPositionChanged();
     void armedChanged                   (bool armed);
     void flightModeChanged              (const QString& flightMode);
     void flyingChanged                  (bool flying);
+    void armedTimerReferenceChanged();
     void landingChanged                 (bool landing);
     void guidedModeChanged              (bool guidedMode);
     void inFwdFlightChanged             ();
@@ -969,6 +977,7 @@ private:
     bool _isActiveVehicle = false;
 
     QGeoCoordinate  _coordinate;
+    qint64 _positionTimestampMs = 0;
     QGeoCoordinate  _homePosition;
     QGeoCoordinate  _armedPosition;
 
@@ -1035,6 +1044,8 @@ private:
     int     _nextSendMessageMultipleIndex = 0;
 
     QElapsedTimer                   _flightTimer;
+    bool _armedStateReceived = false;
+    bool _armedTimerSinceConnection = false;
     QTimer                          _flightTimeUpdater;
     TrajectoryPoints*               _trajectoryPoints = nullptr;
     std::unique_ptr<QmlObjectListModel> _cameraTriggerPoints;

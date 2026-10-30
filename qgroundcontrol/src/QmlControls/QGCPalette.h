@@ -50,7 +50,7 @@
 #define DEFINE_QGC_COLOR(NAME, SETNAME) \
     Q_PROPERTY(QColor NAME READ NAME WRITE SETNAME NOTIFY paletteChanged) \
     Q_PROPERTY(QStringList NAME ## Colors READ NAME ## Colors NOTIFY paletteChanged) \
-    QColor NAME() const { return _colorInfoMap[_theme][_colorGroupEnabled  ? ColorGroupEnabled : ColorGroupDisabled][QStringLiteral(#NAME)]; } \
+    QColor NAME() const { return _color(QStringLiteral(#NAME)); } \
     QStringList NAME ## Colors() const { \
         QStringList c; \
         c << _colorInfoMap[Light][ColorGroupEnabled][QStringLiteral(#NAME)].name(QColor::HexRgb); \
@@ -103,6 +103,7 @@ public:
     Q_PROPERTY(Theme        globalTheme         READ globalTheme        WRITE setGlobalTheme        NOTIFY paletteChanged)
     Q_PROPERTY(bool         colorGroupEnabled   READ colorGroupEnabled  WRITE setColorGroupEnabled  NOTIFY paletteChanged)
     Q_PROPERTY(QStringList  colors              READ colors             CONSTANT)
+    Q_PROPERTY(bool highContrast READ highContrast NOTIFY paletteChanged)
 
     DEFINE_QGC_COLOR(window,                        setWindow)
     DEFINE_QGC_COLOR(windowTransparent,             setWindowTransparent)
@@ -162,11 +163,16 @@ public:
 
     static Theme    globalTheme             () { return _theme; }
     static void     setGlobalTheme          (Theme newTheme);
+    static bool highContrast() { return _highContrast; }
+    static void setHighContrast(bool enabled);
 
 signals:
     void paletteChanged ();
 
 private:
+    QColor _color(const QString &name) const;
+    static bool _highContrast;
+    static QMap<QString, QColor> _highContrastColors;
     static void _buildMap                   ();
     static void _signalPaletteChangeToAll   ();
     void        _signalPaletteChanged       ();

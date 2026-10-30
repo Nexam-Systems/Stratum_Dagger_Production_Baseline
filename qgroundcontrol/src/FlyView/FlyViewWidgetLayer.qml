@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtQuick.Effects
 
 import QtLocation
 import QtPositioning
@@ -23,6 +24,12 @@ Item {
     property var    mapControl
     property var    engagementController    // STRATUM: forwarded to the Engage trigger
     property bool   cameraMaximized:        false   // STRATUM: video is the maximized window
+    property bool panelExpanded: true
+    readonly property real commandPanelWidth: Math.min(138, Math.max(122, width * 0.11))
+    property alias previewSlot: toolStrip.previewSlot
+    readonly property real holdProgress: toolStrip.holdProgress
+    readonly property string holdCommand: toolStrip.holdCommand
+    readonly property bool holdComplete: toolStrip.holdComplete
     property var    standoffController              // STRATUM: forwarded to the dropper drop check
 
     property var    _activeVehicle:         QGroundControl.multiVehicleManager.activeVehicle
@@ -43,10 +50,13 @@ Item {
     // (FlyViewToolBar). These functions keep the logic here (where the standoff panel
     // and the AOP map editor live) and are invoked from FlyView.qml's ribbon wiring.
     function startAOP() {
+        toolStrip.cancelHolds()
         standoffPanel.close()
         mapControl.startAOPEdit()
     }
     function toggleStandoff() {
+        toolStrip.cancelHolds()
+        if (mapControl && mapControl._aopEditMode) mapControl.cancelAOPEdit()
         standoffPanel.toggle()
     }
 
@@ -57,11 +67,54 @@ Item {
         if (!coordinate || !coordinate.isValid) {
             return
         }
+        toolStrip.cancelHolds()
+        if (mapControl && mapControl._aopEditMode) mapControl.cancelAOPEdit()
         if (!standoffPanel.visible) {
             standoffPanel.open()
         }
         standoffLatField.text = coordinate.latitude.toFixed(7)
         standoffLonField.text = coordinate.longitude.toFixed(7)
+    }
+
+    on_ActiveVehicleChanged: {
+        if (standoffPanel) standoffPanel.close()
+        if (standoffLatField) standoffLatField.text = ""
+        if (standoffLonField) standoffLonField.text = ""
+    }
+    onPanelExpandedChanged: if (!panelExpanded) {
+        if (toolStrip) toolStrip.cancelHolds()
+        if (standoffPanel) standoffPanel.close()
+    }
+
+    function fetchCameraTarget() {
+        const estimator = cameraTargetEstimatorComponent.createObject(_root)
+        const estimate = estimator ? estimator.computeEstimate() : null
+        if (estimator) {
+            estimator.destroy()
+        }
+        const usable = estimate && (estimate.status === "VALID" || estimate.status === "DEGRADED")
+                       && typeof estimate.latitude === "number" && typeof estimate.longitude === "number"
+                       && isFinite(estimate.latitude) && isFinite(estimate.longitude)
+        if (!usable) {
+            QGroundControl.showMessageDialog(_root, qsTr("Fetch Target"),
+                                             qsTr("Camera target estimate unavailable: %1")
+                                                 .arg(estimate && estimate.reason ? estimate.reason : qsTr("no estimate")))
+            return
+        }
+        openStandoffWithTarget(QtPositioning.coordinate(estimate.latitude, estimate.longitude))
+    }
+
+    Component {
+        id: cameraTargetEstimatorComponent
+
+        TargetGpsEstimate {
+            visible:            false
+            vehicle:            QGroundControl.multiVehicleManager.activeVehicle
+            gimbalYawDegrees:   QGroundControl.videoManager.c12YawDegrees
+            gimbalPitchDegrees: QGroundControl.videoManager.c12PitchDegrees
+            gimbalRollDegrees:  QGroundControl.videoManager.c12RollDegrees
+            gimbalTimestampMs:  QGroundControl.videoManager.c12AttitudeTimestampMs
+        }
     }
 
     QGCPalette { id: qgcPal; colorGroupEnabled: true }
@@ -76,7 +129,7 @@ Item {
         z:                          QGroundControl.zOrderTopMost
         anchors.horizontalCenter:   parent.horizontalCenter
         anchors.top:                parent.top
-        anchors.topMargin:          parentToolInsets.topEdgeCenterInset + _toolsMargin * 2
+        anchors.topMargin:          _toolsMargin * 2
         radius:                     _margins
         color:                      qgcPal.window
         border.color:               qgcPal.groupBorder
@@ -165,25 +218,26 @@ Item {
 
     QGCToolInsets {
         id:                     _totalToolInsets
-        leftEdgeTopInset:       toolStrip.leftEdgeTopInset
-        leftEdgeCenterInset:    toolStrip.leftEdgeCenterInset
+        leftEdgeTopInset:       0
+        leftEdgeCenterInset:    0
         leftEdgeBottomInset:    virtualJoystickMultiTouch.visible ? virtualJoystickMultiTouch.leftEdgeBottomInset : parentToolInsets.leftEdgeBottomInset
-        rightEdgeTopInset:      topRightPanel.rightEdgeTopInset
-        rightEdgeCenterInset:   topRightPanel.rightEdgeCenterInset
-        rightEdgeBottomInset:   bottomRightRowLayout.rightEdgeBottomInset
-        topEdgeLeftInset:       toolStrip.topEdgeLeftInset
+        rightEdgeTopInset:      toolStrip.visible ? commandPanelWidth + _toolsMargin : 0
+        rightEdgeCenterInset:   rightEdgeTopInset
+        rightEdgeBottomInset:   rightEdgeTopInset
+        topEdgeLeftInset:       0
         topEdgeCenterInset:     mapScale.topEdgeCenterInset
-        topEdgeRightInset:      topRightPanel.topEdgeRightInset
+        topEdgeRightInset:      0
         bottomEdgeLeftInset:    virtualJoystickMultiTouch.visible ? virtualJoystickMultiTouch.bottomEdgeLeftInset : parentToolInsets.bottomEdgeLeftInset
-        bottomEdgeCenterInset:  bottomRightRowLayout.bottomEdgeCenterInset
-        bottomEdgeRightInset:   virtualJoystickMultiTouch.visible ? virtualJoystickMultiTouch.bottomEdgeRightInset : bottomRightRowLayout.bottomEdgeRightInset
+        bottomEdgeCenterInset:  0
+        bottomEdgeRightInset:   virtualJoystickMultiTouch.visible ? virtualJoystickMultiTouch.bottomEdgeRightInset : 0
     }
 
     FlyViewTopRightPanel {
         id:                     topRightPanel
         anchors.top:            parent.top
-        anchors.right:          parent.right
-        maximumHeight:          parent.height - (bottomRightRowLayout.height + _margins * 4)
+        anchors.right:          toolStrip.left
+        anchors.rightMargin:    _toolsMargin
+        maximumHeight:          parent.height
 
         property real topEdgeRightInset:    height + _layoutMargin
         property real rightEdgeTopInset:    width + _layoutMargin
@@ -192,8 +246,10 @@ Item {
 
     FlyViewTopRightColumnLayout {
         id:                 topRightColumnLayout
+        parent:             toolStrip.additionalControlsSlot
         anchors.top:        parent.top
-        anchors.right:      parent.right
+        anchors.left:       parent.left
+        width:              parent.width
         spacing:            _layoutSpacing
         visible:           !topRightPanel.visible
 
@@ -204,6 +260,7 @@ Item {
 
     FlyViewBottomRightRowLayout {
         id:                 bottomRightRowLayout
+        visible:            false
         anchors.bottom:     parent.bottom
         anchors.right:      parent.right
         spacing:            _layoutSpacing
@@ -224,13 +281,13 @@ Item {
         id:                         virtualJoystickMultiTouch
         z:                          QGroundControl.zOrderTopMost + 1
         anchors.right:              parent.right
-        anchors.rightMargin:        anchors.leftMargin
         height:                     Math.min(parent.height * 0.25, ScreenTools.defaultFontPixelWidth * 16)
         visible:                    _virtualJoystickEnabled && !QGroundControl.videoManager.fullScreen && !(_activeVehicle ? _activeVehicle.usingHighLatencyLink : false)
         anchors.bottom:             parent.bottom
         anchors.bottomMargin:       bottomLoaderMargin
         anchors.left:               parent.left
-        anchors.leftMargin:         ( y > toolStrip.y + toolStrip.height ? toolStrip.width / 2 : toolStrip.width * 1.05 + toolStrip.x)
+        anchors.leftMargin:         _toolsMargin
+        anchors.rightMargin:        commandPanelWidth + _toolsMargin
         source:                     "qrc:/qml/QGroundControl/FlyView/VirtualJoystick.qml"
         active:                     _virtualJoystickEnabled && !(_activeVehicle ? _activeVehicle.usingHighLatencyLink : false)
 
@@ -265,36 +322,60 @@ Item {
         }
     }
 
-    FlyViewToolStrip {
-        id:                     toolStrip
-        anchors.left:           parent.left
-        anchors.top:            parent.top
-        engagementController:    _root.engagementController
-        cameraMaximized:         _root.cameraMaximized
-        standoffController:      _root.standoffController
-        z:                      QGroundControl.zOrderWidgets
-        maxHeight:              parent.height - y - parentToolInsets.bottomEdgeLeftInset - _toolsMargin
-        visible:                !QGroundControl.videoManager.fullScreen
-
+    FlyViewToolStripActionList {
+        id: missionActions
+        engagementController: _root.engagementController
+        cameraMaximized: _root.cameraMaximized
+        standoffController: _root.standoffController
+        rtlAbortGate: rtlAbortGate
         onDisplayPreFlightChecklist: {
-            if (!preFlightChecklistLoader.active) {
-                preFlightChecklistLoader.active = true
-            }
+            preFlightChecklistLoader.active = true
             preFlightChecklistLoader.item.open()
         }
-
-        // STRATUM: enter Area-Of-Operations edit mode on the single Fly map. The
-        // standoff panel is closed first so its crosshair pick mode and the AOP
-        // polygon editor never contend for the same map clicks.
-        onDefineAOP:  startAOP()
-
-        // STRATUM: toggle the standoff entry panel beside the strip.
-        onSetStandoff: toggleStandoff()
-
-        property real topEdgeLeftInset:     visible ? y + height : 0
-        property real leftEdgeTopInset:     visible ? x + width : 0
-        property real leftEdgeCenterInset:  leftEdgeTopInset
+        onDefineAOP: _root.startAOP()
+        onSetStandoff: _root.toggleStandoff()
+        onFetchCameraTarget: _root.fetchCameraTarget()
     }
+
+    RightMissionPanel {
+        id:                     toolStrip
+        anchors.right:          parent.right
+        anchors.top:            parent.top
+        anchors.bottom:         parent.bottom
+        width:                  _root.commandPanelWidth
+        vehicle:                _root._activeVehicle
+        guidedController:       _root._guidedController
+        engagementController:    _root.engagementController
+        cameraPrimary:           _root.cameraMaximized
+        rtlAbortGate:            rtlAbortGate
+        contextActive:           _root.visible && _root.panelExpanded && !(_root.mapControl && _root.mapControl._aopEditMode) && !standoffPanel.visible
+        actionModel:             missionActions.model
+        z:                      QGroundControl.zOrderWidgets
+        visible:                _root.panelExpanded
+        onTakeoffRequested: _root._guidedController.showTakeoffDialog()
+        onStandoffRequested: _root.toggleStandoff()
+        onAopRequested: _root.startAOP()
+        onFetchRequested: _root.fetchCameraTarget()
+    }
+
+    // STRATUM Issue #4 / Phase 0: battery-aware RTL Point-of-No-Return decision countdown.
+    RTLPointOfNoReturnEstimator {
+        id:      rtlPnrEstimator
+        vehicle: _root._activeVehicle
+    }
+
+    // STRATUM Issue #42 / Block-1: Layer 1 RTL & Abort gating layered on the estimator.
+    // Read-only -- computes rtlAllowed / abortAllowed that gray the controls; never commands.
+    RTLAbortGate {
+        id:        rtlAbortGate
+        estimator: rtlPnrEstimator
+        vehicle:   _root._activeVehicle
+    }
+
+    // STRATUM KAN-21: the RTL-PNR countdown clock and the abort-budget counter were
+    // moved off the map onto the top status bar (StratumStatusBar). The estimator and
+    // gate objects above stay here read-only so they can still gray the RTL / Abort
+    // controls on the mission panel; only the on-map widget was removed.
 
     VehicleWarnings {
         anchors.centerIn:   parent
@@ -312,15 +393,15 @@ Item {
         id:                 standoffPanel
         visible:            false
         z:                  QGroundControl.zOrderTopMost
-        anchors.left:       toolStrip.right
-        anchors.leftMargin: _toolsMargin
+        anchors.right:      parent.right
+        anchors.rightMargin: Math.min(toolStrip.width + _toolsMargin, Math.max(0, _root.width - width - _toolsMargin))
         anchors.top:        toolStrip.top
         radius:             _margins
         color:              qgcPal.window
         border.color:       "#D11A35"
         border.width:       1
-        width:              standoffPanelGrid.width + _toolsMargin * 4
-        height:             standoffPanelGrid.height + _toolsMargin * 4
+        width:              Math.min(_root.width - 12, standoffPanelGrid.implicitWidth + _toolsMargin * 4)
+        height:             Math.min(_root.height, standoffPanelGrid.implicitHeight + _toolsMargin * 4)
 
         property bool _coordValid: {
             var lat = parseFloat(standoffLatField.text)
@@ -362,8 +443,13 @@ Item {
                 return
             }
             if (_coordValid) {
-                mapControl.setStandoffPendingCoordinate(QtPositioning.coordinate(parseFloat(standoffLatField.text),
-                                                                                 parseFloat(standoffLonField.text)))
+                const coordinate = QtPositioning.coordinate(parseFloat(standoffLatField.text), parseFloat(standoffLonField.text))
+                if (!mapControl.isCoordinateInsideAOP(coordinate)) {
+                    _aopReject = true
+                    mapControl.setStandoffPendingCoordinate(QtPositioning.coordinate())
+                    return
+                }
+                mapControl.setStandoffPendingCoordinate(coordinate)
             } else {
                 mapControl.setStandoffPendingCoordinate(QtPositioning.coordinate())
             }
@@ -380,9 +466,15 @@ Item {
 
         DeadMouseArea { anchors.fill: parent }
 
+        ScrollView {
+            anchors.fill: parent
+            anchors.margins: _toolsMargin * 2
+            contentWidth: availableWidth
+            clip: true
+
         GridLayout {
             id:                 standoffPanelGrid
-            anchors.centerIn:   parent
+            width:              parent.width
             columns:            2
             columnSpacing:      ScreenTools.defaultFontPixelWidth
             rowSpacing:         ScreenTools.defaultFontPixelHeight / 2
@@ -453,12 +545,15 @@ Item {
             }
 
             QGCLabel { text: qsTr("Direction") }
-            QGCComboBox {
-                id:                    standoffDirectionCombo
+            QGCTextField {
+                id:                    standoffDirectionField
                 Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
-                currentIndex:          0
-                // Index maps directly to the web UI direction value (0=N,1=E,2=S,3=W).
-                model:                 [qsTr("North ↑"), qsTr("East →"), qsTr("South ↓"), qsTr("West ←")]
+                text:                  "0"
+                unitsLabel:            qsTr("deg")
+                showUnits:             true
+                inputMethodHints:      Qt.ImhFormattedNumbersOnly
+                // Compass bearing sent to the standoff contract: 0 = N, increasing clockwise.
+                validator:             DoubleValidator { bottom: 0; top: 360; decimals: 1 }
             }
 
             // STRATUM: the command needs a vehicle; surface that instead of failing
@@ -494,15 +589,17 @@ Item {
                 QGCButton {
                     text:       qsTr("Set Standoff")
                     primary:    true
-                    enabled:    standoffPanel._coordValid && _activeVehicle !== null
+                    enabled:    standoffPanel._coordValid && !standoffPanel._aopReject && _activeVehicle !== null
                     onClicked: {
                         var distance  = parseFloat(standoffDistanceField.text)
                         var height    = parseFloat(standoffHeightField.text)
                         var speed     = parseFloat(standoffSpeedField.text)
-                        var direction = standoffDirectionCombo.currentIndex   // 0=N,1=E,2=S,3=W
+                        var direction = parseFloat(standoffDirectionField.text)   // compass bearing deg, 0=N clockwise
                         if (isNaN(distance) || distance <= 0) { distance = 0 }
                         if (isNaN(height))                    { height   = 0 }
                         if (isNaN(speed)   || speed <= 0)     { speed    = 0 }
+                        if (isNaN(direction))                 { direction = 0 }
+                        direction = ((direction % 360) + 360) % 360
                         var target = QtPositioning.coordinate(parseFloat(standoffLatField.text),
                                                               parseFloat(standoffLonField.text))
                         // AOP enforcement: reject a target outside the defined AOP boundary.
@@ -522,11 +619,12 @@ Item {
                 }
             }
         }
+        }
     }
 
     MapScale {
         id:                 mapScale
-        anchors.left:       toolStrip.right
+        anchors.left:       parent.left
         anchors.leftMargin: _toolsMargin
         anchors.top:        parent.top
         mapControl:         _mapControl

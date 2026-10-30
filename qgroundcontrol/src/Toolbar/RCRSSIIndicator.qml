@@ -14,10 +14,16 @@ Item {
 
     // STRATUM: keep the RC RSSI / signal-strength widget on the bar whenever the vehicle
     // supports a radio link. Bars grey out (percent 0) when no live RSSI is available.
-    property bool showIndicator: _activeVehicle.supports.radio
+    property bool showIndicator: _activeVehicle && _activeVehicle.supports && _activeVehicle.supports.radio
 
     property var    _activeVehicle:     QGroundControl.multiVehicleManager.activeVehicle
-    property bool   _rcRSSIAvailable:   _activeVehicle.rcRSSI.rawValue > 0 && _activeVehicle.rcRSSI.rawValue <= 100
+    readonly property color indicatorColor: qgcPal.highContrast ? qgcPal.text : "#79CBE8"
+    property bool   _rcRSSIAvailable:   _activeVehicle && _activeVehicle.rcRSSI && Number(_activeVehicle.rcRSSI.rawValue) > 0 && Number(_activeVehicle.rcRSSI.rawValue) <= 100
+    readonly property string _rcRSSIText: {
+        if (!_activeVehicle || !_activeVehicle.rcRSSI) return qsTr("--")
+        var value = Number(_activeVehicle.rcRSSI.rawValue)
+        return isFinite(value) && value > 0 && value <= 100 ? value.toFixed(0) + "%" : qsTr("--")
+    }
 
     Component {
         id: rcRSSIInfoPage
@@ -30,7 +36,7 @@ Item {
 
                 LabelledLabel {
                     label:      qsTr("RSSI")
-                    labelText:  _activeVehicle.rcRSSI.rawValue + "%"
+                    labelText:  _rcRSSIText
                 }
             }
         }
@@ -50,19 +56,18 @@ Item {
             source:             "/qmlimages/RC.svg"
             fillMode:           Image.PreserveAspectFit
             opacity:            _rcRSSIAvailable ? 1 : 0.5
-            color:              qgcPal.buttonText
+            color:              control.indicatorColor
         }
 
         QGCLabel {
             anchors.verticalCenter: parent.verticalCenter
-            text:                   _rcRSSIAvailable ? (_activeVehicle.rcRSSI.rawValue + qsTr("%")) : qsTr("--")
-            color:                  qgcPal.buttonText
+            text:                   _rcRSSIText
+            color:                  control.indicatorColor
             font.pointSize:         ScreenTools.smallFontPointSize
-            font.bold:              true
-            font.family:            ScreenTools.demiboldFontFamily
         }
 
         SignalStrength {
+            indicatorColor: control.indicatorColor
             anchors.verticalCenter: parent.verticalCenter
             size:                   parent.height * 0.5
             percent:                _rcRSSIAvailable ? _activeVehicle.rcRSSI.rawValue : 0

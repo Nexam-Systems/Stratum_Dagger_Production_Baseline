@@ -66,6 +66,8 @@ public:
 
     Q_INVOKABLE void grabImage(const QString &imageFile = QString());
     Q_INVOKABLE void startRecording(const QString &videoFile = QString());
+    // STRATUM #51: GCS stream recording to a fixed MKV under Desktop/recording.
+    Q_INVOKABLE void startFlightRecording();
     Q_INVOKABLE void startVideo();
     Q_INVOKABLE void stopRecording();
     Q_INVOKABLE void stopVideo();

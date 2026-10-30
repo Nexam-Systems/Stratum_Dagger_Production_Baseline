@@ -3,6 +3,14 @@
     "fileType": "FactMetaData",
     "QGC.MetaData.Facts": [
         {
+            "name": "firmwareCompatibilityChecksEnabled",
+            "shortDesc": "Enable firmware compatibility checks",
+            "longDesc": "Require matching base firmware, NX firmware and STRATUM schema before accepting a vehicle connection. Disabling permits connection without compatible or available firmware-version information. Applies on the next connection attempt.",
+            "type": "bool",
+            "default": true,
+            "label": "Enable firmware compatibility checks"
+        },
+        {
             "name": "requiredPx4MajorVersion",
             "shortDesc": "Required base firmware major version",
             "longDesc": "Base firmware major version the autopilot must report exactly. Set all version fields to zero to disable this check.",

@@ -17,6 +17,7 @@ public:
 
     DEFINE_SETTING_NAME_GROUP()
 
+    DEFINE_SETTINGFACT(firmwareCompatibilityChecksEnabled)
     DEFINE_SETTINGFACT(requiredPx4MajorVersion)
     DEFINE_SETTINGFACT(requiredPx4MinorVersion)
     DEFINE_SETTINGFACT(requiredPx4PatchVersion)
