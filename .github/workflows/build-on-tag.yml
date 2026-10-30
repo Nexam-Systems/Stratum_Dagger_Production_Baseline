@@ -8,6 +8,10 @@ on:
       - 'v*'
   workflow_dispatch: {}   # allow manual runs for debugging
 
+# gh release upload (Attach MSI to Release) needs write access to release assets.
+permissions:
+  contents: write
+
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
