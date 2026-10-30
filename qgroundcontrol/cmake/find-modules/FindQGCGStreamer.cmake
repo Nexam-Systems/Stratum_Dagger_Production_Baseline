@@ -805,6 +805,7 @@ if(NOT DEFINED GSTREAMER_PLUGINS)
         udp
         videoparsersbad
         vpx
+        x264
         # gst >=1.22 split: only the one matching the SDK gets a target; #ifdef in GStreamer.cc picks it.
         videoconvertscale
         videoconvert
@@ -816,7 +817,7 @@ if(NOT DEFINED GSTREAMER_PLUGINS)
     elseif(APPLE)
         list(APPEND GSTREAMER_PLUGINS applemedia dav1d vulkan)
     elseif(WIN32)
-        list(APPEND GSTREAMER_PLUGINS d3d d3d11 d3d12 dav1d dxva nvcodec)
+        list(APPEND GSTREAMER_PLUGINS d3d d3d11 d3d12 dav1d dxva mediafoundation nvcodec)
     elseif(LINUX)
         list(APPEND GSTREAMER_PLUGINS dav1d nvcodec qsv va vulkan)
     endif()

@@ -20,6 +20,7 @@
 #include "QGCLoggingCategory.h"
 
 #include <QtCore/QDateTime>
+#include <QtCore/QStringList>
 #include <QtCore/QUrl>
 #include <QtQuick/QQuickItem>
 
@@ -478,7 +479,35 @@ void GstVideoReceiver::startRecording(const QString &videoFile, FILE_FORMAT form
 
     qCDebug(GstVideoReceiverLog) << "New video file:" << videoFile << _uri;
 
-    _fileSink = _makeFileSink(videoFile, format);
+    // STRATUM: detect the live codec so the file sink can insert the matching parser
+    // (h264parse/h265parse) and write codec config to the container. Without it an HEVC
+    // MKV has no CodecPrivate and plays green.
+    QString mediaType;
+    {
+        GstPad *valveSinkPad = gst_element_get_static_pad(_recorderValve, "sink");
+        if (valveSinkPad) {
+            GstCaps *caps = gst_pad_get_current_caps(valveSinkPad);
+            if (caps) {
+                const GstStructure *s = gst_caps_get_structure(caps, 0);
+                if (s) {
+                    mediaType = QString::fromUtf8(gst_structure_get_name(s));
+                }
+                gst_caps_unref(caps);
+            }
+            gst_clear_object(&valveSinkPad);
+        }
+    }
+
+    // STRATUM: record by decoding then re-encoding the live video. The source RTSP stream can
+    // carry damaged inter-frame references (network loss) that a stream copy preserves, making
+    // the file play as green/garbage even though it muxes cleanly. Re-encoding emits a fresh,
+    // self-contained H.264 stream that always plays. Fall back to stream copy if the encode
+    // elements are unavailable.
+    _fileSink = _makeReencodeFileSink(videoFile, format);
+    if (!_fileSink) {
+        qCWarning(GstVideoReceiverLog) << "Re-encode recording unavailable; falling back to stream copy" << _uri;
+        _fileSink = _makeFileSink(videoFile, format, mediaType);
+    }
     if (!_fileSink) {
         qCCritical(GstVideoReceiverLog) << "_makeFileSink() failed" << _uri;
         _dispatchSignal([this]() { emit onStartRecordingComplete(STATUS_FAIL); });
@@ -501,24 +530,33 @@ void GstVideoReceiver::startRecording(const QString &videoFile, FILE_FORMAT form
 
     GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline-with-filesink");
 
-    // Install a probe on the recording branch to drop buffers until we hit our first keyframe
-    // When we hit our first keyframe, we can offset the timestamps appropriately according to the first keyframe time
-    // This will ensure the first frame is a keyframe at t=0, and decoding can begin immediately on playback
-    GstPad *probepad = gst_element_get_static_pad(_recorderValve, "src");
-    if (!probepad) {
-        qCCritical(GstVideoReceiverLog) << "gst_element_get_static_pad() failed" << _uri;
-        _dispatchSignal([this]() { emit onStartRecordingComplete(STATUS_FAIL); });
-        return;
-    }
+    _recordingOutput = videoFile;
 
-    _keyframeWatchId = gst_pad_add_probe(probepad, GST_PAD_PROBE_TYPE_BUFFER, _keyframeWatch, this, nullptr);
-    gst_clear_object(&probepad);
+    if (_recordEncoder) {
+        // Re-encode path: the encoder emits an IDR first, so no keyframe wait is needed. A
+        // keyframe-wait probe here also set a large pad offset deep in the pipeline, which made
+        // matroskamux drop every frame (header-only, unplayable file). Let frames flow with
+        // their natural timestamps and signal the start directly.
+        _dispatchSignal([this]() { emit recordingStarted(recordingOutput()); });
+    } else {
+        // Stream-copy fallback: wait for the first keyframe and zero the start timestamp so the
+        // file begins on a keyframe at t=0 and decoding can start immediately on playback.
+        GstPad *probepad = _recordParser ? gst_element_get_static_pad(_recordParser, "src")
+                                         : gst_element_get_static_pad(_recorderValve, "src");
+        if (!probepad) {
+            qCCritical(GstVideoReceiverLog) << "gst_element_get_static_pad() failed" << _uri;
+            _dispatchSignal([this]() { emit onStartRecordingComplete(STATUS_FAIL); });
+            return;
+        }
+
+        _keyframeWatchId = gst_pad_add_probe(probepad, GST_PAD_PROBE_TYPE_BUFFER, _keyframeWatch, this, nullptr);
+        _keyframeWatchPad = probepad; // keep the ref so teardown removes from the same pad
+    }
 
     g_object_set(_recorderValve,
                  "drop", FALSE,
                  nullptr);
 
-    _recordingOutput = videoFile;
     _recording = true;
     qCDebug(GstVideoReceiverLog) << "Recording started" << _uri;
     _dispatchSignal([this]() {
@@ -891,13 +929,17 @@ GstElement *GstVideoReceiver::_makeDecoder()
     return decoder;
 }
 
-GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMAT format)
+GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMAT format, const QString &mediaType)
 {
     GstElement *fileSink = nullptr;
+    GstElement *parser = nullptr;
     GstElement *mux = nullptr;
     GstElement *sink = nullptr;
     GstElement *bin = nullptr;
     bool releaseElements = true;
+    _recordParser = nullptr;
+    _recordEncoder = nullptr;
+    _recordConvert = nullptr;
 
     do {
         if (!isValidFileFormat(format)) {
@@ -930,6 +972,18 @@ GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMA
                      "location", qPrintable(videoFile),
                      nullptr);
 
+        // STRATUM: re-parse the elementary stream so the muxer receives it as avc/hvc1
+        // (with codec_data) and writes the codec config to the container (H.264 SPS/PPS,
+        // H.265 VPS/SPS/PPS -> CodecPrivate). On GStreamer 1.28+ the source outputs
+        // byte-stream with no codec_data; without this parser the recorded H.265 MKV has
+        // no CodecPrivate and plays as a green screen on every player. If the codec is
+        // unknown or the parser is unavailable we fall back to the previous direct link.
+        if (mediaType == QLatin1String("video/x-h265")) {
+            parser = gst_element_factory_make("h265parse", nullptr);
+        } else if (mediaType == QLatin1String("video/x-h264")) {
+            parser = gst_element_factory_make("h264parse", nullptr);
+        }
+
         bin = gst_bin_new("sinkbin");
         if (!bin) {
             qCCritical(GstVideoReceiverLog) << "gst_bin_new('sinkbin') failed";
@@ -943,19 +997,40 @@ GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMA
         }
 
         // FIXME: pad handling is potentially leaking (and other similar places too!)
-        GstPad *pad = gst_element_request_pad(mux, padTemplate, nullptr, nullptr);
-        if (!pad) {
+        GstPad *muxPad = gst_element_request_pad(mux, padTemplate, nullptr, nullptr);
+        if (!muxPad) {
             qCCritical(GstVideoReceiverLog) << "gst_element_request_pad(mux) failed";
             break;
         }
 
-        gst_bin_add_many(GST_BIN(bin), mux, sink, nullptr);
+        if (parser) {
+            gst_bin_add_many(GST_BIN(bin), parser, mux, sink, nullptr);
+        } else {
+            gst_bin_add_many(GST_BIN(bin), mux, sink, nullptr);
+        }
 
         releaseElements = false;
 
-        GstPad *ghostpad = gst_ghost_pad_new("sink", pad);
+        // Ghost the bin sink from the parser input when present, otherwise from the mux pad.
+        GstPad *ghostTarget = muxPad;
+        if (parser) {
+            GstPad *parserSrc = gst_element_get_static_pad(parser, "src");
+            const bool linkOk = (parserSrc != nullptr) && (gst_pad_link(parserSrc, muxPad) == GST_PAD_LINK_OK);
+            gst_clear_object(&parserSrc);
+            if (!linkOk) {
+                qCCritical(GstVideoReceiverLog) << "Failed to link parser and mux";
+                gst_clear_object(&muxPad);
+                break;
+            }
+            ghostTarget = gst_element_get_static_pad(parser, "sink");
+        }
+
+        GstPad *ghostpad = gst_ghost_pad_new("sink", ghostTarget);
         (void) gst_element_add_pad(bin, ghostpad);
-        gst_clear_object(&pad);
+        if (parser) {
+            gst_clear_object(&ghostTarget);
+        }
+        gst_clear_object(&muxPad);
 
         if (!gst_element_link(mux, sink)) {
             qCCritical(GstVideoReceiverLog) << "gst_element_link() failed";
@@ -964,11 +1039,196 @@ GstElement *GstVideoReceiver::_makeFileSink(const QString &videoFile, FILE_FORMA
 
         fileSink = bin;
         bin = nullptr;
+        _recordParser = parser; // valid while the returned bin lives; cleared on stop
     } while(0);
 
     if (releaseElements) {
         gst_clear_object(&sink);
         gst_clear_object(&mux);
+        gst_clear_object(&parser);
+    }
+
+    gst_clear_object(&bin);
+    return fileSink;
+}
+
+GstElement *GstVideoReceiver::_makeVideoEncoder(QString *parserFactory)
+{
+    // Discover any available H.264 (preferred) or H.265 video encoder in this GStreamer build
+    // rather than guessing element names — the bundled plugin set varies between machines.
+    GList *factories = gst_element_factory_list_get_elements(GST_ELEMENT_FACTORY_TYPE_VIDEO_ENCODER, GST_RANK_NONE);
+
+    const struct { const char *media; const char *parser; } wanted[] = {
+        { "video/x-h264", "h264parse" },
+        { "video/x-h265", "h265parse" },
+    };
+
+    GstElement *encoder = nullptr;
+    const char *parser = nullptr;
+
+    for (size_t w = 0; (w < G_N_ELEMENTS(wanted)) && !encoder; ++w) {
+        GstCaps *caps = gst_caps_new_empty_simple(wanted[w].media);
+        for (GList *l = factories; l != nullptr; l = l->next) {
+            GstElementFactory *factory = GST_ELEMENT_FACTORY(l->data);
+            if (!gst_element_factory_can_src_any_caps(factory, caps)) {
+                continue;
+            }
+            encoder = gst_element_factory_create(factory, nullptr);
+            if (!encoder) {
+                continue;
+            }
+            parser = wanted[w].parser;
+            qCDebug(GstVideoReceiverLog) << "Record encoder:" << GST_OBJECT_NAME(factory) << wanted[w].media << _uri;
+            break;
+        }
+        gst_caps_unref(caps);
+    }
+
+    if (!encoder) {
+        // Log what encoders DO exist so a missing-codec build is diagnosable from the field.
+        QStringList names;
+        for (GList *l = factories; l != nullptr; l = l->next) {
+            names << QString::fromUtf8(GST_OBJECT_NAME(GST_ELEMENT_FACTORY(l->data)));
+        }
+        qCCritical(GstVideoReceiverLog) << "No H.264/H.265 encoder available for re-encode recording." << _uri
+                                        << "Available video encoders:" << (names.isEmpty() ? QStringLiteral("<none>") : names.join(QStringLiteral(", ")));
+        gst_plugin_feature_list_free(factories);
+        return nullptr;
+    }
+
+    gst_plugin_feature_list_free(factories);
+
+    if (parserFactory) {
+        *parserFactory = QString::fromUtf8(parser);
+    }
+
+    GObjectClass *klass = G_OBJECT_GET_CLASS(encoder);
+    // ~1 keyframe/sec at 30fps so playback starts quickly and seeking works.
+    if (g_object_class_find_property(klass, "key-int-max")) {
+        g_object_set(encoder, "key-int-max", 30, nullptr);
+    } else if (g_object_class_find_property(klass, "gop-size")) {
+        g_object_set(encoder, "gop-size", 30, nullptr);
+    }
+    // x264enc: low-latency preset with no B-frames for easy decode.
+    if (g_strcmp0(G_OBJECT_TYPE_NAME(encoder), "GstX264Enc") == 0) {
+        gst_util_set_object_arg(G_OBJECT(encoder), "speed-preset", "superfast");
+        gst_util_set_object_arg(G_OBJECT(encoder), "tune", "zerolatency");
+    }
+
+    return encoder;
+}
+
+void GstVideoReceiver::_onRecordDecodePad(GstElement * /*element*/, GstPad *pad, gpointer data)
+{
+    GstVideoReceiver *self = static_cast<GstVideoReceiver*>(data);
+    if (!self || !self->_recordConvert) {
+        return;
+    }
+
+    GstPad *sink = gst_element_get_static_pad(self->_recordConvert, "sink");
+    if (!sink) {
+        return;
+    }
+
+    if (!gst_pad_is_linked(sink)) {
+        if (gst_pad_link(pad, sink) != GST_PAD_LINK_OK) {
+            qCCritical(GstVideoReceiverLog) << "Failed to link record decodebin to videoconvert" << self->_uri;
+        }
+    }
+
+    gst_clear_object(&sink);
+}
+
+GstElement *GstVideoReceiver::_makeReencodeFileSink(const QString &videoFile, FILE_FORMAT format)
+{
+    _recordParser = nullptr;
+    _recordEncoder = nullptr;
+    _recordConvert = nullptr;
+
+    GstElement *fileSink = nullptr;
+    GstElement *decode = nullptr;
+    GstElement *convert = nullptr;
+    GstElement *encoder = nullptr;
+    GstElement *parser = nullptr;
+    GstElement *mux = nullptr;
+    GstElement *sink = nullptr;
+    GstElement *bin = nullptr;
+    bool releaseElements = true;
+
+    do {
+        if (!isValidFileFormat(format)) {
+            qCCritical(GstVideoReceiverLog) << "Unsupported file format";
+            break;
+        }
+
+        decode = gst_element_factory_make("decodebin", nullptr);
+        convert = gst_element_factory_make("videoconvert", nullptr);
+        QString parserFactory;
+        encoder = _makeVideoEncoder(&parserFactory);
+        parser = encoder ? gst_element_factory_make(qPrintable(parserFactory), nullptr) : nullptr;
+        mux = gst_element_factory_make(_kFileMux[format], nullptr);
+        sink = gst_element_factory_make("filesink", nullptr);
+        if (!decode || !convert || !encoder || !parser || !mux || !sink) {
+            qCCritical(GstVideoReceiverLog) << "Failed to create re-encode elements";
+            break;
+        }
+
+        // Write SPS/PPS before every keyframe so the container always has codec config.
+        g_object_set(parser, "config-interval", -1, nullptr);
+
+        // mp4mux/qtmux: keep the file playable if recording is interrupted. matroskamux is streamable.
+        if (format == FILE_FORMAT_MP4 || format == FILE_FORMAT_MOV) {
+            g_object_set(mux,
+                         "faststart", TRUE,
+                         "reserved-moov-update-period", G_GUINT64_CONSTANT(1000000000),
+                         nullptr);
+        }
+
+        g_object_set(sink,
+                     "location", qPrintable(videoFile),
+                     nullptr);
+
+        bin = gst_bin_new("reencodebin");
+        if (!bin) {
+            qCCritical(GstVideoReceiverLog) << "gst_bin_new('reencodebin') failed";
+            break;
+        }
+
+        gst_bin_add_many(GST_BIN(bin), decode, convert, encoder, parser, mux, sink, nullptr);
+        releaseElements = false;
+
+        if (!gst_element_link_many(convert, encoder, parser, mux, sink, nullptr)) {
+            qCCritical(GstVideoReceiverLog) << "Failed to link re-encode chain";
+            break;
+        }
+
+        // decodebin exposes its src pad dynamically once it knows the codec.
+        _recordConvert = convert;
+        (void) g_signal_connect(decode, "pad-added", G_CALLBACK(_onRecordDecodePad), this);
+
+        GstPad *decodeSink = gst_element_get_static_pad(decode, "sink");
+        if (!decodeSink) {
+            qCCritical(GstVideoReceiverLog) << "decodebin has no sink pad";
+            break;
+        }
+        GstPad *ghostpad = gst_ghost_pad_new("sink", decodeSink);
+        gst_clear_object(&decodeSink);
+        (void) gst_element_add_pad(bin, ghostpad);
+
+        fileSink = bin;
+        bin = nullptr;
+        _recordEncoder = encoder; // keyframe-wait probe installs here; valid while the bin lives
+    } while(0);
+
+    if (releaseElements) {
+        gst_clear_object(&sink);
+        gst_clear_object(&mux);
+        gst_clear_object(&parser);
+        gst_clear_object(&encoder);
+        gst_clear_object(&convert);
+        gst_clear_object(&decode);
+        _recordConvert = nullptr;
+        _recordEncoder = nullptr;
     }
 
     gst_clear_object(&bin);
@@ -1356,19 +1616,20 @@ void GstVideoReceiver::_shutdownDecodingBranch()
 
 void GstVideoReceiver::_shutdownRecordingBranch()
 {
-    if (_keyframeWatchId != 0 && _recorderValve) {
-        GstPad *probepad = gst_element_get_static_pad(_recorderValve, "src");
-        if (probepad) {
-            gst_pad_remove_probe(probepad, _keyframeWatchId);
-            gst_clear_object(&probepad);
-        }
+    if (_keyframeWatchId != 0 && _keyframeWatchPad) {
+        // Remove from the exact pad the probe was installed on (parser src or valve src).
+        gst_pad_remove_probe(_keyframeWatchPad, _keyframeWatchId);
         _keyframeWatchId = 0;
     }
+    gst_clear_object(&_keyframeWatchPad);
 
     gst_bin_remove(GST_BIN(_pipeline), _fileSink);
     gst_element_set_state(_fileSink, GST_STATE_NULL);
     (void) gst_element_get_state(_fileSink, nullptr, nullptr, GST_CLOCK_TIME_NONE);
     gst_clear_object(&_fileSink);
+    _recordParser = nullptr;  // was owned by the now-destroyed _fileSink bin
+    _recordEncoder = nullptr; // was owned by the now-destroyed _fileSink bin
+    _recordConvert = nullptr; // was owned by the now-destroyed _fileSink bin
 
     _removingRecorder = false;
 
@@ -1719,7 +1980,16 @@ GstPadProbeReturn GstVideoReceiver::_keyframeWatch(GstPad *pad, GstPadProbeInfo 
     }
 
     GstBuffer *buf = gst_pad_probe_info_get_buffer(info);
-    if (GST_BUFFER_FLAG_IS_SET(buf, GST_BUFFER_FLAG_DELTA_UNIT)) {
+
+    // Prefer the upstream keyframe flag, but it is unreliable for byte-stream H.26x coming
+    // from parsebin, so confirm by inspecting the access unit's NAL types. Without this the
+    // recording can start mid-GOP (no IDR) and every player shows a green screen.
+    bool isKeyframe = !GST_BUFFER_FLAG_IS_SET(buf, GST_BUFFER_FLAG_DELTA_UNIT);
+    if (!isKeyframe) {
+        isKeyframe = _bufferContainsKeyframe(pad, buf);
+    }
+
+    if (!isKeyframe) {
         // wait for a keyframe
         return GST_PAD_PROBE_DROP;
     }
@@ -1733,6 +2003,72 @@ GstPadProbeReturn GstVideoReceiver::_keyframeWatch(GstPad *pad, GstPadProbeInfo 
     pThis->_dispatchSignal([pThis]() { emit pThis->recordingStarted(pThis->recordingOutput()); });
 
     return GST_PAD_PROBE_REMOVE;
+}
+
+bool GstVideoReceiver::_bufferContainsKeyframe(GstPad *pad, GstBuffer *buf)
+{
+    if (!pad || !buf) {
+        return false;
+    }
+
+    GstCaps *caps = gst_pad_get_current_caps(pad);
+    if (!caps) {
+        return false;
+    }
+
+    const GstStructure *s = gst_caps_get_structure(caps, 0);
+    const gchar *name = s ? gst_structure_get_name(s) : nullptr;
+    const gchar *streamFormat = s ? gst_structure_get_string(s, "stream-format") : nullptr;
+    const bool isH265 = (name != nullptr) && g_str_has_prefix(name, "video/x-h265");
+    const bool isH264 = (name != nullptr) && g_str_has_prefix(name, "video/x-h264");
+    // Only packetized (avc/hvc1, length-prefixed) access units are parsed here; that is what
+    // the muxer negotiates. Byte-stream falls back to the upstream flag handled by the caller.
+    const bool byteStream = (streamFormat != nullptr) && (g_strcmp0(streamFormat, "byte-stream") == 0);
+    gst_clear_caps(&caps);
+
+    if ((!isH265 && !isH264) || byteStream) {
+        return false;
+    }
+
+    GstMapInfo map;
+    if (!gst_buffer_map(buf, &map, GST_MAP_READ)) {
+        return false;
+    }
+
+    bool found = false;
+    gsize pos = 0;
+    while (pos + 5 <= map.size) {
+        const guint32 nalLen = (static_cast<guint32>(map.data[pos]) << 24)
+                             | (static_cast<guint32>(map.data[pos + 1]) << 16)
+                             | (static_cast<guint32>(map.data[pos + 2]) << 8)
+                             |  static_cast<guint32>(map.data[pos + 3]);
+        pos += 4;
+        if ((nalLen == 0) || (pos + nalLen > map.size)) {
+            break;
+        }
+
+        const guint8 hdr = map.data[pos];
+        if (isH265) {
+            const int type = (hdr >> 1) & 0x3F;
+            // 16-21: BLA/IDR/CRA; 32-34: VPS/SPS/PPS lead a keyframe access unit.
+            if (((type >= 16) && (type <= 21)) || (type == 32) || (type == 33) || (type == 34)) {
+                found = true;
+                break;
+            }
+        } else {
+            const int type = hdr & 0x1F;
+            // 5: IDR; 7/8: SPS/PPS lead a keyframe access unit.
+            if ((type == 5) || (type == 7) || (type == 8)) {
+                found = true;
+                break;
+            }
+        }
+
+        pos += nalLen;
+    }
+
+    gst_buffer_unmap(buf, &map);
+    return found;
 }
 
 GstVideoWorker::GstVideoWorker(QObject *parent)
