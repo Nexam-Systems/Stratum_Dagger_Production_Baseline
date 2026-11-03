@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QObject>
+#include <QtCore/QStringList>
 
 class QTextToSpeech;
 class Fact;
@@ -53,6 +54,13 @@ private:
     Fact *_volumeFact = nullptr;
     Fact *_mutedFact = nullptr;
     double _lastVolume = -1.0;
+
+    // STRATUM #52: finalized voice styling (Microsoft Heera).
+    const double _pitch = -0.20;
+    const double _rate = 0.05;
+
+    /// Selects the first available voice (across all locales) whose name contains @a name.
+    bool _selectVoiceByName(const QString &name);
 
     /// Returns the current volume (0.0 - 100.0) from the settings Fact.
     double _volumeSetting() const;

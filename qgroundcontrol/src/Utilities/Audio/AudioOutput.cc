@@ -157,18 +157,43 @@ void AudioOutput::_applyEngineSettings()
         return;
     }
 
-    const QLocale defaultLocale("en_US");
-    if (_engine->availableLocales().contains(defaultLocale)) {
-        _engine->setLocale(defaultLocale);
+    // STRATUM #52: finalized announcement voice = Microsoft Heera. Fall back to the first
+    // available voice if Heera is not installed on the host.
+    if (!_selectVoiceByName(QStringLiteral("Heera"))) {
+        const QList<QVoice> voices = _engine->availableVoices();
+        if (!voices.isEmpty()) {
+            _engine->setVoice(voices.constFirst());
+        }
     }
 
-    // Pin an explicit voice so output doesn't depend on the engine's per-OS default.
-    const QList<QVoice> voices = _engine->availableVoices();
-    if (!voices.isEmpty()) {
-        _engine->setVoice(voices.constFirst());
-    }
+    // STRATUM #52: finalized pitch/rate (range -1.0 .. 1.0; 0.0 = engine default).
+    _engine->setPitch(_pitch);
+    _engine->setRate(_rate);
+
+    qCDebug(AudioOutputLog) << "AudioOutput voice:" << _engine->voice().name()
+                            << "pitch:" << _pitch << "rate:" << _rate;
 
     _speakCapable = _engine->engineCapabilities().testFlag(QTextToSpeech::Capability::Speak);
+}
+
+bool AudioOutput::_selectVoiceByName(const QString &name)
+{
+    if (!_engine || name.isEmpty()) {
+        return false;
+    }
+
+    const QList<QLocale> locales = _engine->availableLocales();
+    for (const QLocale &locale : locales) {
+        _engine->setLocale(locale);
+        const QList<QVoice> voices = _engine->availableVoices();
+        for (const QVoice &voice : voices) {
+            if (voice.name().contains(name, Qt::CaseInsensitive)) {
+                _engine->setVoice(voice);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 void AudioOutput::_setVolume()
