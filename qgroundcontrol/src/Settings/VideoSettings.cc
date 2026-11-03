@@ -278,6 +278,10 @@ DECLARE_SETTINGSFACT(VideoSettings, daggerC12Host)
 // connected vehicle's 8-byte device frame (AUTOPILOT_VERSION uid) and auto-provisions
 // the C12 camera IP + TV/IR RTSP URLs. Empty disables auto-provisioning.
 DECLARE_SETTINGSFACT(VideoSettings, daggerDeviceKey)
+// STRATUM: JSON array of registered DIP V2 devices ([{"serial","name"}]), managed by
+// the STRATUM Devices settings tab. Each serial decodes (with daggerDeviceKey) to the
+// camera IP + data-link used to provision the aircraft.
+DECLARE_SETTINGSFACT(VideoSettings, deviceRegistry)
 
 bool VideoSettings::streamConfigured(void)
 {

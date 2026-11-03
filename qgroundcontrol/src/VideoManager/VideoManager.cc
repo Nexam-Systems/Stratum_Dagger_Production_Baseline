@@ -1521,6 +1521,85 @@ bool VideoManager::_updateSettings(VideoReceiver *receiver)
     return settingsChanged;
 }
 
+// STRATUM: strip separators and decode an 8-byte DIP V2 serial (hex) with the key.
+static bool _decodeDipV2Serial(const QString &serialHex, const QByteArray &key,
+                               DeviceInfoV2::DeviceInfo &info, QString &error)
+{
+    QString clean;
+    for (const QChar c : serialHex) {
+        if (c.isDigit() || (c >= QLatin1Char('a') && c <= QLatin1Char('f'))
+                        || (c >= QLatin1Char('A') && c <= QLatin1Char('F'))) {
+            clean.append(c);
+        }
+    }
+    const QByteArray frame = QByteArray::fromHex(clean.toLatin1());
+    if (frame.size() != 8) {
+        error = QObject::tr("serial must be 8 bytes (16 hex characters)");
+        return false;
+    }
+    if (key.size() != 16) {
+        error = QObject::tr("device key not set");
+        return false;
+    }
+    return DeviceInfoV2::decode(frame, key, info, &error);
+}
+
+// STRATUM: apply a decoded device to the C12 camera settings (IP + TV/IR RTSP URLs).
+static void _applyDeviceToCamera(VideoSettings *vs, const DeviceInfoV2::DeviceInfo &info)
+{
+    if (!vs) {
+        return;
+    }
+    vs->daggerC12Host()->setRawValue(info.cameraIp);
+    vs->daggerC12TvRtspUrl()->setRawValue(QStringLiteral("rtsp://%1:554/stream=1").arg(info.cameraIp));
+    vs->daggerC12IrRtspUrl()->setRawValue(QStringLiteral("rtsp://%1:555/stream=2").arg(info.cameraIp));
+}
+
+QVariantMap VideoManager::decodeDeviceSerial(const QString &serialHex) const
+{
+    QVariantMap result;
+    const QByteArray key = _videoSettings
+        ? QByteArray::fromHex(_videoSettings->daggerDeviceKey()->rawValue().toString().trimmed().toLatin1())
+        : QByteArray();
+
+    DeviceInfoV2::DeviceInfo info;
+    QString error;
+    if (_decodeDipV2Serial(serialHex, key, info, error)) {
+        result[QStringLiteral("valid")]     = true;
+        result[QStringLiteral("cameraIp")]  = info.cameraIp;
+        result[QStringLiteral("dataIp")]    = info.dataIp;
+        result[QStringLiteral("port")]      = info.port;
+        result[QStringLiteral("handshake")] = info.handshake;
+    } else {
+        result[QStringLiteral("valid")] = false;
+        result[QStringLiteral("error")] = error;
+    }
+    return result;
+}
+
+bool VideoManager::applyDeviceSerial(const QString &serialHex)
+{
+    if (!_videoSettings) {
+        return false;
+    }
+    const QByteArray key = QByteArray::fromHex(
+        _videoSettings->daggerDeviceKey()->rawValue().toString().trimmed().toLatin1());
+
+    DeviceInfoV2::DeviceInfo info;
+    QString error;
+    if (!_decodeDipV2Serial(serialHex, key, info, error)) {
+        qCWarning(VideoManagerLog) << "DIP V2: applyDeviceSerial failed:" << error;
+        return false;
+    }
+
+    qCInfo(VideoManagerLog).noquote()
+        << "DIP V2: applying device camera" << info.cameraIp
+        << "data-link" << info.dataIp << "port" << info.port
+        << "(handshake" << info.handshake << ")";
+    _applyDeviceToCamera(_videoSettings, info);
+    return true;
+}
+
 // STRATUM: Decode the vehicle's 8-byte DIP V2 device frame (carried in
 // AUTOPILOT_VERSION.uid, treated as the big-endian 64-bit cipher word) and
 // auto-provision the C12 camera IP + TV/IR RTSP URLs. A missing/invalid key, a
@@ -1543,15 +1622,11 @@ void VideoManager::_provisionDaggerCameraFromVehicle(Vehicle *vehicle)
         return;
     }
 
-    QByteArray frame(8, Qt::Uninitialized);
-    for (int i = 0; i < 8; ++i) {
-        frame[i] = static_cast<char>((uid >> (8 * (7 - i))) & 0xFF);
-    }
-
+    const QString serial = QStringLiteral("%1").arg(uid, 16, 16, QLatin1Char('0'));
     DeviceInfoV2::DeviceInfo info;
     QString error;
-    if (!DeviceInfoV2::decode(frame, key, info, &error)) {
-        qCDebug(VideoManagerLog) << "DIP V2: device frame did not decode, skipping auto-provision:" << error;
+    if (!_decodeDipV2Serial(serial, key, info, error)) {
+        qCDebug(VideoManagerLog) << "DIP V2: vehicle device frame did not decode, skipping auto-provision:" << error;
         return;
     }
 
@@ -1559,13 +1634,7 @@ void VideoManager::_provisionDaggerCameraFromVehicle(Vehicle *vehicle)
         << "DIP V2: provisioning camera" << info.cameraIp
         << "data-link" << info.dataIp << "port" << info.port
         << "(handshake" << info.handshake << ")";
-
-    const QString tvUrl = QStringLiteral("rtsp://%1:554/stream=1").arg(info.cameraIp);
-    const QString irUrl = QStringLiteral("rtsp://%1:555/stream=2").arg(info.cameraIp);
-
-    _videoSettings->daggerC12Host()->setRawValue(info.cameraIp);
-    _videoSettings->daggerC12TvRtspUrl()->setRawValue(tvUrl);
-    _videoSettings->daggerC12IrRtspUrl()->setRawValue(irUrl);
+    _applyDeviceToCamera(_videoSettings, info);
 }
 
 void VideoManager::_setActiveVehicle(Vehicle *vehicle)

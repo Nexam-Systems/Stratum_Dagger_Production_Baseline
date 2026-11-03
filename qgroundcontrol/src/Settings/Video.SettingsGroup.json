@@ -124,6 +124,15 @@
             "keywords": "dip,device,key,aes,provisioning,dagger"
         },
         {
+            "name": "deviceRegistry",
+            "shortDesc": "Registered STRATUM devices (serial + name).",
+            "longDesc": "JSON array of registered devices, each with a serial number and a vehicle name. Managed by the STRATUM Devices settings tab. STRATUM decodes each serial to provision the camera IP and data-link.",
+            "type": "string",
+            "default": "[]",
+            "label": "Device Registry",
+            "keywords": "stratum,device,serial,registry,vehicle"
+        },
+        {
             "name": "tcpUrl",
             "shortDesc": "Network address and port for TCP video stream (e.g. 192.168.143.200:3001).",
             "longDesc": "TCP url address and port to bind to for video stream. Example: 192.168.143.200:3001",

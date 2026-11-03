@@ -8,6 +8,7 @@
 #include <QtQmlIntegration/QtQmlIntegration>
 
 #include <QtCore/QString>
+#include <QtCore/QVariantMap>
 
 #include <functional>
 #include <memory>
@@ -103,6 +104,14 @@ public:
     // STRATUM: query the C12 gimbal for its actual IP with the Skydroid "rIPV" command.
     // Returns the IPv4 string on success or an empty string on failure/timeout.
     Q_INVOKABLE QString readC12CameraIp(int timeoutMs = 1000);
+
+    // STRATUM DIP V2: decode an 8-byte device serial (hex, optional separators) with the
+    // configured device key. Returns {valid, cameraIp, dataIp, port, handshake, error}.
+    // Used by the STRATUM Devices settings tab to validate/preview registered serials.
+    Q_INVOKABLE QVariantMap decodeDeviceSerial(const QString &serialHex) const;
+    // STRATUM DIP V2: decode the serial and provision the C12 camera (IP + TV/IR URLs)
+    // from it. Returns true on success.
+    Q_INVOKABLE bool applyDeviceSerial(const QString &serialHex);
 
     void init(QQuickWindow *mainWindow);
     void startGStreamerInit();

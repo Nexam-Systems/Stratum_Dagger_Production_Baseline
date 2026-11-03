@@ -91,6 +91,7 @@ qt_add_qml_module(AppSettingsModule
         RemoteIDGpsLocation.qml
         SerialSettings.qml
         SettingsPage.qml
+        StratumDevicesSettings.qml
         TcpSettings.qml
         UdpSettings.qml
     NO_PLUGIN
