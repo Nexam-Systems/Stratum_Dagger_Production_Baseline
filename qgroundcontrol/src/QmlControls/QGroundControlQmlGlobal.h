@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QPointF>
+#include <QtCore/QStringList>
 #include <QtCore/QTimer>
 #include <QtPositioning/QGeoCoordinate>
 #include <QtQml/QJSValue>
