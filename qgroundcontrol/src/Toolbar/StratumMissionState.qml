@@ -100,4 +100,24 @@ Item {
         default:               return qsTr("HOLDING")
         }
     }
+
+    // KAN-25 (#62): company-approved abbreviated header label for the top status bar STATE
+    // cell. Derived purely from `key` (never from displayed text); keys outside the approved
+    // table (COMMS_LOST, LANDING, HOLDING) fall back to the full `text`, so it is never blank.
+    readonly property string headerText: {
+        switch (key) {
+        case "DISCONNECTED":   return qsTr("DISCONNECTED")
+        case "NOT_READY":      return qsTr("NOT READY")
+        case "READY":          return qsTr("READY")
+        case "FLYING":         return qsTr("FLYING")
+        case "ON_STATION":     return qsTr("ON STATION")
+        case "TRANSIT_STDOFF": return qsTr("TO STDOFF")
+        case "AT_STDOFF":      return qsTr("AT STDOFF")
+        case "ENGAGING":       return qsTr("ENGAGING")
+        case "ABORTING":       return qsTr("ABORTING")
+        case "RTL":            return qsTr("RETURNING")
+        case "MANUAL":         return qsTr("MANUAL")
+        default:               return text
+        }
+    }
 }

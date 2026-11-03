@@ -160,7 +160,8 @@ Item {
         return "UAV-" + (vehicle.id < 10 ? "0" + vehicle.id : vehicle.id)
     }
     function _stateText() {
-        return missionState.text
+        // KAN-25 (#62): company-approved abbreviated STATE header labels.
+        return missionState.headerText
     }
     function _stateColor() {
         switch (missionState.key) {
