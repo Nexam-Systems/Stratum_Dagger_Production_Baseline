@@ -2,6 +2,8 @@
 
 #include "FF1.h"
 
+#include <QtCore/QStringList>
+
 #include <array>
 #include <vector>
 
