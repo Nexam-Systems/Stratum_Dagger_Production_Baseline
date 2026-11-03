@@ -144,6 +144,9 @@ class StratumMissionStateTest(unittest.TestCase):
     def text(self):
         return self.state.property("text")
 
+    def headerText(self):
+        return self.state.property("headerText")
+
     def armed(self, mode, **kwargs):
         self.set(inArmed=True, inFlying=True, inFlightMode=mode, **kwargs)
 
@@ -204,6 +207,69 @@ class StratumMissionStateTest(unittest.TestCase):
     def test_landing(self):
         self.armed("Hold", inLanding=True, inVehLat=24.5)  # away from home
         self.assertEqual(self.key(), "LANDING")
+
+    # ---- KAN-25 (#62): abbreviated STATE header labels (all 11 company-approved mappings) ----
+    def test_header_label_disconnected(self):
+        self.set(inHasVehicle=False)
+        self.assertEqual(self.headerText(), "DISCONNECTED")
+
+    def test_header_label_not_ready(self):
+        self.set(inArmed=False, inReadyAvailable=True, inReady=False)
+        self.assertEqual(self.headerText(), "NOT READY")
+
+    def test_header_label_ready(self):
+        self.set(inArmed=False, inReadyAvailable=True, inReady=True, inSensorsHealthy=True)
+        self.assertEqual(self.headerText(), "READY")
+
+    def test_header_label_flying(self):
+        self.armed("Takeoff")
+        self.assertEqual(self.headerText(), "FLYING")
+
+    def test_header_label_on_station(self):
+        self.armed("Hold", inVehLat=24.0, inVehLon=67.0, inHomeLat=24.0, inHomeLon=67.0)
+        self.assertEqual(self.headerText(), "ON STATION")
+
+    def test_header_label_to_stdoff(self):
+        self.armed("Standoff", inStandoffActive=True, inVehLat=24.0, inVehLon=67.0,
+                   inStdLat=24.02, inStdLon=67.02, inStandoffDistance=0)
+        self.assertEqual(self.headerText(), "TO STDOFF")
+
+    def test_header_label_at_stdoff(self):
+        self.armed("Standoff", inStandoffActive=True, inVehLat=24.5, inVehLon=67.5,
+                   inStdLat=24.5, inStdLon=67.5, inStandoffDistance=0,
+                   inStandoffHeight=80, inVehAltRel=80)
+        self.assertEqual(self.headerText(), "AT STDOFF")
+
+    def test_header_label_engaging(self):
+        self.armed("Engagement")
+        self.assertEqual(self.headerText(), "ENGAGING")
+
+    def test_header_label_aborting(self):
+        self.armed("Abort", inStandoffActive=True)
+        self.assertEqual(self.headerText(), "ABORTING")
+
+    def test_header_label_returning(self):
+        self.armed("Safe Recovery")
+        self.assertEqual(self.headerText(), "RETURNING")
+
+    def test_header_label_manual(self):
+        self.armed("Position")
+        self.assertEqual(self.headerText(), "MANUAL")
+
+    # Unmatched keys (comms-loss, landing, generic hold) keep the full canonical text, never blank.
+    def test_header_label_fallback_comms_lost(self):
+        self.set(inCommLost=True)
+        self.assertEqual(self.headerText(), "COMMS LOST")
+
+    def test_header_label_fallback_landing(self):
+        self.armed("Hold", inLanding=True, inVehLat=24.5)
+        self.assertEqual(self.key(), "LANDING")
+        self.assertEqual(self.headerText(), "LANDING")
+
+    def test_header_label_fallback_holding(self):
+        self.armed("Hold", inVehLat=24.5)  # armed, away from home, no standoff
+        self.assertEqual(self.key(), "HOLDING")
+        self.assertEqual(self.headerText(), "HOLDING")
 
     # ---- Geometric states (Hold is ambiguous without geometry) ----
     def test_on_station_over_home(self):
