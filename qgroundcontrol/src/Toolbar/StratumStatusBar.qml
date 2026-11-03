@@ -72,6 +72,43 @@ Item {
         standoffController: root.standoffController
     }
 
+    // STRATUM KAN-26 (#63): GNSS quality classifier feeding the header badge. Fed from the
+    // vehicle GPS facts; the 1 Hz tick below refreshes the sample age and runs an evaluation.
+    // Presentation only — the badge never commands flight.
+    property double _nowMs:     Date.now()
+    property double _gnssLastMs: 0
+    StratumGnssQuality {
+        id: gnssQuality
+        running:    false   // driven by the 1 Hz tick below so sampleAgeSec is fresh each evaluation
+        connected:  root._live && !!root._gps
+        fixType:    (root._gps && isFinite(Number(root._gps.lock.rawValue)))  ? Number(root._gps.lock.rawValue)  : 0
+        satellites: (root._gps && isFinite(Number(root._gps.count.rawValue))) ? Number(root._gps.count.rawValue) : -1
+        hdop:       (root._gps && root._gps.hdop) ? Number(root._gps.hdop.rawValue) : NaN
+        ephM:       (root._gps && root._gps.horizontalAccuracy) ? Number(root._gps.horizontalAccuracy.rawValue) : NaN
+        epvM:       (root._gps && root._gps.verticalAccuracy) ? Number(root._gps.verticalAccuracy.rawValue) : NaN
+    }
+    // A fresh GPS sample bumps the timestamp; stuck/stale values let the age grow -> BAD.
+    Connections {
+        target: root._gps ? root._gps.horizontalAccuracy : null
+        ignoreUnknownSignals: true
+        function onRawValueChanged() { root._gnssLastMs = Date.now() }
+    }
+    Connections {
+        target: root._gps ? root._gps.count : null
+        ignoreUnknownSignals: true
+        function onRawValueChanged() { root._gnssLastMs = Date.now() }
+    }
+    Timer {
+        interval: 1000; repeat: true; running: true
+        onTriggered: {
+            root._nowMs = Date.now()
+            gnssQuality.sampleAgeSec = root._live ? Math.max(0, (root._nowMs - root._gnssLastMs) / 1000) : 999
+            gnssQuality.evaluate()
+        }
+    }
+    // Reset cached quality and counters when the active vehicle changes.
+    onVehicleChanged: { root._gnssLastMs = 0; gnssQuality.reset() }
+
     // STRATUM KAN-21: the RTL-PNR countdown and the abort-budget counter were moved off
     // the map onto this top status bar. Read-only estimator + gate instances compute the
     // values straight from the active vehicle (no side effects, no commands); they mirror
@@ -174,6 +211,39 @@ Item {
         case "LANDING":        return qgcPal.colorOrange
         case "TRANSIT_STDOFF": return _accent
         default:               return qgcPal.colorGreen
+        }
+    }
+    // KAN-26 (#63): GNSS badge colour (text still conveys the state, never colour alone).
+    function _gnssColor(q) {
+        switch (q) {
+        case "BEST": return qgcPal.colorGreen
+        case "GOOD": return qgcPal.colorOrange
+        default:     return qgcPal.colorRed
+        }
+    }
+    function _gnssReasonText(r) {
+        switch (r) {
+        case "VALID":           return qsTr("OK")
+        case "BELOW_THRESHOLD": return qsTr("Below threshold")
+        case "LOST_FIX":        return qsTr("No 3D fix")
+        case "STALE":           return qsTr("Stale data")
+        case "MISSING_FIELD":   return qsTr("Data unavailable")
+        case "DISCONNECTED":    return qsTr("Disconnected")
+        default:                return r
+        }
+    }
+    function _gnssFixText() {
+        if (!root._gps || !isFinite(Number(root._gps.lock.rawValue)))
+            return qsTr("--")
+        switch (Number(root._gps.lock.rawValue)) {
+        case 0:
+        case 1:  return qsTr("No Fix")
+        case 2:  return qsTr("2D")
+        case 3:  return qsTr("3D")
+        case 4:  return qsTr("DGPS")
+        case 5:  return qsTr("RTK Float")
+        case 6:  return qsTr("RTK Fixed")
+        default: return String(Number(root._gps.lock.rawValue))
         }
     }
     function _batteryText() {
@@ -373,34 +443,22 @@ Item {
                         color: root._labelColor
                         font.pointSize: root._labelFontSize
                     }
-                    // STRATUM KAN-21: HACC / VACC / NSAT listed vertically (one per row)
-                    // instead of a single stretched horizontal line. Same label/value
-                    // sizes and colours; each row keeps its label left of the value.
-                    ColumnLayout {
+                    // KAN-26 (#63): single BAD / GOOD / BEST quality badge replaces the stacked
+                    // HACC / VACC / NSAT metrics. Text (not colour alone) always conveys the state;
+                    // tap the cell for the underlying fix / NSAT / HDOP / EPH / EPV / age / reason.
+                    QGCLabel {
                         Layout.alignment: Qt.AlignHCenter
-                        spacing: 1
-                        RowLayout {
-                            spacing: 3
-                            QGCLabel { text: qsTr("HACC"); color: root._labelColor; font.pointSize: root._labelFontSize }
-                            QGCLabel { text: root._meters(_gps ? _gps.horizontalAccuracy : null); color: root._valueColor; font.bold: true; font.pointSize: root._valueFontSize }
-                        }
-                        RowLayout {
-                            spacing: 3
-                            QGCLabel { text: qsTr("VACC"); color: root._labelColor; font.pointSize: root._labelFontSize }
-                            QGCLabel { text: root._meters(_gps ? _gps.verticalAccuracy : null); color: root._valueColor; font.bold: true; font.pointSize: root._valueFontSize }
-                        }
-                        RowLayout {
-                            spacing: 3
-                            QGCLabel { text: qsTr("NSAT"); color: root._labelColor; font.pointSize: root._labelFontSize }
-                            QGCLabel { text: (_gps && _gps.count) ? _gps.count.valueString : "--"; color: root._valueColor; font.bold: true; font.pointSize: root._valueFontSize }
-                        }
+                        text:           gnssQuality.quality
+                        color:          root._gnssColor(gnssQuality.quality)
+                        font.bold:      true
+                        font.pointSize: root._valueFontSize
                     }
                 }
 
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: mainWindow.showIndicatorDrawer(gnssDrawerComponent, gnssCell)
+                    onClicked: mainWindow.showIndicatorDrawer(gnssDetailComponent, gnssCell)
                 }
             }
 
@@ -592,9 +650,24 @@ Item {
         }
     }
 
+    // KAN-26 (#63): GNSS quality detail popover (opened by tapping the badge). Shows the raw
+    // telemetry behind the badge plus the classification reason. Informational only.
     Component {
-        id: gnssDrawerComponent
-        GPSIndicatorPage { }
+        id: gnssDetailComponent
+        ToolIndicatorPage {
+            showExpand: false
+            contentComponent: SettingsGroupLayout {
+                heading: qsTr("GNSS Quality")
+                LabelledLabel { label: qsTr("Quality:");    labelText: gnssQuality.quality }
+                LabelledLabel { label: qsTr("Reason:");     labelText: root._gnssReasonText(gnssQuality.reason) }
+                LabelledLabel { label: qsTr("Fix:");        labelText: root._gnssFixText() }
+                LabelledLabel { label: qsTr("Satellites:"); labelText: (root._gps && isFinite(Number(root._gps.count.rawValue))) ? String(Number(root._gps.count.rawValue)) : qsTr("--") }
+                LabelledLabel { label: qsTr("HDOP:");       labelText: (root._gps && isFinite(Number(root._gps.hdop.rawValue))) ? Number(root._gps.hdop.rawValue).toFixed(2) : qsTr("--") }
+                LabelledLabel { label: qsTr("EPH:");        labelText: root._meters(root._gps ? root._gps.horizontalAccuracy : null) }
+                LabelledLabel { label: qsTr("EPV:");        labelText: root._meters(root._gps ? root._gps.verticalAccuracy : null) }
+                LabelledLabel { label: qsTr("Age:");        labelText: root._live ? (gnssQuality.sampleAgeSec.toFixed(1) + " s") : qsTr("--") }
+            }
+        }
     }
 
     Component {
