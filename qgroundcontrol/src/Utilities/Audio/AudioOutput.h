@@ -46,20 +46,6 @@ public:
     /// Tests the audio output. Will stop current output before test
     void testAudioOutput();
 
-    // --- STRATUM #52 TEMPORARY voice-tuning API (removed once values are fixed) ---
-    /// Names of every TTS voice installed on the system (across all locales).
-    QStringList availableVoiceNames();
-    /// Live pitch (-1.0 .. 1.0); applied immediately.
-    void setVoicePitch(double pitch);
-    /// Live rate/speed (-1.0 .. 1.0); applied immediately.
-    void setVoiceRate(double rate);
-    /// Select a voice by (sub)name across all locales; empty restores the auto pick.
-    void setVoiceByName(const QString &name);
-    double voicePitch() const { return _pitch; }
-    double voiceRate() const { return _rate; }
-    /// Name of the voice currently active on the engine.
-    QString currentVoiceName() const;
-
 private:
     QTextToSpeech *_engine = nullptr;
     qsizetype _textQueueSize = 0;
@@ -69,11 +55,9 @@ private:
     Fact *_mutedFact = nullptr;
     double _lastVolume = -1.0;
 
-    // STRATUM #52: current voice styling. Defaults match the hard-coded values; the
-    // temporary tuning UI overrides these live.
-    double _pitch = -0.25;
-    double _rate = -0.35;
-    QString _voiceNameOverride;
+    // STRATUM #52: finalized voice styling (Microsoft Heera).
+    const double _pitch = -0.20;
+    const double _rate = 0.05;
 
     /// Selects the first available voice (across all locales) whose name contains @a name.
     bool _selectVoiceByName(const QString &name);
