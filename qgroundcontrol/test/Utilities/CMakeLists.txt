@@ -6,6 +6,7 @@
 add_subdirectory(Audio)
 add_subdirectory(Compression)
 add_subdirectory(Database)
+add_subdirectory(DeviceInfoV2)
 add_subdirectory(FileSystem)
 add_subdirectory(Geo)
 add_subdirectory(Logging)
