@@ -106,26 +106,10 @@
             ]
         },
         {
-            "heading": "Dagger Camera Control (SIYI A2 mini)",
-            "keywords": ["dagger", "siyi", "a2 mini", "gimbal", "sdk", "camera"],
-            "showWhen": "isDaggerProfile",
-            "controls": [
-                {
-                    "setting": "videoSettings.daggerCamera"
-                },
-                {
-                    "setting": "videoSettings.daggerCameraSdkHost"
-                },
-                {
-                    "setting": "videoSettings.daggerCameraSdkPort"
-                }
-            ]
-        },
-        {
             "component": "DaggerC12CameraNetwork",
             "sectionName": "Dagger Camera Control (C12)",
             "keywords": ["dagger", "c12", "skydroid", "yunzhuo", "gimbal", "camera", "ip", "host", "network"],
-            "showWhen": "isDaggerProfile"
+            "showWhen": "isDaggerProfile && QGroundControl.corePlugin.stratumDevBuild"
         }
     ]
 }

@@ -43,7 +43,7 @@ qgroundcontrol/
 │   │   ├── FlyViewToolStripActionList.qml       # Right-hand action strip (visibility gates)
 │   │   ├── FlyViewMap.qml                       # AOP polygon edit / range check
 │   │   ├── FlyViewWidgetLayer.qml               # Standoff panel + AOP edit bar
-│   │   ├── FlyViewCameraControlsDagger*.qml     # SIYI A2 mini / C12 dispatch
+│   │   ├── FlyViewCameraControlsDaggerRoot.qml  # C12 PRO camera-control host
 │   │   └── TrackerRoiOverlay.qml                # Companion tracker ROI overlay
 │   ├── TargetFetch/TargetFetchManager.*         # XC25 pod ping + passive target read
 │   ├── VideoManager/VideoManager.cc             # SIYI A2 mini SDK v3 UDP sender
@@ -199,8 +199,8 @@ itself is unchanged and can be triggered by flipping `visible: false` back to
   (`0x0C`, func_type 0..5).
 - **Destination**: `videoSettings.daggerCameraSdkHost` /
   `daggerCameraSdkPort` (defaults `192.168.144.25:37260`), editable at runtime.
-- **QML entry point**: `QGroundControl.videoManager.sendSiyiCameraAction(name)`
-  from [FlyViewCameraControlsDagger.qml](../src/FlyView/FlyViewCameraControlsDagger.qml).
+- **QML entry point**: `QGroundControl.videoManager.sendCameraAction(name)`
+  from [FlyViewCameraControls.qml](../src/FlyView/FlyViewCameraControls.qml) (C12 PRO).
 
 ### 4.5 RTSP video
 

@@ -77,11 +77,11 @@
         {
             "name": "daggerCamera",
             "shortDesc": "Active camera on the Dagger airframe.",
-            "longDesc": "Selects which camera is mounted on the Dagger airframe. The Dagger camera-control panel and the active RTSP feed switch to match.",
+            "longDesc": "Selects which camera is mounted on the Dagger airframe. The Dagger airframe now ships only the C12 PRO gimbal.",
             "type": "uint32",
             "enumStrings": "A2 mini,C12",
             "enumValues": "0,1",
-            "default": 0,
+            "default": 1,
             "label": "Dagger Camera",
             "keywords": "dagger,camera,a2,c12"
         },
