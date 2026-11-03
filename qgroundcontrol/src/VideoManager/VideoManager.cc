@@ -14,6 +14,7 @@
 #include "VehicleLinkManager.h"
 #include "VideoReceiver.h"
 #include "VideoSettings.h"
+#include "DeviceInfoV2.h"
 #include "QtMultimediaReceiver.h"
 #include "UVCReceiver.h"
 #ifdef QGC_GST_STREAMING
@@ -1520,10 +1521,56 @@ bool VideoManager::_updateSettings(VideoReceiver *receiver)
     return settingsChanged;
 }
 
+// STRATUM: Decode the vehicle's 8-byte DIP V2 device frame (carried in
+// AUTOPILOT_VERSION.uid, treated as the big-endian 64-bit cipher word) and
+// auto-provision the C12 camera IP + TV/IR RTSP URLs. A missing/invalid key, a
+// zero uid, or a CRC/validation failure is a silent no-op, so a non-DIP vehicle
+// is never mis-provisioned.
+void VideoManager::_provisionDaggerCameraFromVehicle(Vehicle *vehicle)
+{
+    if (!vehicle || !_videoSettings) {
+        return;
+    }
+
+    const QByteArray key = QByteArray::fromHex(
+        _videoSettings->daggerDeviceKey()->rawValue().toString().trimmed().toLatin1());
+    if (key.size() != 16) {
+        return; // auto-provisioning disabled or key misconfigured
+    }
+
+    const quint64 uid = vehicle->vehicleUID();
+    if (uid == 0) {
+        return;
+    }
+
+    QByteArray frame(8, Qt::Uninitialized);
+    for (int i = 0; i < 8; ++i) {
+        frame[i] = static_cast<char>((uid >> (8 * (7 - i))) & 0xFF);
+    }
+
+    DeviceInfoV2::DeviceInfo info;
+    QString error;
+    if (!DeviceInfoV2::decode(frame, key, info, &error)) {
+        qCDebug(VideoManagerLog) << "DIP V2: device frame did not decode, skipping auto-provision:" << error;
+        return;
+    }
+
+    qCInfo(VideoManagerLog).noquote()
+        << "DIP V2: provisioning camera" << info.cameraIp
+        << "data-link" << info.dataIp << "port" << info.port
+        << "(handshake" << info.handshake << ")";
+
+    const QString tvUrl = QStringLiteral("rtsp://%1:554/stream=1").arg(info.cameraIp);
+    const QString irUrl = QStringLiteral("rtsp://%1:555/stream=2").arg(info.cameraIp);
+
+    _videoSettings->daggerC12Host()->setRawValue(info.cameraIp);
+    _videoSettings->daggerC12TvRtspUrl()->setRawValue(tvUrl);
+    _videoSettings->daggerC12IrRtspUrl()->setRawValue(irUrl);
+}
+
 void VideoManager::_setActiveVehicle(Vehicle *vehicle)
 {
     qCDebug(VideoManagerLog) << Q_FUNC_INFO << "new vehicle" << vehicle << "old active vehicle" << _activeVehicle;
-
     if (_activeVehicle) {
         (void) disconnect(_activeVehicle->vehicleLinkManager(), &VehicleLinkManager::communicationLostChanged, this, &VideoManager::_communicationLostChanged);
         auto cameraManager = _activeVehicle->cameraManager();
@@ -1544,6 +1591,20 @@ void VideoManager::_setActiveVehicle(Vehicle *vehicle)
     _activeVehicle = vehicle;
     if (_activeVehicle) {
         (void) connect(_activeVehicle->vehicleLinkManager(), &VehicleLinkManager::communicationLostChanged, this, &VideoManager::_communicationLostChanged);
+
+        // STRATUM: auto-provision the Dagger camera from the vehicle's DIP V2 device
+        // frame once the initial connection (AUTOPILOT_VERSION/uid) is complete.
+        const QPointer<Vehicle> vehicleGuard(_activeVehicle);
+        if (_activeVehicle->isInitialConnectComplete()) {
+            _provisionDaggerCameraFromVehicle(_activeVehicle);
+        } else {
+            (void) connect(_activeVehicle, &Vehicle::initialConnectComplete, this, [this, vehicleGuard]() {
+                if (vehicleGuard) {
+                    _provisionDaggerCameraFromVehicle(vehicleGuard);
+                }
+            }, Qt::SingleShotConnection);
+        }
+
         if (_activeVehicle->cameraManager()) {
             (void) connect(_activeVehicle->cameraManager(), &QGCCameraManager::streamChanged, this, &VideoManager::_videoSourceChanged);
             MavlinkCameraControlInterface *pCamera = _activeVehicle->cameraManager()->currentCameraInstance();

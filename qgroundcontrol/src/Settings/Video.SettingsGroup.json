@@ -115,6 +115,15 @@
             "keywords": "c12,skydroid,yunzhuo,dagger,camera,ip,host"
         },
         {
+            "name": "daggerDeviceKey",
+            "shortDesc": "DIP V2 AES-128 key (32 hex characters).",
+            "longDesc": "Shared AES-128 key (32 hex characters) used to decrypt the connected vehicle's 8-byte Device Information Protocol V2 frame. When set, the C12 camera IP and TV/IR RTSP URLs are provisioned automatically on vehicle connect. Leave empty to disable auto-provisioning.",
+            "type": "string",
+            "default": "",
+            "label": "Device Info Key (hex)",
+            "keywords": "dip,device,key,aes,provisioning,dagger"
+        },
+        {
             "name": "tcpUrl",
             "shortDesc": "Network address and port for TCP video stream (e.g. 192.168.143.200:3001).",
             "longDesc": "TCP url address and port to bind to for video stream. Example: 192.168.143.200:3001",

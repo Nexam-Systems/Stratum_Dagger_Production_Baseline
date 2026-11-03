@@ -195,6 +195,11 @@ private:
     void _ensureC12AiSocket();
     bool _sendC12AiPacket(quint8 control, const QByteArray &payload);
 
+    // STRATUM: decode the connected vehicle's 8-byte DIP V2 device frame
+    // (AUTOPILOT_VERSION uid) and auto-provision the C12 camera IP + TV/IR RTSP
+    // URLs. No-op when no device key is configured or the frame fails to decode.
+    void _provisionDaggerCameraFromVehicle(Vehicle *vehicle);
+
     QList<VideoReceiver*> _videoReceivers;
     SubtitleWriter *_subtitleWriter = nullptr;
     VideoSettings *_videoSettings = nullptr;
