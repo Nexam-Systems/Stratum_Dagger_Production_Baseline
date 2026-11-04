@@ -62,9 +62,31 @@ Rectangle {
         return _vm.decodeDeviceSerial(serial).valid ? qgcPal.colorGreen : qgcPal.colorOrange
     }
 
+    // Reconstruct the full 8-character handshake (NX + the 6 decoded digits) and register
+    // it as a MAVLink signing key, so the aircraft's signed connection is accepted when it
+    // connects. The serial carries only the 6 digits; the "NX" marker is prepended here.
+    function registerSigningKey(serial, name) {
+        const r = _vm.decodeDeviceSerial(serial)
+        if (!r.valid) {
+            return false
+        }
+        const keyName = (name && name.length > 0) ? name : serial
+        // addKey() returns false if a key with this name already exists -- harmless/idempotent.
+        QGroundControl.mavlinkSigningKeys.addKey(keyName, "NX" + r.handshake)
+        return true
+    }
+
     ListModel { id: deviceModel }
 
-    Component.onCompleted: loadRegistry()
+    Component.onCompleted: {
+        loadRegistry()
+        // Make every registered device's handshake key available up front so any of them
+        // can be accepted the moment it connects.
+        for (let i = 0; i < deviceModel.count; ++i) {
+            const row = deviceModel.get(i)
+            registerSigningKey(row.serial, row.name)
+        }
+    }
 
     QGCFlickable {
         anchors.margins:  _margins
@@ -88,8 +110,10 @@ Rectangle {
                 Layout.fillWidth: true
                 wrapMode:         Text.WordWrap
                 text: qsTr("Register each aircraft by its device serial number and a name. STRATUM decrypts the " +
-                           "serial with the Device Info Key below to configure the camera and data-link. Press " +
-                           "\"Apply\" on a device to provision its camera (IP + TV/IR video streams).")
+                           "serial with the Device Info Key below to recover the 6-digit handshake (stored as " +
+                           "NX + digits), the camera IP, and the data-link. The handshake is registered as the " +
+                           "aircraft's signing key so its connection is accepted. Press \"Apply\" to also provision " +
+                           "the camera (IP + TV/IR video streams).")
             }
 
             // ---- Device Info Key ----------------------------------------
@@ -139,6 +163,7 @@ Rectangle {
                         onEditingFinished: {
                             deviceModel.setProperty(index, "serial", text)
                             root.saveRegistry()
+                            root.registerSigningKey(text, name)
                         }
                     }
                     QGCTextField {
@@ -148,6 +173,7 @@ Rectangle {
                         onEditingFinished: {
                             deviceModel.setProperty(index, "name", text)
                             root.saveRegistry()
+                            root.registerSigningKey(serialField.text, text)
                         }
                     }
                     QGCLabel {
@@ -160,8 +186,9 @@ Rectangle {
                         text:    qsTr("Apply")
                         enabled: root._vm.decodeDeviceSerial(serialField.text).valid
                         onClicked: {
+                            root.registerSigningKey(serialField.text, name)
                             if (root._vm.applyDeviceSerial(serialField.text)) {
-                                applyStatus.text  = qsTr("Provisioned %1").arg(name.length ? name : serialField.text)
+                                applyStatus.text  = qsTr("Provisioned %1 and registered its handshake key").arg(name.length ? name : serialField.text)
                                 applyStatus.color = qgcPal.colorGreen
                             } else {
                                 applyStatus.text  = qsTr("Could not provision %1").arg(serialField.text)
