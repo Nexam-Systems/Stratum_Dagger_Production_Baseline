@@ -71,8 +71,40 @@ Rectangle {
             return false
         }
         const keyName = (name && name.length > 0) ? name : serial
-        // addKey() returns false if a key with this name already exists -- harmless/idempotent.
+        // Remove any stale entry first so an edited serial/handshake replaces the old key.
+        QGroundControl.mavlinkSigningKeys.removeKey(keyName)
         QGroundControl.mavlinkSigningKeys.addKey(keyName, "NX" + r.handshake)
+        return true
+    }
+
+    // Drop a device's handshake signing key so a removed/renamed device can no longer connect.
+    function unregisterSigningKey(serial, name) {
+        const keyName = (name && name.length > 0) ? name : serial
+        QGroundControl.mavlinkSigningKeys.removeKey(keyName)
+    }
+
+    // Create (or reuse) a UDP link to the device's decoded data-link endpoint and connect it,
+    // after making sure the handshake signing key is registered.
+    function connectDevice(serial, name) {
+        const r = _vm.decodeDeviceSerial(serial)
+        if (!r.valid) {
+            return false
+        }
+        registerSigningKey(serial, name)
+
+        const lm = QGroundControl.linkManager
+        const linkName = qsTr("STRATUM %1").arg((name && name.length > 0) ? name : serial)
+        for (let i = 0; i < lm.linkConfigurations.count; ++i) {
+            const existing = lm.linkConfigurations.get(i)
+            if (existing && existing.name === linkName) {
+                lm.createConnectedLink(existing)
+                return true
+            }
+        }
+        const cfg = lm.createConfiguration(LinkConfiguration.TypeUdp, linkName)
+        cfg.addHost(r.dataIp, r.port)
+        lm.endCreateConfiguration(cfg)
+        lm.createConnectedLink(cfg)
         return true
     }
 
@@ -141,7 +173,7 @@ Rectangle {
                 QGCLabel { text: qsTr("Serial Number");  Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 24; font.bold: true }
                 QGCLabel { text: qsTr("Vehicle Name");   Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 18; font.bold: true }
                 QGCLabel { text: qsTr("Decoded");        Layout.fillWidth: true; font.bold: true }
-                Item     { Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 18 }
+                Item     { Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 28 }
             }
 
             // ---- Device rows --------------------------------------------
@@ -171,6 +203,7 @@ Rectangle {
                         text:                  name
                         placeholderText:       qsTr("e.g. Dagger 01")
                         onEditingFinished: {
+                            root.unregisterSigningKey(serialField.text, name)
                             deviceModel.setProperty(index, "name", text)
                             root.saveRegistry()
                             root.registerSigningKey(serialField.text, text)
@@ -197,8 +230,22 @@ Rectangle {
                         }
                     }
                     QGCButton {
+                        text:    qsTr("Connect")
+                        enabled: root._vm.decodeDeviceSerial(serialField.text).valid
+                        onClicked: {
+                            if (root.connectDevice(serialField.text, name)) {
+                                applyStatus.text  = qsTr("Connecting to %1 …").arg(name.length ? name : serialField.text)
+                                applyStatus.color = qgcPal.colorGreen
+                            } else {
+                                applyStatus.text  = qsTr("Could not connect %1").arg(serialField.text)
+                                applyStatus.color = qgcPal.colorOrange
+                            }
+                        }
+                    }
+                    QGCButton {
                         text: qsTr("Remove")
                         onClicked: {
+                            root.unregisterSigningKey(serialField.text, name)
                             deviceModel.remove(index)
                             root.saveRegistry()
                         }
