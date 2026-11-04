@@ -15,6 +15,7 @@
 #include "VideoReceiver.h"
 #include "VideoSettings.h"
 #include "DeviceInfoV2.h"
+#include "MAVLinkSigningKeys.h"
 #include "QtMultimediaReceiver.h"
 #include "UVCReceiver.h"
 #ifdef QGC_GST_STREAMING
@@ -35,6 +36,9 @@
 #include <QtCore/QEventLoop>
 #include <QtCore/QFile>
 #include <QtCore/QFutureWatcher>
+#include <QtCore/QJsonArray>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
 #include <QtCore/QPointer>
 #include <QtCore/QRunnable>
 #include <QtCore/QSettings>
@@ -927,6 +931,10 @@ void VideoManager::init(QQuickWindow *mainWindow)
     });
     (void) connect(MultiVehicleManager::instance(), &MultiVehicleManager::activeVehicleChanged, this, &VideoManager::_setActiveVehicle);
 
+    // STRATUM: make registered devices' handshake keys available at startup so they
+    // connect without the operator having to open the Devices settings page.
+    _registerDeviceSigningKeys();
+
     (void) connect(this, &VideoManager::autoStreamConfiguredChanged, this, &VideoManager::_videoSourceChanged);
 
     // STRATUM: bind the C12 attitude socket up front and enable the GAA stream
@@ -1605,6 +1613,35 @@ void VideoManager::syncSettings()
 {
     QSettings settings;
     settings.sync();
+}
+
+void VideoManager::_registerDeviceSigningKeys()
+{
+    if (!_videoSettings) {
+        return;
+    }
+    const QByteArray key = QByteArray::fromHex(
+        _videoSettings->daggerDeviceKey()->rawValue().toString().trimmed().toLatin1());
+    if (key.size() != 16) {
+        return;
+    }
+
+    const QByteArray json = _videoSettings->deviceRegistry()->rawValue().toString().toUtf8();
+    const QJsonArray entries = QJsonDocument::fromJson(json).array();
+    for (const QJsonValue &value : entries) {
+        const QJsonObject entry = value.toObject();
+        const QString serial = entry.value(QStringLiteral("serial")).toString();
+        const QString name = entry.value(QStringLiteral("name")).toString();
+
+        DeviceInfoV2::DeviceInfo info;
+        QString error;
+        if (!_decodeDipV2Serial(serial, key, info, error)) {
+            continue;
+        }
+        const QString keyName = name.isEmpty() ? serial : name;
+        MAVLinkSigningKeys::instance()->removeKey(keyName);
+        MAVLinkSigningKeys::instance()->addKey(keyName, QStringLiteral("NX") + info.handshake);
+    }
 }
 
 // STRATUM: Decode the vehicle's 8-byte DIP V2 device frame (carried in

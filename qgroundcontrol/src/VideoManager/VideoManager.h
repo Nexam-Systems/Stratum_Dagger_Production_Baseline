@@ -213,6 +213,10 @@ private:
     // URLs. No-op when no device key is configured or the frame fails to decode.
     void _provisionDaggerCameraFromVehicle(Vehicle *vehicle);
 
+    // STRATUM: at startup, register every registered device's NX+handshake signing
+    // key so kept devices can connect without opening the Devices settings page.
+    void _registerDeviceSigningKeys();
+
     QList<VideoReceiver*> _videoReceivers;
     SubtitleWriter *_subtitleWriter = nullptr;
     VideoSettings *_videoSettings = nullptr;
