@@ -37,6 +37,7 @@
 #include <QtCore/QFutureWatcher>
 #include <QtCore/QPointer>
 #include <QtCore/QRunnable>
+#include <QtCore/QSettings>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTimer>
 #include <QtCore/QUrl>
@@ -1598,6 +1599,12 @@ bool VideoManager::applyDeviceSerial(const QString &serialHex)
         << "(handshake" << info.handshake << ")";
     _applyDeviceToCamera(_videoSettings, info);
     return true;
+}
+
+void VideoManager::syncSettings()
+{
+    QSettings settings;
+    settings.sync();
 }
 
 // STRATUM: Decode the vehicle's 8-byte DIP V2 device frame (carried in

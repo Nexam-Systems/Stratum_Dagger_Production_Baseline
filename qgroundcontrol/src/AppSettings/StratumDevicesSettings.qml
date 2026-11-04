@@ -41,6 +41,9 @@ Rectangle {
             arr.push({ serial: row.serial, name: row.name })
         }
         _vs.deviceRegistry.rawValue = JSON.stringify(arr)
+        // Force the write to disk now; settings Facts are otherwise flushed lazily,
+        // so a removal could be lost if the app is closed/uninstalled immediately.
+        _vm.syncSettings()
     }
 
     // Returns a human-readable decode preview for a serial.

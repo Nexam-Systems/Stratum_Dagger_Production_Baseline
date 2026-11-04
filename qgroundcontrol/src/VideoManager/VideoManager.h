@@ -113,6 +113,10 @@ public:
     // from it. Returns true on success.
     Q_INVOKABLE bool applyDeviceSerial(const QString &serialHex);
 
+    // STRATUM: force a QSettings flush to disk. Normal setting writes are lazily
+    // flushed; the device registry calls this so a removal survives an abrupt exit.
+    Q_INVOKABLE void syncSettings();
+
     void init(QQuickWindow *mainWindow);
     void startGStreamerInit();
     bool waitForGStreamerInit(int timeoutMs = 60000);
