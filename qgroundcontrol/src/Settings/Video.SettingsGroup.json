@@ -77,11 +77,11 @@
         {
             "name": "daggerCamera",
             "shortDesc": "Active camera on the Dagger airframe.",
-            "longDesc": "Selects which camera is mounted on the Dagger airframe. The Dagger camera-control panel and the active RTSP feed switch to match.",
+            "longDesc": "Selects which camera is mounted on the Dagger airframe. The Dagger airframe now ships only the C12 PRO gimbal.",
             "type": "uint32",
             "enumStrings": "A2 mini,C12",
             "enumValues": "0,1",
-            "default": 0,
+            "default": 1,
             "label": "Dagger Camera",
             "keywords": "dagger,camera,a2,c12"
         },
@@ -113,6 +113,24 @@
             "default": "192.168.144.108",
             "label": "C12 Camera IP",
             "keywords": "c12,skydroid,yunzhuo,dagger,camera,ip,host"
+        },
+        {
+            "name": "daggerDeviceKey",
+            "shortDesc": "DIP V2 AES-128 key (32 hex characters).",
+            "longDesc": "Shared AES-128 key (32 hex characters) used to decrypt the connected vehicle's 8-byte Device Information Protocol V2 frame. When set, the C12 camera IP and TV/IR RTSP URLs are provisioned automatically on vehicle connect. Leave empty to disable auto-provisioning.",
+            "type": "string",
+            "default": "",
+            "label": "Device Info Key (hex)",
+            "keywords": "dip,device,key,aes,provisioning,dagger"
+        },
+        {
+            "name": "deviceRegistry",
+            "shortDesc": "Registered STRATUM devices (serial + name).",
+            "longDesc": "JSON array of registered devices, each with a serial number and a vehicle name. Managed by the STRATUM Devices settings tab. STRATUM decodes each serial to provision the camera IP and data-link.",
+            "type": "string",
+            "default": "[]",
+            "label": "Device Registry",
+            "keywords": "stratum,device,serial,registry,vehicle"
         },
         {
             "name": "tcpUrl",

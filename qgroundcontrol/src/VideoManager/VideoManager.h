@@ -8,6 +8,7 @@
 #include <QtQmlIntegration/QtQmlIntegration>
 
 #include <QtCore/QString>
+#include <QtCore/QVariantMap>
 
 #include <functional>
 #include <memory>
@@ -104,6 +105,18 @@ public:
     // Returns the IPv4 string on success or an empty string on failure/timeout.
     Q_INVOKABLE QString readC12CameraIp(int timeoutMs = 1000);
 
+    // STRATUM DIP V2: decode an 8-byte device serial (hex, optional separators) with the
+    // configured device key. Returns {valid, cameraIp, dataIp, port, handshake, error}.
+    // Used by the STRATUM Devices settings tab to validate/preview registered serials.
+    Q_INVOKABLE QVariantMap decodeDeviceSerial(const QString &serialHex) const;
+    // STRATUM DIP V2: decode the serial and provision the C12 camera (IP + TV/IR URLs)
+    // from it. Returns true on success.
+    Q_INVOKABLE bool applyDeviceSerial(const QString &serialHex);
+
+    // STRATUM: force a QSettings flush to disk. Normal setting writes are lazily
+    // flushed; the device registry calls this so a removal survives an abrupt exit.
+    Q_INVOKABLE void syncSettings();
+
     void init(QQuickWindow *mainWindow);
     void startGStreamerInit();
     bool waitForGStreamerInit(int timeoutMs = 60000);
@@ -194,6 +207,15 @@ private:
 
     void _ensureC12AiSocket();
     bool _sendC12AiPacket(quint8 control, const QByteArray &payload);
+
+    // STRATUM: decode the connected vehicle's 8-byte DIP V2 device frame
+    // (AUTOPILOT_VERSION uid) and auto-provision the C12 camera IP + TV/IR RTSP
+    // URLs. No-op when no device key is configured or the frame fails to decode.
+    void _provisionDaggerCameraFromVehicle(Vehicle *vehicle);
+
+    // STRATUM: at startup, register every registered device's NX+handshake signing
+    // key so kept devices can connect without opening the Devices settings page.
+    void _registerDeviceSigningKeys();
 
     QList<VideoReceiver*> _videoReceivers;
     SubtitleWriter *_subtitleWriter = nullptr;

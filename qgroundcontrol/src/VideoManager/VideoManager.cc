@@ -14,6 +14,8 @@
 #include "VehicleLinkManager.h"
 #include "VideoReceiver.h"
 #include "VideoSettings.h"
+#include "DeviceInfoV2.h"
+#include "MAVLinkSigningKeys.h"
 #include "QtMultimediaReceiver.h"
 #include "UVCReceiver.h"
 #ifdef QGC_GST_STREAMING
@@ -34,8 +36,12 @@
 #include <QtCore/QEventLoop>
 #include <QtCore/QFile>
 #include <QtCore/QFutureWatcher>
+#include <QtCore/QJsonArray>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
 #include <QtCore/QPointer>
 #include <QtCore/QRunnable>
+#include <QtCore/QSettings>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTimer>
 #include <QtCore/QUrl>
@@ -925,6 +931,10 @@ void VideoManager::init(QQuickWindow *mainWindow)
     });
     (void) connect(MultiVehicleManager::instance(), &MultiVehicleManager::activeVehicleChanged, this, &VideoManager::_setActiveVehicle);
 
+    // STRATUM: make registered devices' handshake keys available at startup so they
+    // connect without the operator having to open the Devices settings page.
+    _registerDeviceSigningKeys();
+
     (void) connect(this, &VideoManager::autoStreamConfiguredChanged, this, &VideoManager::_videoSourceChanged);
 
     // STRATUM: bind the C12 attitude socket up front and enable the GAA stream
@@ -1520,10 +1530,160 @@ bool VideoManager::_updateSettings(VideoReceiver *receiver)
     return settingsChanged;
 }
 
+// STRATUM: strip separators and decode an 8-byte DIP V2 serial (hex) with the key.
+static bool _decodeDipV2Serial(const QString &serialHex, const QByteArray &key,
+                               DeviceInfoV2::DeviceInfo &info, QString &error)
+{
+    QString clean;
+    for (const QChar c : serialHex) {
+        if (c.isDigit() || (c >= QLatin1Char('a') && c <= QLatin1Char('f'))
+                        || (c >= QLatin1Char('A') && c <= QLatin1Char('F'))) {
+            clean.append(c);
+        }
+    }
+    const QByteArray frame = QByteArray::fromHex(clean.toLatin1());
+    if (frame.size() != 8) {
+        error = QObject::tr("serial must be 8 bytes (16 hex characters)");
+        return false;
+    }
+    if (key.size() != 16) {
+        error = QObject::tr("device key not set");
+        return false;
+    }
+    return DeviceInfoV2::decode(frame, key, info, &error);
+}
+
+// STRATUM: apply a decoded device to the C12 camera settings (IP + TV/IR RTSP URLs).
+static void _applyDeviceToCamera(VideoSettings *vs, const DeviceInfoV2::DeviceInfo &info)
+{
+    if (!vs) {
+        return;
+    }
+    vs->daggerC12Host()->setRawValue(info.cameraIp);
+    vs->daggerC12TvRtspUrl()->setRawValue(QStringLiteral("rtsp://%1:554/stream=1").arg(info.cameraIp));
+    vs->daggerC12IrRtspUrl()->setRawValue(QStringLiteral("rtsp://%1:555/stream=2").arg(info.cameraIp));
+}
+
+QVariantMap VideoManager::decodeDeviceSerial(const QString &serialHex) const
+{
+    QVariantMap result;
+    const QByteArray key = _videoSettings
+        ? QByteArray::fromHex(_videoSettings->daggerDeviceKey()->rawValue().toString().trimmed().toLatin1())
+        : QByteArray();
+
+    DeviceInfoV2::DeviceInfo info;
+    QString error;
+    if (_decodeDipV2Serial(serialHex, key, info, error)) {
+        result[QStringLiteral("valid")]     = true;
+        result[QStringLiteral("cameraIp")]  = info.cameraIp;
+        result[QStringLiteral("dataIp")]    = info.dataIp;
+        result[QStringLiteral("port")]      = info.port;
+        result[QStringLiteral("handshake")] = info.handshake;
+    } else {
+        result[QStringLiteral("valid")] = false;
+        result[QStringLiteral("error")] = error;
+    }
+    return result;
+}
+
+bool VideoManager::applyDeviceSerial(const QString &serialHex)
+{
+    if (!_videoSettings) {
+        return false;
+    }
+    const QByteArray key = QByteArray::fromHex(
+        _videoSettings->daggerDeviceKey()->rawValue().toString().trimmed().toLatin1());
+
+    DeviceInfoV2::DeviceInfo info;
+    QString error;
+    if (!_decodeDipV2Serial(serialHex, key, info, error)) {
+        qCWarning(VideoManagerLog) << "DIP V2: applyDeviceSerial failed:" << error;
+        return false;
+    }
+
+    qCInfo(VideoManagerLog).noquote()
+        << "DIP V2: applying device camera" << info.cameraIp
+        << "data-link" << info.dataIp << "port" << info.port
+        << "(handshake" << info.handshake << ")";
+    _applyDeviceToCamera(_videoSettings, info);
+    return true;
+}
+
+void VideoManager::syncSettings()
+{
+    QSettings settings;
+    settings.sync();
+}
+
+void VideoManager::_registerDeviceSigningKeys()
+{
+    if (!_videoSettings) {
+        return;
+    }
+    const QByteArray key = QByteArray::fromHex(
+        _videoSettings->daggerDeviceKey()->rawValue().toString().trimmed().toLatin1());
+    if (key.size() != 16) {
+        return;
+    }
+
+    const QByteArray json = _videoSettings->deviceRegistry()->rawValue().toString().toUtf8();
+    const QJsonArray entries = QJsonDocument::fromJson(json).array();
+    for (const QJsonValue &value : entries) {
+        const QJsonObject entry = value.toObject();
+        const QString serial = entry.value(QStringLiteral("serial")).toString();
+        const QString name = entry.value(QStringLiteral("name")).toString();
+
+        DeviceInfoV2::DeviceInfo info;
+        QString error;
+        if (!_decodeDipV2Serial(serial, key, info, error)) {
+            continue;
+        }
+        const QString keyName = name.isEmpty() ? serial : name;
+        MAVLinkSigningKeys::instance()->removeKey(keyName);
+        MAVLinkSigningKeys::instance()->addKey(keyName, QStringLiteral("NX") + info.handshake);
+    }
+}
+
+// STRATUM: Decode the vehicle's 8-byte DIP V2 device frame (carried in
+// AUTOPILOT_VERSION.uid, treated as the big-endian 64-bit cipher word) and
+// auto-provision the C12 camera IP + TV/IR RTSP URLs. A missing/invalid key, a
+// zero uid, or a CRC/validation failure is a silent no-op, so a non-DIP vehicle
+// is never mis-provisioned.
+void VideoManager::_provisionDaggerCameraFromVehicle(Vehicle *vehicle)
+{
+    if (!vehicle || !_videoSettings) {
+        return;
+    }
+
+    const QByteArray key = QByteArray::fromHex(
+        _videoSettings->daggerDeviceKey()->rawValue().toString().trimmed().toLatin1());
+    if (key.size() != 16) {
+        return; // auto-provisioning disabled or key misconfigured
+    }
+
+    const quint64 uid = vehicle->vehicleUID();
+    if (uid == 0) {
+        return;
+    }
+
+    const QString serial = QStringLiteral("%1").arg(uid, 16, 16, QLatin1Char('0'));
+    DeviceInfoV2::DeviceInfo info;
+    QString error;
+    if (!_decodeDipV2Serial(serial, key, info, error)) {
+        qCDebug(VideoManagerLog) << "DIP V2: vehicle device frame did not decode, skipping auto-provision:" << error;
+        return;
+    }
+
+    qCInfo(VideoManagerLog).noquote()
+        << "DIP V2: provisioning camera" << info.cameraIp
+        << "data-link" << info.dataIp << "port" << info.port
+        << "(handshake" << info.handshake << ")";
+    _applyDeviceToCamera(_videoSettings, info);
+}
+
 void VideoManager::_setActiveVehicle(Vehicle *vehicle)
 {
     qCDebug(VideoManagerLog) << Q_FUNC_INFO << "new vehicle" << vehicle << "old active vehicle" << _activeVehicle;
-
     if (_activeVehicle) {
         (void) disconnect(_activeVehicle->vehicleLinkManager(), &VehicleLinkManager::communicationLostChanged, this, &VideoManager::_communicationLostChanged);
         auto cameraManager = _activeVehicle->cameraManager();
@@ -1544,6 +1704,20 @@ void VideoManager::_setActiveVehicle(Vehicle *vehicle)
     _activeVehicle = vehicle;
     if (_activeVehicle) {
         (void) connect(_activeVehicle->vehicleLinkManager(), &VehicleLinkManager::communicationLostChanged, this, &VideoManager::_communicationLostChanged);
+
+        // STRATUM: auto-provision the Dagger camera from the vehicle's DIP V2 device
+        // frame once the initial connection (AUTOPILOT_VERSION/uid) is complete.
+        const QPointer<Vehicle> vehicleGuard(_activeVehicle);
+        if (_activeVehicle->isInitialConnectComplete()) {
+            _provisionDaggerCameraFromVehicle(_activeVehicle);
+        } else {
+            (void) connect(_activeVehicle, &Vehicle::initialConnectComplete, this, [this, vehicleGuard]() {
+                if (vehicleGuard) {
+                    _provisionDaggerCameraFromVehicle(vehicleGuard);
+                }
+            }, Qt::SingleShotConnection);
+        }
+
         if (_activeVehicle->cameraManager()) {
             (void) connect(_activeVehicle->cameraManager(), &QGCCameraManager::streamChanged, this, &VideoManager::_videoSourceChanged);
             MavlinkCameraControlInterface *pCamera = _activeVehicle->cameraManager()->currentCameraInstance();
