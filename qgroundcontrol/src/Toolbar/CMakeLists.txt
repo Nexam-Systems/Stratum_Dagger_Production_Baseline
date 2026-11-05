@@ -33,6 +33,7 @@ qt_add_qml_module(ToolbarModule
         RTKGPSIndicator.qml
         SelectViewDropdown.qml
         SignalStrength.qml
+        StratumGnssQuality.qml
         StratumMissionState.qml
         StratumStatusBar.qml
         TelemetryRSSIIndicator.qml
