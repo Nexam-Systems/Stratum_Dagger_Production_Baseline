@@ -209,6 +209,29 @@ QGCPopupDialog {
                 }
             }
 
+            QGCLabel {
+                Layout.topMargin:   ScreenTools.defaultFontPixelHeight / 2
+                text:               qsTr("Assets")
+                font.bold:          true
+            }
+            RowLayout {
+                spacing: ScreenTools.defaultFontPixelWidth
+                QGCLabel {
+                    text:                  qsTr("Device Info Key (hex)")
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 22
+                }
+                FactTextField {
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 34
+                    fact:                  QGroundControl.settingsManager.videoSettings.daggerDeviceKey
+                    placeholderText:       qsTr("32 hex characters (AES-128 key)")
+                }
+            }
+            QGCLabel {
+                Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 58
+                wrapMode:            Text.WordWrap
+                text:                qsTr("Shared AES-128 key used to decode asset serial numbers in Application Settings > Assets.")
+            }
+
             Rectangle {
                 Layout.topMargin:       ScreenTools.defaultFontPixelHeight / 2
                 Layout.fillWidth:       true

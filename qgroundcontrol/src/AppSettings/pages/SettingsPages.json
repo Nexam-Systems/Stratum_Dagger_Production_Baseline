@@ -104,7 +104,7 @@
             "visible": "QGroundControl.settingsManager.videoSettings.userVisible"
         },
         {
-            "name": "Devices",
+            "name": "Assets",
             "qml": "StratumDevicesSettings.qml",
             "icon": "qrc:/InstrumentValueIcons/drone.svg"
         },
