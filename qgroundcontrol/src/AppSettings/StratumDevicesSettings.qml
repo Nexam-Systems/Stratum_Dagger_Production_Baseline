@@ -152,6 +152,7 @@ Rectangle {
                 spacing:          ScreenTools.defaultFontPixelWidth
                 QGCLabel { text: qsTr("Serial Number");  Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 24; font.bold: true }
                 QGCLabel { text: qsTr("Vehicle Name");   Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 18; font.bold: true }
+                QGCLabel { text: qsTr("Status");         Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16; font.bold: true }
                 Item     { Layout.fillWidth: true }
                 QGCLabel { text: qsTr("Actions");        Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 28; font.bold: true }
             }
@@ -160,12 +161,21 @@ Rectangle {
             Repeater {
                 model: deviceModel
                 delegate: RowLayout {
+                    id:               assetRow
                     required property int    index
                     required property string serial
                     required property string name
 
                     Layout.fillWidth: true
                     spacing:          ScreenTools.defaultFontPixelWidth
+
+                    // Live connection state: true when the asset's signing key is actively
+                    // in use by a connected vehicle (keyUsageRevision makes it reactive).
+                    readonly property string _keyName:   (name && name.length > 0) ? name : serial
+                    readonly property bool   _connected: {
+                        void(QGroundControl.mavlinkSigningKeys.keyUsageRevision)
+                        return _keyName.length > 0 && QGroundControl.mavlinkSigningKeys.isKeyInUse(_keyName)
+                    }
 
                     QGCTextField {
                         id:                    serialField
@@ -187,6 +197,21 @@ Rectangle {
                             deviceModel.setProperty(index, "name", text)
                             root.saveRegistry()
                             root.registerSigningKey(serialField.text, text)
+                        }
+                    }
+                    RowLayout {
+                        Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                        spacing:               ScreenTools.defaultFontPixelWidth / 2
+                        Rectangle {
+                            implicitWidth:    ScreenTools.defaultFontPixelHeight * 0.5
+                            implicitHeight:   implicitWidth
+                            radius:           implicitWidth / 2
+                            color:            assetRow._connected ? qgcPal.colorGreen : "#808080"
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+                        QGCLabel {
+                            text:  assetRow._connected ? qsTr("Connected") : qsTr("Offline")
+                            color: assetRow._connected ? qgcPal.colorGreen : qgcPal.text
                         }
                     }
                     Item { Layout.fillWidth: true }
