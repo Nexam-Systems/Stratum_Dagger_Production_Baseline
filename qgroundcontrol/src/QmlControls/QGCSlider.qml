@@ -8,6 +8,7 @@ Slider {
     property bool zeroCentered: false ///< Value indicator starts display from zero instead of min value
     property bool displayValue: false ///< true: Show value on handle
     property bool showBoundaryValues: false ///< true: Show min/max values at slider ends
+    property bool highlightValue: false
 
     id: control
     implicitHeight: ScreenTools.implicitSliderHeight + (showBoundaryValues ? minLabel.contentHeight : 0)
@@ -33,6 +34,16 @@ Slider {
         color: qgcPal.button
         border.width: 1
         border.color: qgcPal.buttonText
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.bottom: parent.bottom
+            width: control.horizontal ? control.position * parent.width : parent.width
+            height: control.horizontal ? parent.height : control.position * parent.height
+            radius: parent.radius
+            visible: control.highlightValue
+            color: qgcPal.brandingPurple
+        }
     }
 
     handle: Rectangle {
@@ -44,7 +55,7 @@ Slider {
                control.topPadding + control.visualPosition * (control.availableHeight - height)
         implicitWidth: _radius * 2
         implicitHeight: _radius * 2
-        color: qgcPal.button
+        color: control.highlightValue ? qgcPal.brandingPurple : qgcPal.button
         border.color: qgcPal.buttonText
         border.width: 1
         radius: _radius

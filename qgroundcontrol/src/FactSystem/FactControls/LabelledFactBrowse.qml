@@ -23,6 +23,7 @@ RowLayout {
     property string dialogTitle:    label
     property bool   selectFolder:   true
     property string defaultText:    qsTr("<not set>")
+    property bool   showPathField:  false
 
     spacing: ScreenTools.defaultFontPixelWidth * 2
 
@@ -34,6 +35,7 @@ RowLayout {
         QGCLabel {
             Layout.fillWidth:   true
             text:               root.label
+            visible:            !root.showPathField && text !== ""
             wrapMode:           Text.WordWrap
         }
 
@@ -42,11 +44,23 @@ RowLayout {
             font.pointSize:     ScreenTools.smallFontPointSize
             text:               root.fact.rawValue === "" ? root.defaultText : root.fact.value
             elide:              Text.ElideMiddle
+            visible:            !root.showPathField
+        }
+
+        QGCTextField {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            visible: root.showPathField
+            readOnly: true
+            outlined: true
+            selectByMouse: true
+            text: root.fact.rawValue === "" ? root.defaultText : root.fact.value
         }
     }
 
     QGCButton {
         text:       qsTr("Browse")
+        iconSource: root.showPathField ? "/InstrumentValueIcons/folder.svg" : ""
         onClicked:  _browseDialog.openForLoad()
 
         QGCFileDialog {

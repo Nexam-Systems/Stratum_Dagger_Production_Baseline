@@ -2,6 +2,12 @@
 {{ indent }}    Layout.fillWidth: true
 {{ indent }}    label: {{ label_expr }}
 {{ indent }}    fact: {{ fact_ref }}
+{% if qml_type == "LabelledFactBrowse" %}
+{{ indent }}    showPathField: true
+{{ indent }}    dialogTitle: fact.label
+{% elif qml_type == "LabelledFactIncrementer" %}
+{{ indent }}    showUnits: true
+{% endif %}
 {% if enable_when %}
 {{ indent }}    enabled: {{ enable_when }}
 {% endif %}

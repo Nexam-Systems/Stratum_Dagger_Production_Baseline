@@ -8,6 +8,7 @@ import QGroundControl.Controls
 
 T.ComboBox {
     property bool sizeToContents: false
+    property bool outlined: false
     property string alternateText: ""
 
     id: control
@@ -26,7 +27,7 @@ T.ComboBox {
     property real _popupWidth: width
     property real _largestTextWidth: 0
     property bool _onCompleted: false
-    property bool _showBorder: qgcPal.globalTheme === QGCPalette.Light
+    property bool _showBorder: outlined || qgcPal.globalTheme === QGCPalette.Light
     property bool _showHighlight: enabled && pressed
 
     QGCPalette { id: qgcPal; colorGroupEnabled: enabled }

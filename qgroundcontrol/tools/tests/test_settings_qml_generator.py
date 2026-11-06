@@ -580,16 +580,37 @@ class TestRealPageDefinitions:
             page = load_page_def(json_file)
             qml = generate_page_qml(page, settings_dir, json_context=json_file.name)
             assert "responsiveColumns: true" in qml
-            assert qml.count("collapsible: true") == qml.count("SettingsGroupLayout {")
+            assert qml.count("collapsible: true") == qml.count("SettingsSection {")
             assert qml.count("Layout.columnSpan: settingsPage.columnCount") == sum(
-                bool(group.component) for group in page.groups
+                bool(group.component) or group.fullWidth for group in page.groups
             )
+
+    def test_concept_sections_and_field_layout(self, repo_root: Path):
+        path = repo_root / "src" / "AppSettings" / "pages" / "General.SettingsUI.json"
+        page = load_page_def(path)
+        qml = generate_page_qml(page, repo_root / "src" / "Settings", json_context=path.name)
+        assert page.title == "General Settings"
+        numbered = [group for group in page.groups if group.sectionNumber]
+        assert [group.sectionNumber for group in numbered] == ["01", "02", "03", "04", "05"]
+        assert all(group.icon for group in numbered)
+        assert [group.heading for group in page.groups if group.fullWidth] == ["Application"]
+        assert 'pageTitle: qsTranslate("General.SettingsUI.json", "General Settings")' in qml
+        assert "SettingsFieldRow {" in qml
+        assert "highlightSlider: true" in qml
+        assert "showPathField: true" in qml
+        assert "showUnits: true" in qml
+        assert "comboBoxFillWidth: true" in qml
+        assert "comboBoxOutlined: true" in qml
+        assert "textFieldFillWidth: true" in qml
+        assert "textFieldOutlined: true" in qml
+        assert "Accessible.name: QGroundControl.settingsManager.appSettings.clearSettingsNextBoot.label" in qml
+        assert "QGroundControl.testAudioOutput()" in qml
 
     def test_general_sections_preserve_settings(self, repo_root: Path):
         path = repo_root / "src" / "AppSettings" / "pages" / "General.SettingsUI.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         groups = {group["heading"]: group for group in data["groups"]}
-        assert {"STRATUM Operational Limits", "User Interface", "Position Streaming",
+        assert {"Operational Limits", "User Interface", "Position Streaming",
                 "Audio", "Application", "Vehicle Preferences", "Units"} <= groups.keys()
         settings = [
             control["setting"]

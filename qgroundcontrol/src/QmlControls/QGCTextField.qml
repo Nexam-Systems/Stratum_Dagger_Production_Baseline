@@ -24,6 +24,7 @@ TextField {
     EnterKey.type:      Qt.EnterKeyDone
 
     property bool   showUnits:          false
+    property bool   outlined:           false
     property bool   showHelp:           false
     property string unitsLabel:         ""
     property string extraUnitsLabel:    ""
@@ -83,7 +84,7 @@ TextField {
     }
 
     background: Rectangle {
-        border.width:   control.validationError ? 2 : (qgcPal.globalTheme === QGCPalette.Light ? 1 : 0)
+        border.width:   control.validationError ? 2 : (control.outlined || qgcPal.globalTheme === QGCPalette.Light ? 1 : 0)
         border.color:   control.validationError ? qgcPal.colorRed : qgcPal.buttonBorder
         radius:         ScreenTools.defaultBorderRadius
         color:          qgcPal.textField

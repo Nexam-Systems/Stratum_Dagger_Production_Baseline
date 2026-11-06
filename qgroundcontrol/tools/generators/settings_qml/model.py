@@ -39,6 +39,9 @@ class GroupDef:
     showWhen: str = ""
     enableWhen: str = ""
     headingDescription: str = ""
+    sectionNumber: str = ""
+    icon: str = ""
+    fullWidth: bool = False
     component: str = ""
     sectionName: str = ""
     keywords: list[str] = field(default_factory=list)
@@ -56,6 +59,8 @@ class PageDef:
     imports: list[str] = field(default_factory=list)
     bindings: dict[str, str] = field(default_factory=dict)
     groups: list[GroupDef] = field(default_factory=list)
+    title: str = ""
+    description: str = ""
 
 
 def split_translated_list(csv: str) -> list[str]:
@@ -77,13 +82,17 @@ def load_page_def(json_path: Path) -> PageDef:
     with open(json_path, encoding="utf-8") as f:
         data = json.load(f)
 
-    page = PageDef(imports=data.get("imports", []), bindings=data.get("bindings", {}))
+    page = PageDef(imports=data.get("imports", []), bindings=data.get("bindings", {}),
+                   title=data.get("title", ""), description=data.get("description", ""))
     for grp_data in data.get("groups", []):
         grp = GroupDef(
             heading=grp_data.get("heading", ""),
             showWhen=grp_data.get("showWhen", ""),
             enableWhen=grp_data.get("enableWhen", ""),
             headingDescription=grp_data.get("headingDescription", ""),
+            sectionNumber=grp_data.get("sectionNumber", ""),
+            icon=grp_data.get("icon", ""),
+            fullWidth=grp_data.get("fullWidth", False),
             component=grp_data.get("component", ""),
             sectionName=grp_data.get("sectionName", ""),
             keywords=parse_keywords(grp_data.get("keywords", [])),

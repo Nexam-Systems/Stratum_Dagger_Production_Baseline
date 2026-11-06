@@ -1,6 +1,8 @@
 {
     "version": 1,
     "fileType": "SettingsUI",
+    "title": "General Settings",
+    "description": "Configure application preferences and operational parameters",
     "bindings": {
         "_appSettings": "QGroundControl.settingsManager.appSettings"
     },
@@ -17,7 +19,9 @@
             ]
         },
         {
-            "heading": "STRATUM Operational Limits",
+            "heading": "Operational Limits",
+            "sectionNumber": "01",
+            "icon": "/InstrumentValueIcons/tuning.svg",
             "keywords": ["stratum", "standoff", "aop", "area of operations", "limit", "distance", "max"],
             "controls": [
                 {
@@ -30,6 +34,8 @@
         },
         {
             "heading": "User Interface",
+            "sectionNumber": "02",
+            "icon": "/InstrumentValueIcons/computer-desktop.svg",
             "keywords": ["language", "locale", "color theme", "color scheme", "high contrast", "normal", "dark mode", "theme", "palette", "ui scale", "font size", "zoom"],
             "controls": [
                 {
@@ -47,6 +53,8 @@
         },
         {
             "heading": "Position Streaming",
+            "sectionNumber": "03",
+            "icon": "/InstrumentValueIcons/location.svg",
             "keywords": ["follow me", "position", "stream", "gcs"],
             "controls": [
                 {
@@ -56,6 +64,8 @@
         },
         {
             "heading": "Audio",
+            "sectionNumber": "04",
+            "icon": "/InstrumentValueIcons/volume-up.svg",
             "keywords": ["audio", "volume", "sound", "mute", "test"],
             "controls": [
                 {
@@ -75,6 +85,9 @@
         },
         {
             "heading": "Application",
+            "sectionNumber": "05",
+            "icon": "/InstrumentValueIcons/servers.svg",
+            "fullWidth": true,
             "keywords": ["save path", "storage", "reset", "clear settings", "factory reset"],
             "controls": [
                 {

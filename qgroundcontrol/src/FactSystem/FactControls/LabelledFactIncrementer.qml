@@ -18,6 +18,7 @@ RowLayout {
     property string label:      fact.label
     property Fact   fact
     property real   step:       5
+    property bool   showUnits:  false
 
     spacing: ScreenTools.defaultFontPixelWidth * 2
 
@@ -25,6 +26,7 @@ RowLayout {
         Layout.fillWidth:    true
         Layout.minimumWidth: implicitWidth
         text:                root.label
+        visible:             text !== ""
     }
 
     RowLayout {
@@ -44,7 +46,7 @@ RowLayout {
         QGCLabel {
             id:     valueLabel
             width:  ScreenTools.defaultFontPixelWidth * 6
-            text:   root.fact.valueString
+            text:   root.fact.valueString + (root.showUnits && root.fact.units !== "" ? " " + root.fact.units : "")
         }
 
         QGCButton {

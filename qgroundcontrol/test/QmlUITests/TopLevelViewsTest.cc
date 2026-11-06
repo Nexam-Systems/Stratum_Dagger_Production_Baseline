@@ -135,6 +135,13 @@ void TopLevelViewsTest::_testResponsiveSettings()
     QTRY_VERIFY(groups[1]->x() > groups[0]->x());
     for (QQuickItem *group : groups) {
         QVERIFY(group->x() + group->width() <= grid->width() + 1);
+        for (QQuickItem *field : group->findChildren<QQuickItem *>()) {
+            if (field->isVisible() && field->property("fact").isValid()) {
+                const QPointF position = field->mapToItem(group, QPointF());
+                QVERIFY(position.x() >= -1);
+                QVERIFY(position.x() + field->width() <= group->width() + 1);
+            }
+        }
     }
 
     const qreal expandedHeight = groups[0]->height();
