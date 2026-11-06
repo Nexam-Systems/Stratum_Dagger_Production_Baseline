@@ -10,6 +10,8 @@ import {{ imp }}
 {% endfor %}
 
 SettingsPage {
+    id: settingsPage
+    responsiveColumns: true
 {% if object_name %}
     objectName: "settingsPage_{{ object_name }}"
 {% endif %}

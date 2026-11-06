@@ -1,5 +1,10 @@
 #include "TopLevelViewsTest.h"
 
+#include <QtCore/QScopedPointer>
+#include <QtCore/QVariant>
+#include <QtCore/QtMath>
+#include <QtQml/QQmlApplicationEngine>
+#include <QtQml/QQmlComponent>
 #include <QtQuick/QQuickItem>
 #include <QtQuick/QQuickWindow>
 #include <QtTest/QTest>
@@ -8,6 +13,22 @@ UT_REGISTER_TEST(TopLevelViewsTest, TestLabel::Integration)
 
 // This test assumes Advanced UI mode is enabled (the default). All views including
 // Analyze are expected to be visible.
+
+void TopLevelViewsTest::_testToolTabButtonLoads()
+{
+    startUI();
+    if (QTest::currentTestFailed()) return;
+
+    // Load through the real QML modules: QGCPalette is exported by QGroundControl,
+    // not QGroundControl.Controls. A missing import prevents every tool page loading.
+    QQmlComponent component(_engine, QUrl(QStringLiteral("qrc:/qml/QGroundControl/Controls/ToolTabButton.qml")));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> button(component.create());
+    QVERIFY2(!button.isNull(), qPrintable(component.errorString()));
+    QVERIFY(button->setProperty("text", QStringLiteral("General")));
+    QVERIFY(button->property("implicitWidth").toReal() > 0);
+    QVERIFY(button->property("implicitHeight").toReal() >= 40);
+}
 
 void TopLevelViewsTest::_testNavigateViews()
 {
@@ -78,5 +99,60 @@ void TopLevelViewsTest::_testNavigateViews()
         }
     }
 
+    stopUI();
+}
+
+void TopLevelViewsTest::_testResponsiveSettings()
+{
+    startUI();
+    if (QTest::currentTestFailed()) return;
+
+    QVERIFY(QMetaObject::invokeMethod(_window, "showSettingsTool", Q_ARG(QVariant, QVariant(QString()))));
+    auto *page = findVisibleItem(_rootItem, QStringLiteral("settingsPage_General"));
+    QVERIFY(page);
+    auto *grid = findVisibleItem(page, QStringLiteral("settings_grid"));
+    QVERIFY(grid);
+    auto *actions = findVisibleItem(_rootItem, QStringLiteral("tool_headerActions"));
+    auto *save = findVisibleItem(_rootItem, QStringLiteral("settings_save"));
+    auto *reset = findVisibleItem(_rootItem, QStringLiteral("settings_reset"));
+    QVERIFY(actions && save && reset);
+    QVERIFY(save->mapToScene(QPointF()).y() < page->mapToScene(QPointF()).y());
+    QCOMPARE(qRound(save->mapToScene(QPointF()).y()), qRound(reset->mapToScene(QPointF()).y()));
+
+    const qreal breakpoint = page->property("minimumColumnWidth").toReal() * 2
+                             + grid->property("columnSpacing").toReal();
+    const int pageMargins = qRound(_window->width() - page->width());
+    _window->setWidth(qCeil(breakpoint) + pageMargins + 40);
+    QTRY_COMPARE(page->property("columnCount").toInt(), 2);
+
+    QList<QQuickItem *> groups;
+    for (QQuickItem *child : grid->childItems()) {
+        if (child->isVisible() && child->property("collapsible").toBool()) {
+            groups.append(child);
+        }
+    }
+    QVERIFY(groups.size() >= 5);
+    QTRY_VERIFY(groups[1]->x() > groups[0]->x());
+    for (QQuickItem *group : groups) {
+        QVERIFY(group->x() + group->width() <= grid->width() + 1);
+    }
+
+    const qreal expandedHeight = groups[0]->height();
+    auto *toggle = findVisibleItem(groups[0], QStringLiteral("settings_groupToggle"));
+    QVERIFY(toggle);
+    const QPoint toggleCenter = toggle->mapToScene(QPointF(toggle->width() / 2, toggle->height() / 2)).toPoint();
+    QTest::mouseClick(_window, Qt::LeftButton, Qt::NoModifier, toggleCenter);
+    QTRY_VERIFY(!groups[0]->property("expanded").toBool());
+    QTRY_VERIFY(groups[0]->height() < expandedHeight);
+    QTest::mouseClick(_window, Qt::LeftButton, Qt::NoModifier, toggleCenter);
+    QTRY_VERIFY(groups[0]->property("expanded").toBool());
+    QTRY_VERIFY(groups[0]->height() >= expandedHeight);
+
+    _window->setWidth(qFloor(breakpoint) + pageMargins - 40);
+    QTRY_COMPARE(page->property("columnCount").toInt(), 1);
+    for (QQuickItem *group : groups) {
+        QTRY_VERIFY(qAbs(group->x()) < 1);
+        QTRY_VERIFY(group->width() <= grid->width() + 1);
+    }
     stopUI();
 }

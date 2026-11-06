@@ -80,12 +80,8 @@ void PX4AirframeSetupUITest::_verifyAirframePrereq(const QString &compObjectName
                  qPrintable(QStringLiteral("Prerequisite message panel unexpectedly shown for: %1").arg(compObjectName)));
     }
 
-    // Components with children must expand on click even when the prerequisite
-    // is not met
-    if (compBtn->property("expandable").toBool()) {
-        QVERIFY2(QTest::qWaitFor([&] { return compBtn->property("expanded").toBool(); }, 3000),
-                 qPrintable(QStringLiteral("Component tree did not expand after click: %1").arg(compObjectName)));
-    }
+    QVERIFY2(compBtn->property("checked").toBool(),
+             qPrintable(QStringLiteral("Component tab not selected after click: %1").arg(compObjectName)));
 
     // Components which auto-select their first section on root click must do so
     // even when the prerequisite is not met
@@ -93,7 +89,7 @@ void PX4AirframeSetupUITest::_verifyAirframePrereq(const QString &compObjectName
         QQuickItem *sectionBtn = findVisibleItem(_rootItem, checkedSectionObjectName, 3000);
         QVERIFY2(sectionBtn,
                  qPrintable(QStringLiteral("Section button not found: %1").arg(checkedSectionObjectName)));
-        QVERIFY2(QTest::qWaitFor([&] { return sectionBtn->property("sectionChecked").toBool(); }, 3000),
+        QVERIFY2(QTest::qWaitFor([&] { return sectionBtn->property("checked").toBool(); }, 3000),
                  qPrintable(QStringLiteral("First child section not selected after clicking %1: %2").arg(compObjectName, checkedSectionObjectName)));
     }
 }
@@ -129,8 +125,8 @@ void PX4AirframeSetupUITest::_testAirframePrereqPages()
     // With Airframe setup incomplete, PX4AutoPilotPlugin::prerequisiteSetup()
     // requires Airframe first for Sensors, Power, Safety, PID Tuning and
     // Flight Modes (COM_RC_IN_MODE defaults to 0), so clicking those pages
-    // shows the prerequisite message panel instead of the page. Expandable
-    // components must still expand, and Sensors must still auto-select its
+    // shows the prerequisite message panel instead of the page. Component
+    // tabs must still select, and Sensors must still auto-select its
     // first section (Compass).
     struct PrereqCheck {
         const char *objectName;

@@ -170,6 +170,8 @@ qt_add_qml_module(QGroundControlControlsModule
         SectionHeader.qml
         SelectableControl.qml
         SettingsButton.qml
+        ToolTabBar.qml
+        ToolTabButton.qml
         SettingsGroupLayout.qml
         SetupPage.qml
         SliderSwitch.qml

@@ -15,5 +15,7 @@ public:
     TopLevelViewsTest() = default;
 
 private slots:
+    void _testToolTabButtonLoads();
     void _testNavigateViews();
+    void _testResponsiveSettings();
 };

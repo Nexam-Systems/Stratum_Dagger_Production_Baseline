@@ -409,9 +409,13 @@ void QmlUITestBase::scrollIntoView(QQuickItem *item, const QString &flickableObj
         return; // already within the flickable's clip region
     }
 
-    // mapToItem gives a viewport-relative position (already offset by contentY).
-    // Add current contentY to get the absolute content-space position.
+    // Convert viewport coordinates back to content coordinates on both axes.
     const QPointF itemInFlickable = item->mapToItem(flickable, QPointF(0, 0));
+    const double absoluteX = itemInFlickable.x() + flickable->property("contentX").toDouble();
+    const double targetX = absoluteX + item->width() / 2.0 - flickable->width() / 2.0;
+    const double maxContentX = flickable->property("contentWidth").toDouble() - flickable->width();
+    const double clampedTargetX = qBound(0.0, targetX, qMax(0.0, maxContentX));
+    flickable->setProperty("contentX", clampedTargetX);
     const double currentContentY = flickable->property("contentY").toDouble();
     const double absoluteY = itemInFlickable.y() + currentContentY;
     // Target contentY that places the item's centre in the middle of the flickable.
@@ -420,17 +424,15 @@ void QmlUITestBase::scrollIntoView(QQuickItem *item, const QString &flickableObj
     const double clampedTargetY = qBound(0.0, targetY, qMax(0.0, maxContentY));
     flickable->setProperty("contentY", clampedTargetY);
 
-    // Wait for the flickable to apply the new contentY and re-lay-out the item, so callers
-    // that immediately query/click the item see it at its scrolled position. The observable
-    // condition is that the item's scene centre now falls inside the flickable viewport, or
-    // contentY settled at its clamped target when the item can't be fully centred.
+    // Wait for the viewport to contain the item, or for both offsets to reach their limits.
     QTRY_VERIFY_WITH_TIMEOUT(
         ([&] {
             const QPointF center = item->mapToScene(QPointF(item->width() / 2, item->height() / 2));
             const QRectF viewport(flickable->mapToScene(QPointF(0, 0)),
                                   QSizeF(flickable->width(), flickable->height()));
             return viewport.contains(center)
-                || qFuzzyCompare(flickable->property("contentY").toDouble() + 1.0, clampedTargetY + 1.0);
+                || (qFuzzyCompare(flickable->property("contentX").toDouble() + 1.0, clampedTargetX + 1.0)
+                    && qFuzzyCompare(flickable->property("contentY").toDouble() + 1.0, clampedTargetY + 1.0));
         }()),
         TestTimeout::shortMs());
 }
