@@ -3,6 +3,60 @@
     "fileType": "FactMetaData",
     "QGC.MetaData.Facts": [
         {
+            "name": "thermalImuSource",
+            "type": "uint32",
+            "default": 0,
+            "enumStrings": "Unverified (NO DATA),Verified SCALED_IMU,Verified SCALED_IMU2,Verified SCALED_IMU3",
+            "enumValues": "0,1,2,3",
+            "label": "Verified FC IMU temperature source",
+            "shortDesc": "Select only after verifying the installed firmware publishes the onboard IMU temperature on this message. HIGHRES_IMU and pressure temperatures are not used as board temperature."
+        },
+        {
+            "name": "thermalFreshnessMs",
+            "type": "uint32",
+            "default": 3000,
+            "min": 1000,
+            "max": 30000,
+            "units": "ms",
+            "label": "Thermal telemetry freshness timeout",
+            "shortDesc": "Older temperatures and ground-state reports are stale. Unknown flight phase never triggers a thermal flight-control block."
+        },
+        {
+            "name": "thermalRequireImu",
+            "type": "bool",
+            "default": false,
+            "label": "Require FC IMU temperature before flight",
+            "shortDesc": "Missing, unverified or stale data blocks ground commands when required. A fresh reading above 80 degrees C blocks regardless of this option."
+        },
+        {
+            "name": "thermalRequireEsc1",
+            "type": "bool",
+            "default": false,
+            "label": "Require Motor 1 ESC temperature before flight",
+            "shortDesc": "Block ground commands if this ESC temperature is missing, offline or stale."
+        },
+        {
+            "name": "thermalRequireEsc2",
+            "type": "bool",
+            "default": false,
+            "label": "Require Motor 2 ESC temperature before flight",
+            "shortDesc": "Block ground commands if this ESC temperature is missing, offline or stale."
+        },
+        {
+            "name": "thermalRequireEsc3",
+            "type": "bool",
+            "default": false,
+            "label": "Require Motor 3 ESC temperature before flight",
+            "shortDesc": "Block ground commands if this ESC temperature is missing, offline or stale."
+        },
+        {
+            "name": "thermalRequireEsc4",
+            "type": "bool",
+            "default": false,
+            "label": "Require Motor 4 ESC temperature before flight",
+            "shortDesc": "Block ground commands if this ESC temperature is missing, offline or stale."
+        },
+        {
             "name": "preferredFirmwareClass",
             "shortDesc": "Tailors the interface to a specific firmware for a simpler experience.",
             "longDesc": "When set to a specific firmware type, the interface is streamlined for that firmware.",

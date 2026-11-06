@@ -55,6 +55,13 @@ public:
     DEFINE_SETTINGFACT(favoriteParameters)
     DEFINE_SETTINGFACT(showAppLogTimestampAsElapsedTime)
     DEFINE_SETTINGFACT(stratumProfile)
+    DEFINE_SETTINGFACT(thermalImuSource)
+    DEFINE_SETTINGFACT(thermalFreshnessMs)
+    DEFINE_SETTINGFACT(thermalRequireImu)
+    DEFINE_SETTINGFACT(thermalRequireEsc1)
+    DEFINE_SETTINGFACT(thermalRequireEsc2)
+    DEFINE_SETTINGFACT(thermalRequireEsc3)
+    DEFINE_SETTINGFACT(thermalRequireEsc4)
 
     // QSettings key for clearSettingsNextBoot. Accessed directly by QGCApplication
     // at startup before SettingsManager is initialized.

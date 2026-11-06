@@ -35,6 +35,9 @@ target_sources(${CMAKE_PROJECT_NAME}
         TrajectoryPoints.h
         Vehicle.cc
         Vehicle.h
+        ThermalState.h
+        VehicleThermalMonitor.cc
+        VehicleThermalMonitor.h
         VehicleLinkManager.cc
         VehicleLinkManager.h
         VehicleObjectAvoidance.cc

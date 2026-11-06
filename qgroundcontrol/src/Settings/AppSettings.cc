@@ -126,6 +126,13 @@ DECLARE_SETTINGGROUP(App, "")
 }
 
 DECLARE_SETTINGSFACT(AppSettings, preferredFirmwareClass)
+DECLARE_SETTINGSFACT(AppSettings, thermalImuSource)
+DECLARE_SETTINGSFACT(AppSettings, thermalFreshnessMs)
+DECLARE_SETTINGSFACT(AppSettings, thermalRequireImu)
+DECLARE_SETTINGSFACT(AppSettings, thermalRequireEsc1)
+DECLARE_SETTINGSFACT(AppSettings, thermalRequireEsc2)
+DECLARE_SETTINGSFACT(AppSettings, thermalRequireEsc3)
+DECLARE_SETTINGSFACT(AppSettings, thermalRequireEsc4)
 DECLARE_SETTINGSFACT(AppSettings, preferredVehicleClass)
 DECLARE_SETTINGSFACT(AppSettings, offlineEditingFirmwareClass)
 DECLARE_SETTINGSFACT(AppSettings, offlineEditingVehicleClass)

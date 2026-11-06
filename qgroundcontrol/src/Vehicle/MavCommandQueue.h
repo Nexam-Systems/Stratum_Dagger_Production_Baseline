@@ -93,6 +93,7 @@ private:
     } MavCommandListEntry_t;
 
     void _sendFromList(int index);
+    bool _thermalCommandDenied(int compId, MAV_CMD command, float param1, const MavCmdAckHandlerInfo_t *handler = nullptr);
     static bool _shouldRetry(MAV_CMD command);
     static bool _canBeDuplicated(MAV_CMD command);
     static int _responseCheckIntervalMSecs();

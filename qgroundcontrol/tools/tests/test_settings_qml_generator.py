@@ -595,8 +595,9 @@ class TestRealPageDefinitions:
             control["setting"]
             for group in data["groups"]
             for control in group["controls"]
+            if "setting" in control
         ]
-        assert len(settings) == len(set(settings)) == 18
+        assert len(settings) == len(set(settings)) == 25
         assert set(settings) == {
             "appSettings.stratumProfile",
             "flyViewSettings.maxGoToLocationDistance", "flyViewSettings.maxAOPDistance",
@@ -607,11 +608,15 @@ class TestRealPageDefinitions:
             "appSettings.preferredFirmwareClass", "appSettings.preferredVehicleClass",
             "unitsSettings.horizontalDistanceUnits", "unitsSettings.verticalDistanceUnits",
             "unitsSettings.areaUnits", "unitsSettings.speedUnits", "unitsSettings.temperatureUnits",
+            "appSettings.thermalImuSource", "appSettings.thermalFreshnessMs",
+            "appSettings.thermalRequireImu", "appSettings.thermalRequireEsc1",
+            "appSettings.thermalRequireEsc2", "appSettings.thermalRequireEsc3", "appSettings.thermalRequireEsc4",
         }
         audio = groups["Audio"]["controls"][0]
         assert audio["button"]["onClicked"] == "QGroundControl.testAudioOutput()"
         assert audio["enableCheckbox"]["checked"] == "!_appSettings.audioMuted.rawValue"
         assert groups["Units"]["showWhen"] == "QGroundControl.settingsManager.unitsSettings.userVisible"
+        assert groups["Thermal Monitoring"]["showWhen"] == "QGroundControl.corePlugin.stratumDevBuild"
 
     """Test against real QGC page definition files if available."""
 
