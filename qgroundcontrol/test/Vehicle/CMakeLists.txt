@@ -29,6 +29,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         SendMavCommandWithSignallingTest.h
         VehicleLinkManagerTest.cc
         VehicleLinkManagerTest.h
+        VehicleThermalMonitorTest.cc
+        VehicleThermalMonitorTest.h
 )
 
 if(NOT QGC_DISABLE_APM_PLUGIN)
@@ -59,3 +61,11 @@ add_qgc_test(RequestMessageTest LABELS Integration Vehicle TIMEOUT ${QGC_TEST_TI
 add_qgc_test(SendMavCommandWithHandlerTest LABELS Integration Vehicle)
 add_qgc_test(SendMavCommandWithSignallingTest LABELS Integration Vehicle)
 add_qgc_test(VehicleLinkManagerTest LABELS Integration Vehicle SERIAL)
+add_qgc_test(VehicleThermalMonitorTest LABELS Unit Vehicle)
+
+add_executable(StratumThermalPolicyTest ThermalStateTest.cc)
+set_target_properties(StratumThermalPolicyTest PROPERTIES AUTOMOC OFF)
+target_include_directories(StratumThermalPolicyTest PRIVATE "${CMAKE_SOURCE_DIR}/src/Vehicle")
+target_compile_features(StratumThermalPolicyTest PRIVATE cxx_std_17)
+add_test(NAME StratumThermalPolicyTest COMMAND StratumThermalPolicyTest)
+set_tests_properties(StratumThermalPolicyTest PROPERTIES LABELS "Unit;Vehicle")

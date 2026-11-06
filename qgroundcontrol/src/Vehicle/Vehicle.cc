@@ -396,11 +396,14 @@ void Vehicle::_commonInit(LinkInterface* link)
     _vehicleSupports = new VehicleSupports(this);
 
     _createCameraManager();
+    _thermalMonitor = new VehicleThermalMonitor(this);
 }
 
 Vehicle::~Vehicle()
 {
     qCDebug(VehicleLog) << "~Vehicle" << this;
+    delete _thermalMonitor;
+    _thermalMonitor = nullptr;
 
     // Stop all timers and disconnect their signals to prevent any callbacks during destruction.
     // Even though _stopCommandProcessing() should have been called earlier via VehicleLinkManager,
@@ -590,6 +593,7 @@ void Vehicle::_mavlinkMessageReceived(LinkInterface* link, mavlink_message_t mes
     _remoteIDManager->mavlinkMessageReceived(message);
 
     _reqMsgCoord->handleReceivedMessage(message);
+    if (_thermalMonitor) _thermalMonitor->handleMessage(message);
 
     // Handle creation of dynamic fact group lists
     _batteryFactGroupListModel->handleMessageForFactGroupCreation(this, message);
@@ -1502,6 +1506,7 @@ bool Vehicle::setFlightModeCustom(const QString& flightMode, uint8_t* base_mode,
 
 void Vehicle::setFlightMode(const QString& flightMode)
 {
+    if (!thermalCommandAllowed(MAV_CMD_DO_SET_MODE)) return;
     uint8_t     base_mode;
     uint32_t    custom_mode;
 
@@ -1856,6 +1861,7 @@ QString Vehicle::gotoFlightMode() const
 
 void Vehicle::guidedModeRTL(bool smartRTL)
 {
+    if (!thermalCommandAllowed(MAV_CMD_NAV_RETURN_TO_LAUNCH)) return;
     if (!_vehicleSupports->guidedMode()) {
         QGC::showAppMessage(guided_mode_not_supported_by_vehicle);
         return;
@@ -1865,6 +1871,7 @@ void Vehicle::guidedModeRTL(bool smartRTL)
 
 void Vehicle::guidedModeLand()
 {
+    if (!thermalCommandAllowed(MAV_CMD_NAV_LAND)) return;
     if (!_vehicleSupports->guidedMode()) {
         QGC::showAppMessage(guided_mode_not_supported_by_vehicle);
         return;
@@ -1874,6 +1881,7 @@ void Vehicle::guidedModeLand()
 
 void Vehicle::guidedModeTakeoff(double altitudeRelative)
 {
+    if (!thermalCommandAllowed(MAV_CMD_NAV_TAKEOFF)) return;
     if (!_vehicleSupports->guidedMode()) {
         QGC::showAppMessage(guided_mode_not_supported_by_vehicle);
         return;
@@ -1910,17 +1918,46 @@ bool Vehicle::hasGripper()  const
 
 void Vehicle::startTakeoff()
 {
+    if (!thermalCommandAllowed(MAV_CMD_NAV_TAKEOFF)) return;
     _firmwarePlugin->startTakeoff(this);
 }
 
 
 void Vehicle::startMission()
 {
+    if (!thermalCommandAllowed(MAV_CMD_MISSION_START)) return;
     _firmwarePlugin->startMission(this);
+}
+
+bool Vehicle::thermalCommandAllowed(MAV_CMD command, float param1)
+{
+    if (!_thermalMonitor) return true;
+    switch (command) {
+    case MAV_CMD_COMPONENT_ARM_DISARM:
+        if (param1 <= 0.5f) return true; // Disarming must remain available.
+        break;
+    case MAV_CMD_DO_SET_MODE:
+    case MAV_CMD_DO_SET_STANDARD_MODE:
+    case MAV_CMD_NAV_TAKEOFF:
+    case MAV_CMD_NAV_VTOL_TAKEOFF:
+    case MAV_CMD_MISSION_START:
+    case MAV_CMD_DO_PAUSE_CONTINUE:
+    case MAV_CMD_DO_REPOSITION:
+    case MAV_CMD_DO_ORBIT:
+    case MAV_CMD_DO_VTOL_TRANSITION:
+    case MAV_CMD_NAV_RETURN_TO_LAUNCH:
+    case MAV_CMD_NAV_LAND:
+    case MAV_CMD_NAV_VTOL_LAND:
+        break;
+    default:
+        return true;
+    }
+    return !_thermalMonitor->blockCommand();
 }
 
 bool Vehicle::guidedModeGotoLocation(const QGeoCoordinate& gotoCoord, double forwardFlightLoiterRadius)
 {
+    if (!thermalCommandAllowed(MAV_CMD_DO_REPOSITION)) return false;
     if (!_vehicleSupports->guidedMode()) {
         QGC::showAppMessage(guided_mode_not_supported_by_vehicle);
         return false;
@@ -1942,6 +1979,7 @@ bool Vehicle::guidedModeGotoLocation(const QGeoCoordinate& gotoCoord, double for
 
 bool Vehicle::guidedModeStandoff(const QGeoCoordinate& targetCoord, double distanceMeters, double bearingDegrees, double relativeHeight)
 {
+    if (!thermalCommandAllowed(MAV_CMD_DO_REPOSITION)) return false;
     if (!_vehicleSupports->guidedMode()) {
         QGC::showAppMessage(guided_mode_not_supported_by_vehicle);
         return false;
@@ -1992,6 +2030,7 @@ Vehicle::guidedModeChangeEquivalentAirspeedMetersSecond(double airspeed)
 
 void Vehicle::guidedModeOrbit(const QGeoCoordinate& centerCoord, double radius, double amslAltitude)
 {
+    if (!thermalCommandAllowed(MAV_CMD_DO_ORBIT)) return;
     if (!_vehicleSupports->orbitMode()) {
         QGC::showAppMessage(QStringLiteral("Orbit mode not supported by Vehicle."));
         return;

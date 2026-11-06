@@ -616,6 +616,7 @@ class TestRealPageDefinitions:
             control["setting"]
             for group in data["groups"]
             for control in group["controls"]
+            if "setting" in control
         ]
         assert len(settings) == len(set(settings)) == 18
         assert set(settings) == {
@@ -633,6 +634,7 @@ class TestRealPageDefinitions:
         assert audio["button"]["onClicked"] == "QGroundControl.testAudioOutput()"
         assert audio["enableCheckbox"]["checked"] == "!_appSettings.audioMuted.rawValue"
         assert groups["Units"]["showWhen"] == "QGroundControl.settingsManager.unitsSettings.userVisible"
+        assert "Thermal Monitoring" not in groups
 
     """Test against real QGC page definition files if available."""
 

@@ -1,5 +1,33 @@
 # UI Changes to make as per the slide numbers
 
+## KAN-24: motor temperatures and ground thermal check
+
+- The existing MOT TEMP cell is now AVG TEMP; no extra status-bar cell is added.
+  It averages fresh, valid readings from the four motor ESCs only. Color follows
+  the hottest valid motor: below 70 C normal, 70-80 C warning, above 80 C critical.
+- The drawer contains only Motor 1-4 temperatures and Average. Missing, invalid,
+  offline or stale readings display N/A and are excluded from the average.
+  These are ESC temperatures, not separate motor-winding measurements.
+- Nano/IMU monitoring, thermal settings, required-sensor options and the drawer's
+  source/age/status/policy details have been removed. There is no missing-data
+  interlock; only a fresh motor reading above 80 C triggers the thermal block.
+- Fresh EXTENDED_SYS_STATE ON_GROUND plus no flying/landing state is required for
+  blocking. Any fresh motor ESC reading above 80 C blocks
+  STRATUM Arm/Takeoff/flight-mode requests and shows a reason popup. Disarm remains
+  available. Exactly 80 C does not block. This is not a PX4/RC arming lock.
+- In-air, takeoff, landing and uncertain/stale flight phase never trigger this
+  command block. High temperatures produce a popup without sending flight-control
+  commands. Popup episodes re-arm at or below 77 C to prevent repeated threshold chatter;
+  the command threshold remains strictly above 80 C.
+- Link loss clears samples and phase; reconnect requires fresh telemetry. Readings
+  and ground reports expire after 3 seconds. ESC_INFO supplies motor ESC temperatures
+  in centi-C (INT16_MAX invalid). ESC_INFO and EXTENDED_SYS_STATE streams are requested
+  through the existing MAVLink message-interval manager.
+- Coverage: StratumThermalPolicyTest, VehicleThermalMonitorTest (native integration),
+  StratumThermalIndicatorTest, StratumMissionStateTest, and generator tests.
+  Bench-check ESC routing, phase reports, ground blocks,
+  airborne warnings, RC independence, disarm, and both color schemes before flight.
+
 ## KAN-28: adaptive settings and tool navigation
 
 The dark concept in issue #64 is the visual target (including its colors), per

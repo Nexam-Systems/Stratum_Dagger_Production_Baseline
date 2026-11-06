@@ -55,6 +55,7 @@ void MavCommandQueue::sendCommand(int compId, MAV_CMD command, bool showError, f
 
 void MavCommandQueue::sendCommandDelayed(int compId, MAV_CMD command, bool showError, int milliseconds, float param1, float param2, float param3, float param4, float param5, float param6, float param7)
 {
+    if (_stopped || _thermalCommandDenied(compId, command, param1)) return;
     QTimer::singleShot(milliseconds, this, [=, this] {
         sendCommand(compId, command, showError, param1, param2, param3, param4, param5, param6, param7);
     });
@@ -99,9 +100,11 @@ struct LambdaFallbackHandlerData {
     Vehicle*              vehicle;
     bool                  showError;
     std::function<void()> unsupportedLambda;
+    MAV_CMD               command;
+    float                 param1;
 };
 
-void lambdaFallbackResultHandler(void* resultHandlerData, int /*compId*/, const mavlink_command_ack_t& ack, VehicleTypes::MavCmdResultFailureCode_t /*failureCode*/)
+void lambdaFallbackResultHandler(void* resultHandlerData, int compId, const mavlink_command_ack_t& ack, VehicleTypes::MavCmdResultFailureCode_t /*failureCode*/)
 {
     auto* data          = static_cast<LambdaFallbackHandlerData*>(resultHandlerData);
     auto* instanceData  = data->vehicle->firmwarePluginInstanceData();
@@ -112,7 +115,9 @@ void lambdaFallbackResultHandler(void* resultHandlerData, int /*compId*/, const 
         break;
     case MAV_RESULT_UNSUPPORTED:
         instanceData->setCommandSupported(MAV_CMD(ack.command), FirmwarePluginInstanceData::CommandSupportedResult::UNSUPPORTED);
-        data->unsupportedLambda();
+        if (compId != data->vehicle->defaultComponentId() || data->vehicle->thermalCommandAllowed(data->command, data->param1)) {
+            data->unsupportedLambda();
+        }
         break;
     default:
         if (data->showError) {
@@ -128,6 +133,7 @@ void lambdaFallbackResultHandler(void* resultHandlerData, int /*compId*/, const 
 
 void MavCommandQueue::sendCommandWithLambdaFallback(std::function<void()> lambda, int compId, MAV_CMD command, bool showError, float param1, float param2, float param3, float param4, float param5, float param6, float param7)
 {
+    if (_stopped || _thermalCommandDenied(compId, command, param1)) return;
     auto* instanceData = _vehicle->firmwarePluginInstanceData();
 
     switch (instanceData->getCommandSupported(command)) {
@@ -138,7 +144,7 @@ void MavCommandQueue::sendCommandWithLambdaFallback(std::function<void()> lambda
         sendCommand(compId, command, showError, param1, param2, param3, param4, param5, param6, param7);
         break;
     case FirmwarePluginInstanceData::CommandSupportedResult::UNKNOWN: {
-        auto* data = new LambdaFallbackHandlerData { _vehicle, showError, std::move(lambda) };
+        auto* data = new LambdaFallbackHandlerData { _vehicle, showError, std::move(lambda), command, param1 };
         const MavCmdAckHandlerInfo_t handlerInfo {
             /* .resultHandler         = */ &lambdaFallbackResultHandler,
             /* .resultHandlerData     = */ data,
@@ -249,6 +255,8 @@ void MavCommandQueue::sendWorker(bool commandInt, bool showError,
         return;
     }
 
+    if (_thermalCommandDenied(targetCompId, command, param1, ackHandlerInfo)) return;
+
     // We can't send commands to compIdAll using this method. The reason being that we would get responses back possibly from multiple components
     // which this code can't handle.
     // We also can't send the majority of commands again if we are already waiting for a response from that same command. If we did that we would not be able to discern
@@ -318,6 +326,20 @@ void MavCommandQueue::sendWorker(bool commandInt, bool showError,
 
     _list.append(entry);
     _sendFromList(_list.count() - 1);
+}
+
+bool MavCommandQueue::_thermalCommandDenied(int compId, MAV_CMD command, float param1, const MavCmdAckHandlerInfo_t *handler)
+{
+    if (compId != _vehicle->defaultComponentId() || _vehicle->thermalCommandAllowed(command, param1)) return false;
+    mavlink_command_ack_t ack{};
+    ack.command = command;
+    ack.result = MAV_RESULT_DENIED;
+    if (handler && handler->resultHandler) {
+        (*handler->resultHandler)(handler->resultHandlerData, compId, ack, MavCmdResultCommandResultOnly);
+    } else {
+        emit commandResult(_vehicle->id(), compId, command, MAV_RESULT_DENIED, MavCmdResultCommandResultOnly);
+    }
+    return true;
 }
 
 void MavCommandQueue::_sendFromList(int index)
