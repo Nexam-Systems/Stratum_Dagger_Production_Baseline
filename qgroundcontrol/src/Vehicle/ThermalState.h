@@ -9,7 +9,7 @@
 class ThermalState
 {
 public:
-    static constexpr int SensorCount = 5; // FC IMU, then ESCs 1-4
+    static constexpr int SensorCount = 4;
     static constexpr double WarningC = 70.0;
     static constexpr double CriticalC = 80.0;
     enum class Severity { Unknown, Normal, Warning, Critical };
@@ -25,7 +25,6 @@ public:
         double averageC = std::numeric_limits<double>::quiet_NaN();
         int freshCount = 0;
         unsigned criticalMask = 0;
-        unsigned missingRequiredMask = 0;
         Severity severity = Severity::Unknown;
     };
 
@@ -56,14 +55,13 @@ public:
         return Severity::Normal;
     }
 
-    Result evaluate(int64_t now, int64_t timeout, unsigned requiredMask) const
+    Result evaluate(int64_t now, int64_t timeout) const
     {
         Result result;
         double sum = 0;
         Severity worst = Severity::Unknown;
         for (int i = 0; i < SensorCount; ++i) {
             if (availability(i, now, timeout) != Availability::Fresh) {
-                result.missingRequiredMask |= requiredMask & (1U << i);
                 continue;
             }
             ++result.freshCount;
@@ -73,8 +71,7 @@ public:
             if (current == Severity::Critical) result.criticalMask |= 1U << i;
         }
         if (result.freshCount) result.averageC = sum / result.freshCount;
-        result.severity = result.criticalMask ? Severity::Critical
-                         : result.missingRequiredMask ? Severity::Unknown : worst;
+        result.severity = worst;
         return result;
     }
 
@@ -90,10 +87,10 @@ public:
                && now >= phaseReceivedAtMs && now - phaseReceivedAtMs <= timeout;
     }
 
-    bool blocksGroundCommands(int64_t now, int64_t timeout, unsigned requiredMask) const
+    bool blocksGroundCommands(int64_t now, int64_t timeout) const
     {
-        const Result result = evaluate(now, timeout, requiredMask);
-        return confirmedGround(now, timeout) && (result.criticalMask || result.missingRequiredMask);
+        const Result result = evaluate(now, timeout);
+        return confirmedGround(now, timeout) && result.criticalMask;
     }
 
     std::array<Reading, SensorCount> readings{};

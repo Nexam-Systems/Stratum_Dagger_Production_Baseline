@@ -88,17 +88,14 @@ Item {
  property string averageText: _avgTempText()
  property color averageColor: _thermalColor(_thermal ? _thermal.severity : 0)
  QGCPalette { id: qgcPal }
- function scenario(average, severity, blocked) {
+ function scenario(average, severity, missing) {
   var rows = []
-  for (var i = 0; i < 5; ++i) rows.push({
-   name: i === 0 ? "FC IMU TEMP" : "Motor " + i + " ESC",
-   temperatureC: i === 0 ? Number.NaN : 40 + i,
-   state: i === 0 ? "NO DATA" : "NORMAL", severity: i === 0 ? 0 : 1,
-   source: i === 0 ? "Unverified" : "ESC_INFO", required: i === 4, ageSeconds: i === 0 ? -1 : 0.2
+  for (var i = 0; i < 4; ++i) rows.push({
+   name: "Motor " + (i + 1),
+   temperatureC: missing && i === 3 ? Number.NaN : (severity === 3 && i === 0 ? 81 : 40 + i),
+   severity: missing && i === 3 ? 0 : (severity === 3 && i === 0 ? 3 : 1)
   })
-  _thermal = {averageC:average, freshCount:4, severity:severity, sensors:rows,
-   sourceNotice:"IMU source is unverified", reason:blocked ? "Temperature too high" : "",
-   groundBlocked:blocked, confirmedGround:blocked}
+  _thermal = {averageC:average, freshCount:missing ? 3 : 4, severity:severity, sensors:rows}
  }
 """ + helpers + "\n" + drawer + "\n Loader { sourceComponent: escTempDrawerComponent }\n}"
         path = self.root / "Harness.qml"
@@ -126,25 +123,28 @@ Item {
         return result
 
     def test_average_and_worst_sensor_color(self):
-        self.item.scenario(48.2, 3, True)
+        self.item.scenario(51.75, 3, False)
         self.app.processEvents()
-        self.assertEqual(self.item.property("averageText"), "48.2 \u00b0C")
+        self.assertEqual(self.item.property("averageText"), "51.8 \u00b0C")
         self.assertEqual(self.item.property("averageColor").name(), "#ff0000")
-        self.assertTrue(any("blocked" in text for text in self.texts()))
+        self.assertIn("81.00 \u00b0C", self.texts())
 
-    def test_drawer_has_four_escs_and_imu_with_no_data(self):
-        self.item.scenario(42.5, 1, False)
+    def test_drawer_contains_only_four_motors_and_average(self):
+        self.item.scenario(41, 1, True)
         self.app.processEvents()
         texts = self.texts()
-        self.assertIn("FC IMU TEMP", texts)
-        for index in range(1, 5):
-            self.assertIn(f"Motor {index} ESC", texts)
-        self.assertIn("NO DATA", texts)
-        self.assertTrue(any("warning-only" in text for text in texts))
+        self.assertCountEqual(texts, [
+            "Motor Temperatures", "Motor 1", "40.00 \u00b0C",
+            "Motor 2", "41.00 \u00b0C", "Motor 3", "42.00 \u00b0C",
+            "Motor 4", "N/A", "Average:", "41.0 \u00b0C",
+        ])
 
     def test_no_vehicle_and_warning_colors(self):
         self.assertEqual(self.item.property("averageText"), "--")
-        self.assertIn("No vehicle connected", self.texts())
+        self.assertCountEqual(self.texts(), [
+            "Motor Temperatures", "Motor 1", "N/A", "Motor 2", "N/A",
+            "Motor 3", "N/A", "Motor 4", "N/A", "Average:", "--",
+        ])
         self.item.scenario(75, 2, False)
         self.assertEqual(self.item.property("averageColor").name(), "#ff9900")
         self.item.scenario(40, 0, False)

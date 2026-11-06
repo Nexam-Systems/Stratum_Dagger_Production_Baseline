@@ -1,72 +1,62 @@
 #include "VehicleThermalMonitorTest.h"
 
-#include "AppSettings.h"
 #include "MAVLinkLib.h"
-#include "SettingsManager.h"
 #include "Vehicle.h"
 
 #include <QtCore/QRegularExpression>
-#include <QtCore/qscopeguard.h>
 #include <QtTest/QSignalSpy>
 
 void VehicleThermalMonitorTest::_sourcesAndGroundCommandGuard()
 {
-    auto *settings = SettingsManager::instance()->appSettings();
-    const std::array<Fact *, 7> facts{
-        settings->thermalImuSource(), settings->thermalFreshnessMs(), settings->thermalRequireImu(),
-        settings->thermalRequireEsc1(), settings->thermalRequireEsc2(), settings->thermalRequireEsc3(),
-        settings->thermalRequireEsc4()
-    };
-    std::array<QVariant, 7> oldValues;
-    for (size_t i = 0; i < facts.size(); ++i) oldValues[i] = facts[i]->rawValue();
-    const auto restore = qScopeGuard([&]() {
-        for (size_t i = 0; i < facts.size(); ++i) facts[i]->setRawValue(oldValues[i]);
-    });
-    settings->thermalImuSource()->setRawValue(0);
-    for (size_t i = 2; i < facts.size(); ++i) facts[i]->setRawValue(false);
-    settings->thermalFreshnessMs()->setRawValue(3000);
     ignoreLogMessage("Vehicle.Thermal", QtWarningMsg, QRegularExpression("Ground command blocked"));
     ignoreLogMessage("API.QGCApplication.AppMessage", QtDebugMsg, QRegularExpression("thermal check|Temperature too high"));
 
     Vehicle vehicle(MAV_AUTOPILOT_PX4, MAV_TYPE_QUADROTOR);
     auto *monitor = vehicle.thermal();
     QVERIFY(monitor);
-    QCOMPARE(monitor->sensors().size(), 5);
+    QCOMPARE(monitor->sensors().size(), 4);
     QCOMPARE(monitor->freshCount(), 0);
 
     mavlink_message_t message{};
     mavlink_scaled_imu_t imu{};
-    imu.temperature = 5000;
-    mavlink_msg_scaled_imu_encode(vehicle.id(), vehicle.defaultComponentId(), &message, &imu);
-    monitor->handleMessage(message);
-    QCOMPARE(monitor->freshCount(), 0); // A stream is not proof of source verification.
-    settings->thermalImuSource()->setRawValue(1);
-    monitor->handleMessage(message);
-    QCOMPARE(monitor->averageC(), 50.0);
     imu.temperature = 9000;
-    mavlink_msg_scaled_imu_encode(vehicle.id(), MAV_COMP_ID_CAMERA, &message, &imu);
-    monitor->handleMessage(message);
-    QCOMPARE(monitor->averageC(), 50.0);
-    mavlink_msg_scaled_imu_encode(vehicle.id() + 1, vehicle.defaultComponentId(), &message, &imu);
-    monitor->handleMessage(message);
-    QCOMPARE(monitor->averageC(), 50.0);
-    imu.temperature = 0;
     mavlink_msg_scaled_imu_encode(vehicle.id(), vehicle.defaultComponentId(), &message, &imu);
     monitor->handleMessage(message);
-    QCOMPARE(monitor->freshCount(), 0);
-    imu.temperature = 5000;
-    mavlink_msg_scaled_imu_encode(vehicle.id(), vehicle.defaultComponentId(), &message, &imu);
-    monitor->handleMessage(message);
+    QCOMPARE(monitor->freshCount(), 0); // IMU readings no longer participate.
+    QVERIFY(monitor->preflightReady());
 
     mavlink_esc_info_t info{};
     info.index = 0;
     info.count = 4;
     info.info = 15;
-    for (int i = 0; i < 4; ++i) info.temperature[i] = 4000;
-    info.temperature[2] = 8100;
+    for (int i = 0; i < 4; ++i) info.temperature[i] = 4000 + i * 1000;
+    info.temperature[3] = 8000;
     mavlink_msg_esc_info_encode(vehicle.id(), vehicle.defaultComponentId(), &message, &info);
     monitor->handleMessage(message);
-    QCOMPARE(monitor->freshCount(), 5);
+    QCOMPARE(monitor->averageC(), 57.5);
+    QVERIFY(monitor->preflightReady());
+    mavlink_msg_scaled_imu_encode(vehicle.id(), vehicle.defaultComponentId(), &message, &imu);
+    monitor->handleMessage(message);
+    mavlink_scaled_imu2_t imu2{};
+    imu2.temperature = 9000;
+    mavlink_msg_scaled_imu2_encode(vehicle.id(), vehicle.defaultComponentId(), &message, &imu2);
+    monitor->handleMessage(message);
+    mavlink_scaled_imu3_t imu3{};
+    imu3.temperature = 9000;
+    mavlink_msg_scaled_imu3_encode(vehicle.id(), vehicle.defaultComponentId(), &message, &imu3);
+    monitor->handleMessage(message);
+    QCOMPARE(monitor->averageC(), 57.5);
+    QVERIFY(monitor->preflightReady());
+
+    info.temperature[2] = 8100;
+    mavlink_msg_esc_info_encode(vehicle.id(), MAV_COMP_ID_CAMERA, &message, &info);
+    monitor->handleMessage(message);
+    mavlink_msg_esc_info_encode(vehicle.id() + 1, vehicle.defaultComponentId(), &message, &info);
+    monitor->handleMessage(message);
+    QCOMPARE(monitor->averageC(), 57.5);
+    mavlink_msg_esc_info_encode(vehicle.id(), vehicle.defaultComponentId(), &message, &info);
+    monitor->handleMessage(message);
+    QCOMPARE(monitor->freshCount(), 4);
     QVERIFY(monitor->averageC() < 80.0);
     QVERIFY(!monitor->preflightReady());
     QVERIFY(!monitor->groundBlocked()); // Flight phase remains unknown.
@@ -113,14 +103,14 @@ void VehicleThermalMonitorTest::_sourcesAndGroundCommandGuard()
     info.temperature[2] = INT16_MAX;
     mavlink_msg_esc_info_encode(vehicle.id(), vehicle.defaultComponentId(), &message, &info);
     monitor->handleMessage(message);
-    QCOMPARE(monitor->freshCount(), 4);
-    settings->thermalRequireEsc3()->setRawValue(true);
+    QCOMPARE(monitor->freshCount(), 3);
     QVERIFY(!monitor->groundBlocked());
     phase.landed_state = MAV_LANDED_STATE_ON_GROUND;
     mavlink_msg_extended_sys_state_encode(vehicle.id(), vehicle.defaultComponentId(), &message, &phase);
     monitor->handleMessage(message);
-    QVERIFY(monitor->groundBlocked());
-    QVERIFY(monitor->reason().contains(QStringLiteral("unavailable")));
+    QVERIFY(!monitor->groundBlocked());
+    QVERIFY(monitor->preflightReady());
+    QVERIFY(monitor->reason().isEmpty());
 }
 
 UT_REGISTER_TEST(VehicleThermalMonitorTest, TestLabel::Unit, TestLabel::Vehicle)

@@ -106,25 +106,6 @@
             ]
         },
         {
-            "heading": "Thermal Monitoring",
-            "showWhen": "QGroundControl.corePlugin.stratumDevBuild",
-            "keywords": ["thermal", "temperature", "imu", "esc", "arm", "takeoff", "freshness"],
-            "controls": [
-                {
-                    "control": "info",
-                    "label": "Thermal policy",
-                    "value": "qsTr(\"Warning: 70-80 C. Critical: any sensor above 80 C. Ground-only command blocking; airborne warnings only.\")"
-                },
-                { "setting": "appSettings.thermalImuSource", "control": "combobox" },
-                { "setting": "appSettings.thermalFreshnessMs" },
-                { "setting": "appSettings.thermalRequireImu" },
-                { "setting": "appSettings.thermalRequireEsc1" },
-                { "setting": "appSettings.thermalRequireEsc2" },
-                { "setting": "appSettings.thermalRequireEsc3" },
-                { "setting": "appSettings.thermalRequireEsc4" }
-            ]
-        },
-        {
             "heading": "Units",
             "keywords": ["units", "metric", "imperial", "distance", "speed", "area", "temperature", "feet", "meters"],
             "showWhen": "QGroundControl.settingsManager.unitsSettings.userVisible",

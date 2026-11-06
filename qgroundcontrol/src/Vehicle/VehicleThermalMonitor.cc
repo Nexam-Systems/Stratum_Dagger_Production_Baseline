@@ -1,10 +1,8 @@
 #include "VehicleThermalMonitor.h"
 
 #include "AppMessages.h"
-#include "AppSettings.h"
 #include "MAVLinkLib.h"
 #include "QGCLoggingCategory.h"
-#include "SettingsManager.h"
 #include "Vehicle.h"
 #include "VehicleLinkManager.h"
 
@@ -16,54 +14,15 @@ VehicleThermalMonitor::VehicleThermalMonitor(Vehicle *vehicle)
     : QObject(vehicle), _vehicle(vehicle)
 {
     _clock.start();
-    auto *settings = SettingsManager::instance()->appSettings();
-    for (Fact *fact : {settings->thermalImuSource(), settings->thermalFreshnessMs(),
-                       settings->thermalRequireImu(), settings->thermalRequireEsc1(),
-                       settings->thermalRequireEsc2(), settings->thermalRequireEsc3(),
-                       settings->thermalRequireEsc4()}) {
-        connect(fact, &Fact::rawValueChanged, this, [this]() { _configure(); });
-    }
     connect(vehicle->vehicleLinkManager(), &VehicleLinkManager::communicationLostChanged,
             this, [this](bool lost) { if (lost) _reset(); });
     connect(vehicle, &Vehicle::flyingChanged, this, &VehicleThermalMonitor::refresh);
     connect(vehicle, &Vehicle::landingChanged, this, &VehicleThermalMonitor::refresh);
     connect(vehicle, &Vehicle::armedChanged, this, &VehicleThermalMonitor::refresh);
-    _configure();
+    refresh();
     _timer.setInterval(250);
     connect(&_timer, &QTimer::timeout, this, &VehicleThermalMonitor::refresh);
     _timer.start();
-}
-
-void VehicleThermalMonitor::_configure()
-{
-    auto *settings = SettingsManager::instance()->appSettings();
-    const int source = settings->thermalImuSource()->rawValue().toInt();
-    const int timeout = settings->thermalFreshnessMs()->rawValue().toInt();
-    if (source < 0 || source > 3 || timeout < 1000 || timeout > 30000) {
-        qCWarning(VehicleThermalLog) << "Invalid thermal configuration; IMU source disabled and freshness limited to 3 s";
-        _imuSource = 0;
-        _timeoutMs = 3000;
-        _state.readings[0] = {};
-        _alertLatch &= ~1U;
-    } else {
-        if (_imuSource != source) {
-            _state.readings[0] = {};
-            _alertLatch &= ~1U;
-            _streamsRequested = false;
-        }
-        _imuSource = source;
-        _timeoutMs = timeout;
-    }
-    _requiredMask = 0;
-    const std::array<Fact *, 5> required{
-        settings->thermalRequireImu(), settings->thermalRequireEsc1(), settings->thermalRequireEsc2(),
-        settings->thermalRequireEsc3(), settings->thermalRequireEsc4()
-    };
-    for (int i = 0; i < ThermalState::SensorCount; ++i) {
-        if (required[i]->rawValue().toBool()) _requiredMask |= 1U << i;
-    }
-    if (_heardHeartbeat) _requestStreams();
-    refresh();
 }
 
 void VehicleThermalMonitor::_requestStreams()
@@ -72,10 +31,6 @@ void VehicleThermalMonitor::_requestStreams()
     _streamsRequested = true;
     _vehicle->setMessageRate(_vehicle->defaultComponentId(), MAVLINK_MSG_ID_ESC_INFO, 2);
     _vehicle->setMessageRate(_vehicle->defaultComponentId(), MAVLINK_MSG_ID_EXTENDED_SYS_STATE, 2);
-    const std::array<uint16_t, 3> imuIds{
-        MAVLINK_MSG_ID_SCALED_IMU, MAVLINK_MSG_ID_SCALED_IMU2, MAVLINK_MSG_ID_SCALED_IMU3
-    };
-    if (_imuSource > 0) _vehicle->setMessageRate(_vehicle->defaultComponentId(), imuIds[_imuSource - 1], 2);
 }
 
 void VehicleThermalMonitor::_reset()
@@ -113,33 +68,12 @@ void VehicleThermalMonitor::handleMessage(const mavlink_message_t &message)
         mavlink_msg_esc_info_decode(&message, &info);
         for (int slot = 0; slot < 4; ++slot) {
             const int index = info.index + slot;
-            if (index >= 4) continue;
+            if (index >= ThermalState::SensorCount) continue;
             const bool online = index < info.count && (info.info & (1U << slot));
             const double temperature = info.temperature[slot] == INT16_MAX
                 ? qQNaN() : info.temperature[slot] / 100.0;
-            _state.update(index + 1, temperature, online, now);
+            _state.update(index, temperature, online, now);
         }
-        break;
-    }
-    case MAVLINK_MSG_ID_SCALED_IMU: {
-        if (_imuSource != 1) break;
-        mavlink_scaled_imu_t imu{};
-        mavlink_msg_scaled_imu_decode(&message, &imu);
-        _state.update(0, imu.temperature == 0 ? qQNaN() : imu.temperature / 100.0, true, now);
-        break;
-    }
-    case MAVLINK_MSG_ID_SCALED_IMU2: {
-        if (_imuSource != 2) break;
-        mavlink_scaled_imu2_t imu{};
-        mavlink_msg_scaled_imu2_decode(&message, &imu);
-        _state.update(0, imu.temperature == 0 ? qQNaN() : imu.temperature / 100.0, true, now);
-        break;
-    }
-    case MAVLINK_MSG_ID_SCALED_IMU3: {
-        if (_imuSource != 3) break;
-        mavlink_scaled_imu3_t imu{};
-        mavlink_msg_scaled_imu3_decode(&message, &imu);
-        _state.update(0, imu.temperature == 0 ? qQNaN() : imu.temperature / 100.0, true, now);
         break;
     }
     default:
@@ -150,14 +84,7 @@ void VehicleThermalMonitor::handleMessage(const mavlink_message_t &message)
 
 QString VehicleThermalMonitor::_sensorName(int index) const
 {
-    return index == 0 ? tr("FC IMU TEMP") : tr("Motor %1 ESC").arg(index);
-}
-
-QString VehicleThermalMonitor::sourceNotice() const
-{
-    return _imuSource == 0
-        ? tr("FC IMU source is unverified. Select a source in development settings only after verifying the installed firmware and physical sensor.")
-        : tr("FC IMU TEMP is the configured IMU sensor reading, not a verified board or CPU temperature.");
+    return tr("Motor %1").arg(index + 1);
 }
 
 QString VehicleThermalMonitor::_stateText(ThermalState::Availability available, ThermalState::Severity severity) const
@@ -173,30 +100,24 @@ QString VehicleThermalMonitor::_stateText(ThermalState::Availability available, 
 void VehicleThermalMonitor::refresh()
 {
     const int64_t now = _clock.elapsed();
-    _result = _state.evaluate(now, _timeoutMs, _requiredMask);
-    _confirmedGround = _state.confirmedGround(now, _timeoutMs)
+    _result = _state.evaluate(now, FreshnessTimeoutMs);
+    _confirmedGround = _state.confirmedGround(now, FreshnessTimeoutMs)
                        && !_vehicle->flying() && !_vehicle->landing()
                        && !_vehicle->vehicleLinkManager()->communicationLost();
-    _groundBlocked = _confirmedGround && _state.blocksGroundCommands(now, _timeoutMs, _requiredMask);
+    _groundBlocked = _confirmedGround && _state.blocksGroundCommands(now, FreshnessTimeoutMs);
     _sensors.clear();
     QStringList hot;
-    QStringList missing;
     for (int i = 0; i < ThermalState::SensorCount; ++i) {
         const auto &reading = _state.readings[i];
-        const auto available = _state.availability(i, now, _timeoutMs);
+        const auto available = _state.availability(i, now, FreshnessTimeoutMs);
         const bool fresh = available == ThermalState::Availability::Fresh;
         const auto severity = fresh ? ThermalState::severity(reading.temperatureC) : ThermalState::Severity::Unknown;
         const QString state = _stateText(available, severity);
-        const QString source = i == 0 ? (_imuSource ? QStringLiteral("SCALED_IMU%1").arg(_imuSource == 1 ? QString() : QString::number(_imuSource))
-                                                     : tr("Unverified")) : QStringLiteral("ESC_INFO");
         _sensors.append(QVariantMap{
             {QStringLiteral("name"), _sensorName(i)}, {QStringLiteral("temperatureC"), fresh ? reading.temperatureC : qQNaN()},
-            {QStringLiteral("state"), state}, {QStringLiteral("severity"), static_cast<int>(severity)},
-            {QStringLiteral("source"), source}, {QStringLiteral("required"), bool(_requiredMask & (1U << i))},
-            {QStringLiteral("ageSeconds"), reading.receivedAtMs < 0 ? -1.0 : (now - reading.receivedAtMs) / 1000.0}
+            {QStringLiteral("severity"), static_cast<int>(severity)}
         });
         if (_result.criticalMask & (1U << i)) hot << tr("%1: %2 °C").arg(_sensorName(i)).arg(reading.temperatureC, 0, 'f', 2);
-        if (_result.missingRequiredMask & (1U << i)) missing << _sensorName(i);
         if (fresh && reading.temperatureC <= 77.0) _alertLatch &= ~(1U << i);
         if (_lastStates[i] != state) {
             qCInfo(VehicleThermalLog) << "Vehicle" << _vehicle->id() << _sensorName(i) << state
@@ -205,8 +126,7 @@ void VehicleThermalMonitor::refresh()
         }
     }
     _reason = !hot.isEmpty() ? tr("Temperature too high (limit 80 °C): %1.").arg(hot.join(QStringLiteral(", ")))
-                            : !missing.isEmpty() ? tr("Required temperature data unavailable: %1.").arg(missing.join(QStringLiteral(", ")))
-                                                 : QString();
+                            : QString();
     const unsigned newHot = _result.criticalMask & ~_alertLatch;
     if (newHot && !_confirmedGround && (_vehicle->armed() || _vehicle->flying() || _vehicle->landing())) {
         _alertLatch |= _result.criticalMask;

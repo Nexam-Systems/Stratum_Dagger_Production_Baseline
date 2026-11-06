@@ -482,7 +482,7 @@ Item {
                 }
             }
 
-            // One cell for the combined IMU/ESC average; color follows the worst sensor.
+            // One cell for the four ESCs' average; color follows the worst motor.
             Divider {}
             Cell {
                 id: motTempCell
@@ -674,78 +674,36 @@ Item {
         ToolIndicatorPage {
             showExpand: false
             contentComponent: SettingsGroupLayout {
-                heading: qsTr("System and ESC Temperatures")
-
-                QGCLabel {
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 50
-                    wrapMode: Text.WordWrap
-                    text: root._thermal
-                          ? qsTr("Combined average: %1 (%2 of 5 sensors fresh)").arg(root._avgTempText()).arg(root._thermal.freshCount)
-                          : qsTr("No vehicle connected")
-                }
-                QGCLabel {
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 50
-                    text: qsTr("Green: below 70 \u00b0C. Orange: 70-80 \u00b0C. Red: above 80 \u00b0C. Any hot sensor triggers the ground check, not the average.")
-                    wrapMode: Text.WordWrap
-                    font.pointSize: ScreenTools.smallFontPointSize
-                }
+                heading: qsTr("Motor Temperatures")
 
                 Repeater {
-                    model: root._thermal ? root._thermal.sensors : []
-                    ColumnLayout {
-                        required property var modelData
+                    model: 4
+                    RowLayout {
+                        required property int index
+                        readonly property var reading: root._thermal && index < root._thermal.sensors.length
+                                                       ? root._thermal.sensors[index] : null
                         Layout.fillWidth: true
-                        spacing: ScreenTools.defaultFontPixelHeight / 4
-                        RowLayout {
+                        spacing: ScreenTools.defaultFontPixelWidth * 2
+                        QGCLabel {
+                            text: reading ? reading.name : qsTr("Motor %1").arg(index + 1)
                             Layout.fillWidth: true
-                            QGCLabel { text: modelData.name; font.bold: true; Layout.fillWidth: true }
-                            QGCLabel {
-                                text: isFinite(modelData.temperatureC) ? modelData.temperatureC.toFixed(2) + " \u00b0C" : "--"
-                                color: root._thermalColor(modelData.severity)
-                                font.bold: true
-                            }
-                            QGCLabel {
-                                text: modelData.state
-                                color: root._thermalColor(modelData.severity)
-                            }
                         }
                         QGCLabel {
-                            Layout.fillWidth: true
-                            Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 50
-                            wrapMode: Text.WordWrap
-                            text: qsTr("%1 | Age: %2 | %3").arg(modelData.source)
-                                  .arg(modelData.ageSeconds < 0 ? "--" : modelData.ageSeconds.toFixed(1) + " s")
-                                  .arg(modelData.required ? qsTr("Required") : qsTr("Optional"))
-                            font.pointSize: ScreenTools.smallFontPointSize
+                            text: reading && isFinite(reading.temperatureC)
+                                  ? reading.temperatureC.toFixed(2) + " \u00b0C" : qsTr("N/A")
+                            color: root._thermalColor(reading ? reading.severity : 0)
                         }
                     }
                 }
 
-                QGCLabel {
+                RowLayout {
                     Layout.fillWidth: true
-                    Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 50
-                    text: root._thermal ? root._thermal.sourceNotice : ""
-                    wrapMode: Text.WordWrap
-                    font.pointSize: ScreenTools.smallFontPointSize
-                }
-                QGCLabel {
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 50
-                    visible: root._thermal && root._thermal.reason !== ""
-                    text: root._thermal ? root._thermal.reason : ""
-                    color: root._thermalColor(root._thermal ? root._thermal.severity : 0)
-                    wrapMode: Text.WordWrap
-                }
-                QGCLabel {
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 50
-                    text: !root._thermal ? "" : root._thermal.groundBlocked
-                          ? qsTr("Ground thermal check: Arm, Takeoff and flight-mode changes are blocked. Disarming remains available.")
-                          : root._thermal.confirmedGround ? qsTr("Ground thermal check: no block under the configured requirements.")
-                          : qsTr("Ground state is not confirmed. Thermal monitoring is warning-only; flight controls are not changed.")
-                    wrapMode: Text.WordWrap
+                    spacing: ScreenTools.defaultFontPixelWidth * 2
+                    QGCLabel { text: qsTr("Average:"); Layout.fillWidth: true }
+                    QGCLabel {
+                        text: root._avgTempText()
+                        color: root._thermalColor(root._thermal ? root._thermal.severity : 0)
+                    }
                 }
             }
         }

@@ -24,7 +24,6 @@ class VehicleThermalMonitor : public QObject
     Q_PROPERTY(bool preflightReady READ preflightReady NOTIFY updated)
     Q_PROPERTY(bool confirmedGround READ confirmedGround NOTIFY updated)
     Q_PROPERTY(QString reason READ reason NOTIFY updated)
-    Q_PROPERTY(QString sourceNotice READ sourceNotice NOTIFY updated)
 
 public:
     explicit VehicleThermalMonitor(Vehicle *vehicle);
@@ -37,16 +36,14 @@ public:
     int freshCount() const { return _result.freshCount; }
     int severity() const { return static_cast<int>(_result.severity); }
     bool groundBlocked() const { return _groundBlocked; }
-    bool preflightReady() const { return !_result.criticalMask && !_result.missingRequiredMask; }
+    bool preflightReady() const { return !_result.criticalMask; }
     bool confirmedGround() const { return _confirmedGround; }
     QString reason() const { return _reason; }
-    QString sourceNotice() const;
 
 signals:
     void updated();
 
 private:
-    void _configure();
     void _requestStreams();
     void _reset();
     QString _sensorName(int index) const;
@@ -60,10 +57,8 @@ private:
     QVariantList _sensors;
     QString _reason;
     std::array<QString, ThermalState::SensorCount> _lastStates{};
-    unsigned _requiredMask = 0;
     unsigned _alertLatch = 0;
-    int _imuSource = 0;
-    int _timeoutMs = 3000;
+    static constexpr int FreshnessTimeoutMs = 3000;
     bool _heardHeartbeat = false;
     bool _streamsRequested = false;
     bool _confirmedGround = false;

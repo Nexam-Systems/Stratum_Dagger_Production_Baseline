@@ -1,33 +1,31 @@
 # UI Changes to make as per the slide numbers
 
-## KAN-24: combined temperature monitor and ground thermal check
+## KAN-24: motor temperatures and ground thermal check
 
 - The existing MOT TEMP cell is now AVG TEMP; no extra status-bar cell is added.
-  It averages fresh, valid FC IMU and four ESC readings. Color follows the worst
-  sensor, never the average: below 70 C normal, 70-80 C warning, above 80 C critical.
-- The drawer always lists FC IMU TEMP and Motor 1-4 ESC readings when connected,
-  including source, receive age, status and required/optional configuration.
+  It averages fresh, valid readings from the four motor ESCs only. Color follows
+  the hottest valid motor: below 70 C normal, 70-80 C warning, above 80 C critical.
+- The drawer contains only Motor 1-4 temperatures and Average. Missing, invalid,
+  offline or stale readings display N/A and are excluded from the average.
   These are ESC temperatures, not separate motor-winding measurements.
-- Dev Settings > General > Thermal Monitoring selects a verified SCALED_IMU/2/3
-  source, required sensors and freshness timeout (default 3000 ms). IMU source
-  defaults to unverified/NO DATA; required flags default off to avoid silently
-  requiring unsupported sensors. Verification is a commissioning prerequisite
-  for the installed firmware/fleet. HIGHRES_IMU and pressure data are not used.
+- Nano/IMU monitoring, thermal settings, required-sensor options and the drawer's
+  source/age/status/policy details have been removed. There is no missing-data
+  interlock; only a fresh motor reading above 80 C triggers the thermal block.
 - Fresh EXTENDED_SYS_STATE ON_GROUND plus no flying/landing state is required for
-  blocking. Any fresh sensor above 80 C, or unavailable required sensor, blocks
+  blocking. Any fresh motor ESC reading above 80 C blocks
   STRATUM Arm/Takeoff/flight-mode requests and shows a reason popup. Disarm remains
   available. Exactly 80 C does not block. This is not a PX4/RC arming lock.
 - In-air, takeoff, landing and uncertain/stale flight phase never trigger this
   command block. High temperatures produce a popup without sending flight-control
-  commands. Popup episodes re-arm below 77 C to prevent repeated threshold chatter;
+  commands. Popup episodes re-arm at or below 77 C to prevent repeated threshold chatter;
   the command threshold remains strictly above 80 C.
-- Link loss clears samples and phase; reconnect requires fresh telemetry.
-  ESC_INFO supplies ESC temperatures (INT16_MAX invalid); selected SCALED_IMU
-  temperatures use centi-C (zero means unavailable). Streams are requested through
-  the existing MAVLink message-interval manager; unsupported streams remain NO DATA.
+- Link loss clears samples and phase; reconnect requires fresh telemetry. Readings
+  and ground reports expire after 3 seconds. ESC_INFO supplies motor ESC temperatures
+  in centi-C (INT16_MAX invalid). ESC_INFO and EXTENDED_SYS_STATE streams are requested
+  through the existing MAVLink message-interval manager.
 - Coverage: StratumThermalPolicyTest, VehicleThermalMonitorTest (native integration),
   StratumThermalIndicatorTest, StratumMissionStateTest, and generator tests.
-  Bench-check physical IMU identity, ESC routing, phase reports, ground blocks,
+  Bench-check ESC routing, phase reports, ground blocks,
   airborne warnings, RC independence, disarm, and both color schemes before flight.
 
 ## KAN-28: adaptive settings and tool navigation
