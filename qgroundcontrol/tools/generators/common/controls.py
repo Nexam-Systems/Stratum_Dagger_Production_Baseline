@@ -138,6 +138,7 @@ def render_slider(
     slider_min: str = "",
     slider_max: str = "",
     tr_context: str = "",
+    highlight_slider: bool = False,
 ) -> str:
     """Render a ``FactTextFieldSlider``, optionally with enable checkbox and button."""
     label_line = f'    label: {qml_tr(label, tr_context)}' if label else "    label: fact.label"
@@ -156,6 +157,8 @@ def render_slider(
     lines.append(f"{inner_indent}    Layout.fillWidth: true")
     lines.append(f"{inner_indent}{label_line}")
     lines.append(f"{inner_indent}    fact: {fact_ref}")
+    if highlight_slider:
+        lines.append(f"{inner_indent}    highlightSlider: true")
 
     if allow_using_min_max:
         lines.append(f"{inner_indent}    allowUsingMinMax: true")
@@ -200,6 +203,7 @@ def render_checkbox(
     label_source: str = "fact.label",
     qml_type: str = "FactCheckBox",
     tr_context: str = "",
+    accessible_name: str = "",
 ) -> str:
     """Render a ``FactCheckBox`` (or variant like ``FactCheckBoxSlider``)."""
     label_line = f'    {label_property}: {qml_tr(label, tr_context)}' if label else f"    {label_property}: {label_source}"
@@ -209,6 +213,8 @@ def render_checkbox(
         f"{indent}{label_line}",
         f"{indent}    fact: {fact_ref}",
     ]
+    if accessible_name:
+        lines.append(f"{indent}    Accessible.name: {accessible_name}")
     if enable_when:
         lines.append(f"{indent}    enabled: {enable_when}")
     lines.append(f"{indent}}}")
@@ -225,6 +231,7 @@ def render_combobox(
     qml_type: str = "FactComboBox",
     combo_preferred_width: str = "",
     tr_context: str = "",
+    extra_lines: list[str] | None = None,
 ) -> str:
     """Render a ``FactComboBox`` (or ``LabelledFactComboBox``)."""
     if qml_type == "LabelledFactComboBox":
@@ -240,6 +247,8 @@ def render_combobox(
         lines.append(f"{indent}    comboBoxPreferredWidth: {combo_preferred_width}")
     lines.append(f"{indent}    fact: {fact_ref}")
     lines.append(f"{indent}    indexModel: false")
+    if extra_lines:
+        lines.extend(f"{indent}    {line}" for line in extra_lines)
     if enable_when:
         lines.append(f"{indent}    enabled: {enable_when}")
     lines.append(f"{indent}}}")

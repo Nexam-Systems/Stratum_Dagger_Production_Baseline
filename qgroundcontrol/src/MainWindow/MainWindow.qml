@@ -464,9 +464,12 @@ ApplicationWindow {
         property string toolTitle
         property alias toolSource:  toolDrawerLoader.source
         property var toolIcon
+        readonly property bool hasSettingsHeader: toolDrawerLoader.item
+                                                  && typeof toolDrawerLoader.item.headerTitle !== "undefined"
         readonly property var activeVehicle: QGroundControl.multiVehicleManager.activeVehicle
         readonly property bool vehicleConnected: activeVehicle && activeVehicle.vehicleLinkManager
                                                  && !activeVehicle.vehicleLinkManager.communicationLost
+        SettingsTheme { id: toolSettingsTheme }
 
         onVisibleChanged: {
             if (!toolDrawer.visible) {
@@ -485,7 +488,7 @@ ApplicationWindow {
             anchors.right:  parent.right
             anchors.top:    parent.top
             height:         ScreenTools.toolbarHeight
-            color:          qgcPal.toolbarBackground
+            color:          toolDrawer.hasSettingsHeader ? toolSettingsTheme.background : qgcPal.toolbarBackground
 
             RowLayout {
                 id:                 toolDrawerToolbarLayout
@@ -501,25 +504,28 @@ ApplicationWindow {
                     id: qgcButton
                     objectName: "toolbar_qgcLogo"
                     height: parent.height
-                    icon.source: "/res/QGCLogoFull.svg"
+                    icon.source: toolDrawer.hasSettingsHeader ? "/res/NXLogo.svg" : "/res/QGCLogoFull.svg"
                     logo: true
                     onClicked: mainWindow.showToolSelectDialog()
                 }
 
                 QGCLabel {
                     id:             toolbarDrawerText
-                    Layout.fillWidth: true
                     Layout.minimumWidth: 0
-                    text:           toolDrawer.toolTitle
+                    Layout.maximumWidth: toolDrawer.width * 0.4
+                    text:           toolDrawer.hasSettingsHeader ? toolDrawerLoader.item.headerTitle : toolDrawer.toolTitle
                     font.pointSize: ScreenTools.largeFontPointSize
+                    font.bold:      toolDrawer.hasSettingsHeader
                     elide:          Text.ElideRight
                 }
 
                 QGCLabel {
-                    visible: toolDrawer.width > ScreenTools.defaultFontPixelWidth * 140
+                    visible: toolDrawer.width > ScreenTools.defaultFontPixelWidth * 95
                     text: QGroundControl.stratumVersion
                     font.pointSize: ScreenTools.smallFontPointSize
                 }
+
+                Item { Layout.fillWidth: true }
 
                 Rectangle {
                     Layout.preferredWidth: ScreenTools.defaultFontPixelHeight * 0.6

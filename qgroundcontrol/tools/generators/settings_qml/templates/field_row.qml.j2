@@ -1,0 +1,14 @@
+{{ indent }}SettingsFieldRow {
+{{ indent }}    Layout.fillWidth: true
+{{ indent }}    visible: {{ vis_expr }}
+{{ indent }}    label: {{ label_expr }}
+{{ indent }}    description: {{ fact_ref }}.shortDescription
+{% if editor_width %}
+{{ indent }}    editorPreferredWidth: {{ editor_width }}
+{% endif %}
+{% if fill_editor %}
+{{ indent }}    fillEditor: true
+{% endif %}
+
+{{ control_qml_indented }}
+{{ indent }}}

@@ -2,6 +2,20 @@
 
 ## KAN-28: adaptive settings and tool navigation
 
+The dark concept in issue #64 is the visual target (including its colors), per
+the subsequent design clarification. Styling is scoped to the settings/tool
+components; High Contrast still uses the application's accessible palette.
+
+- Dark navy panels, cyan icon tabs and section headings, muted descriptions,
+  numbered General sections 01-05, and a full-width Application panel.
+- Field labels/descriptions stay together; editors align on the right and stack
+  beneath their labels when space is limited. Existing Fact controls retain
+  validation, units, persisted values, and callbacks.
+- The shared header retains the page selector, with NX/STRATUM branding and
+  outlined Reset / cyan Save actions. Search remains available beside the page
+  title. General keeps the extra preferences/units wherever previously visible.
+- CMake tracks settings templates and shared renderers as generation dependencies.
+
 - Generated application settings pages use two equal-width columns when there
   is room for two 55-character-wide panels plus the gutter; otherwise one column.
   The breakpoint scales with the UI font size. Pages scroll vertically.

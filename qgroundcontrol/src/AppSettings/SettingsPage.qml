@@ -13,8 +13,12 @@ Item {
     default property alias contentItem: mainLayout.data
     property int sectionFilter: -1
     property bool responsiveColumns: false
+    property string pageTitle
+    property string pageDescription
+    readonly property color secondaryTextColor: settingsTheme.secondaryText
     readonly property int columnCount: mainLayout.columns
     readonly property real minimumColumnWidth: ScreenTools.defaultFontPixelWidth * 55
+    SettingsTheme { id: settingsTheme }
 
     QGCFlickable {
         anchors.fill:   parent

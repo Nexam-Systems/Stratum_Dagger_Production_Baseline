@@ -1,8 +1,14 @@
-    SettingsGroupLayout {
+    SettingsSection {
         Layout.fillWidth: true
+        Layout.fillHeight: expanded
         Layout.alignment: Qt.AlignTop
         Layout.minimumWidth: 0
         collapsible: true
+        sectionNumber: {{ section_number }}
+        iconSource: {{ icon }}
+{% if full_width %}
+        Layout.columnSpan: settingsPage.columnCount
+{% endif %}
 {% if heading %}
         heading: {{ heading }}
 {% endif %}

@@ -8,12 +8,12 @@ import QGroundControl.AppSettings
 
 Rectangle {
     id:     settingsView
-    color:  qgcPal.window
+    color:  settingsTheme.background
     z:      QGroundControl.zOrderTopMost
 
     readonly property real _defaultTextHeight:  ScreenTools.defaultFontPixelHeight
     readonly property real _defaultTextWidth:   ScreenTools.defaultFontPixelWidth
-    readonly property real _horizontalMargin:   _defaultTextWidth / 2
+    readonly property real _horizontalMargin:   _defaultTextWidth * 4
     readonly property real _verticalMargin:     _defaultTextHeight / 2
 
     property bool _first: true
@@ -24,20 +24,24 @@ Rectangle {
     property int  _expandedRevision: 0  // bumped to trigger re-evaluation
     property string _searchQuery: ""
 
+    readonly property string headerTitle: QGroundControl.appName
+
     property Component headerActions: RowLayout {
         spacing: ScreenTools.defaultFontPixelWidth
 
-        QGCButton {
+        SettingsActionButton {
             objectName: "settings_reset"
-            text: settingsView.width < ScreenTools.defaultFontPixelWidth * 100 ? qsTr("Reset") : qsTr("Reset to Defaults")
+            text: (settingsView.width < ScreenTools.defaultFontPixelWidth * 100 ? qsTr("Reset") : qsTr("Reset to Defaults")).toUpperCase()
+            iconSource: "/InstrumentValueIcons/reload.svg"
             onClicked: QGroundControl.showMessageDialog(settingsView, qsTr("Reset to Defaults"),
                 qsTr("All settings will be reset to defaults the next time %1 is started. Continue?").arg(QGroundControl.appName),
                 Dialog.Yes | Dialog.No,
                 function() { QGroundControl.settingsManager.appSettings.clearSettingsNextBoot.rawValue = true })
         }
-        QGCButton {
+        SettingsActionButton {
             objectName: "settings_save"
-            text: settingsView.width < ScreenTools.defaultFontPixelWidth * 100 ? qsTr("Save") : qsTr("Save Settings")
+            text: (settingsView.width < ScreenTools.defaultFontPixelWidth * 100 ? qsTr("Save") : qsTr("Save Settings")).toUpperCase()
+            iconSource: "/InstrumentValueIcons/save-disk.svg"
             primary: true
             onClicked: {
                 settingsView.forceActiveFocus()
@@ -144,6 +148,7 @@ Rectangle {
     }
 
     QGCPalette { id: qgcPal }
+    SettingsTheme { id: settingsTheme }
 
     Component.onCompleted: {
         // Find and select the default page
@@ -182,21 +187,12 @@ Rectangle {
         anchors.right:      parent.right
         spacing:            _verticalMargin / 2
 
-        QGCTextField {
-            id:                 searchField
-            Layout.fillWidth:   true
-            placeholderText:    qsTr("Search settings...")
-
-            onTextChanged: {
-                settingsView._searchQuery = text
-            }
-        }
-
         ToolTabBar {
             id:                 buttonList
             objectName:         "settings_buttonList"
             Layout.fillWidth:   true
             Layout.preferredHeight: implicitHeight
+            equalWidthTabs: true
 
             Repeater {
                 id:     buttonRepeater
@@ -217,6 +213,7 @@ Rectangle {
                     visible: pageName !== "Divider" && pageVisible()
                            && (settingsView._searchQuery.trim() === "" || settingsView._pageMatchesSearch(index))
                     text: pageName
+                    icon.source: model.nameKey === "General" ? "/InstrumentValueIcons/cog.svg" : (model.iconUrl ?? "")
                     checked: isSelected
                     onClicked: {
                         if (mainWindow.allowViewSwitch()) {
@@ -226,18 +223,51 @@ Rectangle {
                 }
             }
         }
-    }
 
-    Rectangle {
-        id:                     divider
-        anchors.topMargin:      _verticalMargin / 2
-        anchors.leftMargin:     _horizontalMargin
-        anchors.rightMargin:    _horizontalMargin
-        anchors.left:           parent.left
-        anchors.right:          parent.right
-        anchors.top:            leftPanel.bottom
-        height:                 1
-        color:                  qgcPal.windowShade
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 2
+            color: settingsTheme.accent
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: _verticalMargin
+            Layout.bottomMargin: _verticalMargin
+            spacing: _defaultTextWidth * 2
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                spacing: _verticalMargin / 2
+
+                QGCLabel {
+                    Layout.fillWidth: true
+                    text: rightPanel.item && rightPanel.item.pageTitle
+                          ? rightPanel.item.pageTitle
+                          : (_selectedPageIndex >= 0 ? settingsPagesModel.get(_selectedPageIndex).name : "")
+                    color: settingsTheme.text
+                    font.pointSize: ScreenTools.largeFontPointSize
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                }
+                QGCLabel {
+                    Layout.fillWidth: true
+                    text: rightPanel.item && rightPanel.item.pageDescription ? rightPanel.item.pageDescription : ""
+                    visible: text !== ""
+                    color: settingsTheme.secondaryText
+                    wrapMode: Text.WordWrap
+                }
+            }
+
+            QGCTextField {
+                id: searchField
+                Layout.preferredWidth: Math.min(settingsView.width * 0.3, _defaultTextWidth * 25)
+                Layout.minimumWidth: 0
+                placeholderText: qsTr("Search settings...")
+                onTextChanged: settingsView._searchQuery = text
+            }
+        }
     }
 
     //-- Panel Contents
@@ -250,7 +280,7 @@ Rectangle {
         anchors.bottomMargin:   _verticalMargin
         anchors.left:           parent.left
         anchors.right:          parent.right
-        anchors.top:            divider.bottom
+        anchors.top:            leftPanel.bottom
         anchors.bottom:         parent.bottom
     }
 }

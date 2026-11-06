@@ -21,6 +21,7 @@ Rectangle {
     property bool  warnOnUserMinMaxInvalid: true  ///< true: warn if userMin/userMax are invalid, false: no warning
 
     property bool   showEnableCheckbox: false ///< true: show enable/disable checkbox, false: hide
+    property bool   highlightSlider: false
     property bool   allowUsingMinMax:   false ///< true: fall back to fact.min/max when userMin/Max not set
     property var    sliderMin:          undefined ///< explicit slider minimum, overrides fact.userMin/min
     property var    sliderMax:          undefined ///< explicit slider maximum, overrides fact.userMax/max
@@ -112,6 +113,7 @@ Rectangle {
                 from:               control._sliderMin
                 to:                 control._sliderMax
                 showBoundaryValues: true
+                highlightValue: control.highlightSlider
 
                 onMoved: {
                     if (control._loadComplete) {

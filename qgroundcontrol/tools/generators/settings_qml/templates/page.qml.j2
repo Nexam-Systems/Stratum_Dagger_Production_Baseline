@@ -12,6 +12,12 @@ import {{ imp }}
 SettingsPage {
     id: settingsPage
     responsiveColumns: true
+{% if page_title %}
+    pageTitle: {{ page_title }}
+{% endif %}
+{% if page_description %}
+    pageDescription: {{ page_description }}
+{% endif %}
 {% if object_name %}
     objectName: "settingsPage_{{ object_name }}"
 {% endif %}

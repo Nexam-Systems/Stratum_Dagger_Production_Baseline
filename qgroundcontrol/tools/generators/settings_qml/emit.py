@@ -19,16 +19,23 @@ from .model import ControlDef, PageDef, load_page_def
 _env = make_env(Path(__file__).parent / "templates")
 
 
-def _wrap_with_description(control_qml: str, fact_ref: str, vis_expr: str, indent: str) -> str:
-    """Wrap a control's QML in a ColumnLayout that appends a shortDescription label."""
+def _wrap_with_description(
+    control_qml: str, fact_ref: str, vis_expr: str, indent: str,
+    *, label_expr: str = "", editor_width: str = "", fill_editor: bool = False,
+) -> str:
+    """Keep Fact controls intact while positioning their label and description."""
     control_qml_indented = "\n".join(
         (f"    {line}" if line.strip() else line) for line in control_qml.splitlines()
     )
-    return _env.get_template("wrap_with_description.qml.j2").render(
+    template = "field_row.qml.j2" if label_expr else "wrap_with_description.qml.j2"
+    return _env.get_template(template).render(
         indent=indent,
         vis_expr=vis_expr,
         fact_ref=fact_ref,
         control_qml_indented=control_qml_indented,
+        label_expr=label_expr,
+        editor_width=editor_width,
+        fill_editor=fill_editor,
     )
 
 
@@ -36,6 +43,7 @@ def _qml_control(ctrl: ControlDef, settings_dir: Path, json_context: str = "") -
     """Generate QML for a single control."""
     indent = "        "
     fact_ref = f"QGroundControl.settingsManager.{ctrl.setting}"
+    field_label = qml_tr(ctrl.label, json_context) if ctrl.label else f"{fact_ref}.label"
 
     def _vis_expr() -> str:
         if ctrl.showWhen:
@@ -80,19 +88,23 @@ def _qml_control(ctrl: ControlDef, settings_dir: Path, json_context: str = "") -
             button=ctrl.button,
             enable_when=ctrl.enableWhen,
             tr_context=json_context,
+            highlight_slider=True,
         )
         return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent)
     elif ctrl.control in ("browse", "scaler"):
         qml_type = "LabelledFactBrowse" if ctrl.control == "browse" else "LabelledFactIncrementer"
-        label_expr = qml_tr(ctrl.label, json_context) if ctrl.label else "fact.label"
         control_qml = _env.get_template("control_labelled_fact.qml.j2").render(
             indent=indent,
             qml_type=qml_type,
-            label_expr=label_expr,
+            label_expr='""',
             fact_ref=fact_ref,
             enable_when=ctrl.enableWhen,
         )
-        return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent)
+        return _wrap_with_description(
+            control_qml, fact_ref, _vis_expr(), indent, label_expr=field_label,
+            editor_width=f"ScreenTools.defaultFontPixelWidth * {60 if ctrl.control == 'browse' else 20}",
+            fill_editor=ctrl.control == "browse",
+        )
     elif ctrl.control == "checkbox":
         use_checkbox, use_combobox = True, False
     elif ctrl.control == "combobox":
@@ -108,40 +120,45 @@ def _qml_control(ctrl: ControlDef, settings_dir: Path, json_context: str = "") -
     if use_checkbox:
         control_qml = render_checkbox(
             fact_ref, indent,
-            label=ctrl.label,
             enable_when=ctrl.enableWhen,
             label_property="text",
-            label_source="fact.label",
+            label_source='""',
             qml_type="FactCheckBoxSlider",
             tr_context=json_context,
+            accessible_name=field_label,
         )
-        return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent)
+        return _wrap_with_description(
+            control_qml, fact_ref, _vis_expr(), indent,
+            label_expr=field_label, editor_width="ScreenTools.defaultFontPixelWidth * 6",
+        )
     if use_combobox:
         control_qml = render_combobox(
             fact_ref, indent,
-            label=ctrl.label,
             enable_when=ctrl.enableWhen,
-            label_source="fact.label",
+            label_source='""',
             qml_type="LabelledFactComboBox",
+            extra_lines=["comboBoxFillWidth: true", "comboBoxOutlined: true"],
             tr_context=json_context,
         )
-        return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent)
+        return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent, label_expr=field_label)
 
     fact_type = get_fact_type(ctrl.setting, settings_dir)
-    extra: list[str] = []
+    extra: list[str] = ["textFieldFillWidth: true", "textFieldOutlined: true"]
     if fact_type == "string":
         extra.append("textFieldPreferredWidth: _stringFieldWidth")
     control_qml = render_textfield(
         fact_ref, indent,
-        label=ctrl.label,
         enable_when=ctrl.enableWhen,
         placeholder=ctrl.placeholder,
-        label_source="fact.label",
+        label_source='""',
         qml_type="LabelledFactTextField",
         extra_lines=extra if extra else None,
         tr_context=json_context,
     )
-    return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent)
+    return _wrap_with_description(
+        control_qml, fact_ref, _vis_expr(), indent, label_expr=field_label,
+        editor_width="_stringFieldWidth" if fact_type == "string" else "ScreenTools.defaultFontPixelWidth * 16",
+    )
 
 
 def _qml_missing_placeholder(description: str) -> str:
@@ -226,6 +243,9 @@ def generate_page_qml(
         group_blocks.append(_env.get_template("group_settings.qml.j2").render(
             heading=_tr(grp.heading) if grp.heading else None,
             heading_description=grp.headingDescription,
+            section_number=json.dumps(grp.sectionNumber),
+            icon=json.dumps(grp.icon),
+            full_width=grp.fullWidth,
             visible=visible_expr,
             enable_when=grp.enableWhen,
             blocks=blocks,
@@ -238,6 +258,8 @@ def generate_page_qml(
         bindings=bindings,
         section_cases=section_cases,
         groups=group_blocks,
+        page_title=_tr(page.title or page_name) if page.title or page_name else None,
+        page_description=_tr(page.description) if page.description else None,
     ) + "\n"
 
 
