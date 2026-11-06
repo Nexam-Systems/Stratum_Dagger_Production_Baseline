@@ -28,7 +28,9 @@ QQuickItem *VehicleConfigUITestBase::clickSidebarButton(const QString &objectNam
         return nullptr;
     }
 
-    scrollIntoView(btn, QStringLiteral("vehicleConfig_sidebarFlickable"));
+    scrollIntoView(btn, objectName.startsWith(QStringLiteral("vehicleConfig_section_"))
+                       ? QStringLiteral("vehicleConfig_sectionTabs")
+                       : QStringLiteral("vehicleConfig_sidebarFlickable"));
     const QPointF center = btn->mapToScene(QPointF(btn->width() / 2, btn->height() / 2));
     QTest::mouseClick(_window, Qt::LeftButton, Qt::NoModifier, center.toPoint());
     QTest::qWait(_pageDelay);

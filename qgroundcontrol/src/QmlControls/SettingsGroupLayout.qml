@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 
 import QGroundControl
@@ -8,7 +9,7 @@ ColumnLayout {
     id:                 control
     spacing:            _margins / 2
     implicitWidth:      _contentLayout.implicitWidth + (_margins * 2)
-    implicitHeight:     _contentLayout.implicitHeight + (_margins * 2)
+    implicitHeight:     headingLayout.implicitHeight + (outerRect.visible ? outerRect.implicitHeight + spacing : 0)
 
     default property alias contentItem: _contentLayout.data
 
@@ -24,6 +25,8 @@ ColumnLayout {
     property string headingDescription
     property bool   showDividers:       true
     property bool   showBorder:         true
+    property bool   collapsible:        false
+    property bool   expanded:           true
 
     property real _margins: ScreenTools.defaultFontPixelHeight / 2
 
@@ -37,15 +40,52 @@ ColumnLayout {
     }
 
     ColumnLayout {
+        id:                 headingLayout
         Layout.leftMargin:  _margins
         Layout.fillWidth:   true
         spacing:            0
         visible:            heading !== ""
 
         QGCLabel {
+            Layout.fillWidth: true
+            visible:        !control.collapsible
             text:           heading
+            wrapMode:       Text.WordWrap
             font.pointSize: headingPointSize
             font.bold:      true
+        }
+
+        Button {
+            id: headingButton
+            objectName: "settings_groupToggle"
+            Layout.fillWidth: true
+            implicitHeight: Math.max(40, contentItem.implicitHeight + topPadding + bottomPadding)
+            visible: control.collapsible
+            text: control.heading
+            Accessible.name: text
+            Accessible.role: Accessible.CheckBox
+            checkable: true
+            checked: control.expanded
+            onClicked: control.expanded = checked
+
+            background: Rectangle {
+                color: headingButton.hovered ? QGroundControl.globalPalette.windowShade : "transparent"
+                border.width: headingButton.activeFocus ? 1 : 0
+                border.color: QGroundControl.globalPalette.brandingPurple
+            }
+            contentItem: RowLayout {
+                QGCLabel {
+                    text: control.expanded ? "-" : "+"
+                    font.bold: true
+                }
+                QGCLabel {
+                    Layout.fillWidth: true
+                    text: control.heading
+                    font.pointSize: control.headingPointSize
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                }
+            }
         }
 
         QGCLabel {
@@ -53,12 +93,13 @@ ColumnLayout {
             text:               headingDescription
             wrapMode:           Text.WordWrap
             font.pointSize:     ScreenTools.smallFontPointSize
-            visible:            headingDescription !== ""
+            visible:            headingDescription !== "" && (!control.collapsible || control.expanded)
         }
     }
 
     Rectangle {
         id:                 outerRect
+        visible:            !control.collapsible || control.expanded
         Layout.fillWidth:   true
         implicitWidth:      _contentLayout.implicitWidth + (showBorder ? _margins * 2 : 0)
         implicitHeight:     _contentLayout.implicitHeight + (showBorder ? _margins * 2: 0)

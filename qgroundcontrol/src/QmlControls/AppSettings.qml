@@ -24,10 +24,28 @@ Rectangle {
     property int  _expandedRevision: 0  // bumped to trigger re-evaluation
     property string _searchQuery: ""
 
-    // STRATUM: settings top-row connection state.
-    readonly property var  _activeVehicle:    QGroundControl.multiVehicleManager.activeVehicle
-    readonly property bool _vehicleConnected: _activeVehicle && _activeVehicle.vehicleLinkManager
-                                              && !_activeVehicle.vehicleLinkManager.communicationLost
+    property Component headerActions: RowLayout {
+        spacing: ScreenTools.defaultFontPixelWidth
+
+        QGCButton {
+            objectName: "settings_reset"
+            text: settingsView.width < ScreenTools.defaultFontPixelWidth * 100 ? qsTr("Reset") : qsTr("Reset to Defaults")
+            onClicked: QGroundControl.showMessageDialog(settingsView, qsTr("Reset to Defaults"),
+                qsTr("All settings will be reset to defaults the next time %1 is started. Continue?").arg(QGroundControl.appName),
+                Dialog.Yes | Dialog.No,
+                function() { QGroundControl.settingsManager.appSettings.clearSettingsNextBoot.rawValue = true })
+        }
+        QGCButton {
+            objectName: "settings_save"
+            text: settingsView.width < ScreenTools.defaultFontPixelWidth * 100 ? qsTr("Save") : qsTr("Save Settings")
+            primary: true
+            onClicked: {
+                settingsView.forceActiveFocus()
+                if (QGroundControl.videoManager) QGroundControl.videoManager.syncSettings()
+                QGroundControl.showMessageDialog(settingsView, qsTr("Save Settings"), qsTr("All settings saved."))
+            }
+        }
+    }
 
     function _setExpanded(pageIndex, value) {
         _expandedPages[pageIndex] = value
@@ -164,54 +182,6 @@ Rectangle {
         anchors.right:      parent.right
         spacing:            _verticalMargin / 2
 
-        // STRATUM #64: settings top row — branding/version, connection status, actions.
-        RowLayout {
-            Layout.fillWidth: true
-            spacing:          _defaultTextWidth
-
-            QGCColoredImage {
-                source:                 "qrc:/res/QGCLogoWhite.svg"
-                fillMode:               Image.PreserveAspectFit
-                color:                  qgcPal.text
-                Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 1.5
-                Layout.preferredWidth:  ScreenTools.defaultFontPixelHeight * 1.5
-            }
-            QGCLabel {
-                text:           QGroundControl.appName + "  " + QGroundControl.stratumVersion
-                font.bold:      true
-                font.pointSize: ScreenTools.mediumFontPointSize
-            }
-            Item { Layout.fillWidth: true }
-            Rectangle {
-                Layout.preferredWidth:  ScreenTools.defaultFontPixelHeight * 0.6
-                Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 0.6
-                radius:                 width / 2
-                Layout.alignment:       Qt.AlignVCenter
-                color: !settingsView._activeVehicle ? "#808080"
-                       : (settingsView._vehicleConnected ? qgcPal.colorGreen : qgcPal.colorOrange)
-            }
-            QGCLabel {
-                Layout.alignment: Qt.AlignVCenter
-                text: !settingsView._activeVehicle ? qsTr("No vehicle")
-                      : (settingsView._vehicleConnected ? qsTr("Connected") : qsTr("Comm lost"))
-            }
-            QGCButton {
-                text: qsTr("Reset to Defaults")
-                onClicked: QGroundControl.showMessageDialog(settingsView, qsTr("Reset to Defaults"),
-                    qsTr("All settings will be reset to defaults the next time %1 is started. Continue?").arg(QGroundControl.appName),
-                    Dialog.Yes | Dialog.No,
-                    function() { QGroundControl.settingsManager.appSettings.clearSettingsNextBoot.rawValue = true })
-            }
-            QGCButton {
-                text:    qsTr("Save Settings")
-                primary: true
-                onClicked: {
-                    if (QGroundControl.videoManager) QGroundControl.videoManager.syncSettings()
-                    QGroundControl.showMessageDialog(settingsView, qsTr("Save Settings"), qsTr("All settings saved."))
-                }
-            }
-        }
-
         QGCTextField {
             id:                 searchField
             Layout.fillWidth:   true
@@ -222,64 +192,35 @@ Rectangle {
             }
         }
 
-        QGCFlickable {
+        ToolTabBar {
             id:                 buttonList
             objectName:         "settings_buttonList"
             Layout.fillWidth:   true
-            Layout.preferredHeight: tabRow.implicitHeight
-            contentWidth:       tabRow.implicitWidth
-            contentHeight:      tabRow.implicitHeight
-            flickableDirection: Flickable.HorizontalFlick
-            clip:               true
+            Layout.preferredHeight: implicitHeight
 
-            Row {
-                id:         tabRow
-                spacing:    _defaultTextWidth / 2
+            Repeater {
+                id:     buttonRepeater
+                model:  settingsPagesModel
 
-                Repeater {
-                    id:     buttonRepeater
-                    model:  settingsPagesModel
+                ToolTabButton {
+                    id:     tabButton
+                    tabBar: buttonList
+                    objectName: "settingsButton_" + pageName
 
-                    Button {
-                        id:     tabButton
+                    required property int index
+                    required property var model
 
-                        required property int index
-                        required property var model
+                    property string pageName:    model.name ?? ""
+                    property var    pageVisible: model.pageVisible ?? function() { return true }
+                    property bool   isSelected:  settingsView._selectedPageIndex === index
 
-                        property string pageName:    model.name ?? ""
-                        property var    pageVisible: model.pageVisible ?? function() { return true }
-                        property bool   isSelected:  settingsView._selectedPageIndex === index
-
-                        visible: pageName !== "Divider" && pageVisible()
-                               && (settingsView._searchQuery.trim() === "" || settingsView._pageMatchesSearch(index))
-                        height:       ScreenTools.defaultFontPixelHeight * 2.2
-                        leftPadding:  ScreenTools.defaultFontPixelWidth * 1.5
-                        rightPadding: ScreenTools.defaultFontPixelWidth * 1.5
-                        hoverEnabled: !ScreenTools.isMobile
-
-                        background: Rectangle {
-                            color: tabButton.isSelected ? qgcPal.windowShade
-                                   : (tabButton.hovered ? qgcPal.windowShadeDark : "transparent")
-                            Rectangle {
-                                anchors.left:   parent.left
-                                anchors.right:  parent.right
-                                anchors.bottom: parent.bottom
-                                height:         ScreenTools.defaultFontPixelHeight * 0.18
-                                visible:        tabButton.isSelected
-                                color:          qgcPal.brandingPurple
-                            }
-                        }
-                        contentItem: QGCLabel {
-                            text:                tabButton.pageName.toUpperCase()
-                            color:               tabButton.isSelected ? qgcPal.text : qgcPal.buttonText
-                            font.bold:           tabButton.isSelected
-                            verticalAlignment:   Text.AlignVCenter
-                            horizontalAlignment: Text.AlignHCenter
-                        }
-                        onClicked: {
-                            if (mainWindow.allowViewSwitch()) {
-                                settingsView._navigateTo(index, -1)
-                            }
+                    visible: pageName !== "Divider" && pageVisible()
+                           && (settingsView._searchQuery.trim() === "" || settingsView._pageMatchesSearch(index))
+                    text: pageName
+                    checked: isSelected
+                    onClicked: {
+                        if (mainWindow.allowViewSwitch()) {
+                            settingsView._navigateTo(index, -1)
                         }
                     }
                 }

@@ -61,57 +61,37 @@ Rectangle {
         anchors.fill: parent
     }
 
-    QGCFlickable {
+    ToolTabBar {
         id:                 buttonScroll
-        width:              buttonColumn.width
         anchors.topMargin:  _defaultTextHeight / 2
         anchors.top:        parent.top
-        anchors.bottom:     parent.bottom
         anchors.leftMargin: _horizontalMargin
+        anchors.rightMargin: _horizontalMargin
         anchors.left:       parent.left
-        contentHeight:      buttonColumn.height
-        flickableDirection: Flickable.VerticalFlick
-        clip:               true
+        anchors.right:      parent.right
 
-        Column {
-            id:         buttonColumn
-            width:      _maxButtonWidth
-            spacing:    _defaultTextHeight / 2
+        Repeater {
+            id:     buttonRepeater
+            model:  QGroundControl.corePlugin ? QGroundControl.corePlugin.analyzePages : []
 
-            property real _maxButtonWidth: {
-                var maxW = 0
-                for (var i = 0; i < buttonRepeater.count; i++) {
-                    var item = buttonRepeater.itemAt(i)
-                    if (item) maxW = Math.max(maxW, item.implicitWidth)
+            Component.onCompleted: {
+                if (count > 0) {
+                    _currentPage = QGroundControl.corePlugin.analyzePages[0]
+                    panelContainer.title = _currentPage.title
+                    _updatePanelSource()
                 }
-                return maxW
             }
 
-            Repeater {
-                id:     buttonRepeater
-                model:  QGroundControl.corePlugin ? QGroundControl.corePlugin.analyzePages : []
+            ToolTabButton {
+                tabBar:             buttonScroll
+                checked:            _root._currentPage === modelData
+                text:               modelData.title
 
-                Component.onCompleted: {
-                    if (count > 0) {
-                        itemAt(0).checked = true
-                        _currentPage = QGroundControl.corePlugin.analyzePages[0]
-                        panelContainer.title = _currentPage.title
-                        _updatePanelSource()
-                    }
-                }
-
-                SubMenuButton {
-                    imageResource:      modelData.icon
-                    autoExclusive:      true
-                    text:               modelData.title
-                    width:              buttonColumn._maxButtonWidth
-
-                    onClicked: {
-                        _currentPage        = modelData
-                        panelContainer.title = modelData.title
-                        checked             = true
-                        _updatePanelSource()
-                    }
+                onClicked: {
+                    if (!mainWindow.allowViewSwitch()) return
+                    _currentPage        = modelData
+                    panelContainer.title = modelData.title
+                    _updatePanelSource()
                 }
             }
         }
@@ -120,12 +100,12 @@ Rectangle {
     Rectangle {
         id:                     divider
         anchors.topMargin:      _verticalMargin
-        anchors.bottomMargin:   _verticalMargin
         anchors.leftMargin:     _horizontalMargin
-        anchors.left:           buttonScroll.right
-        anchors.top:            parent.top
-        anchors.bottom:         parent.bottom
-        width:                  1
+        anchors.rightMargin:    _horizontalMargin
+        anchors.left:           parent.left
+        anchors.right:          parent.right
+        anchors.top:            buttonScroll.bottom
+        height:                 1
         color:                  qgcPal.windowShade
     }
 
@@ -135,9 +115,9 @@ Rectangle {
         anchors.bottomMargin:   _verticalMargin
         anchors.leftMargin:     _horizontalMargin
         anchors.rightMargin:    _horizontalMargin
-        anchors.left:           divider.right
+        anchors.left:           parent.left
         anchors.right:          parent.right
-        anchors.top:            parent.top
+        anchors.top:            divider.bottom
         anchors.bottom:         parent.bottom
 
         property string title

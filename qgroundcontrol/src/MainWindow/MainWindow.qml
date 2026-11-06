@@ -464,6 +464,9 @@ ApplicationWindow {
         property string toolTitle
         property alias toolSource:  toolDrawerLoader.source
         property var toolIcon
+        readonly property var activeVehicle: QGroundControl.multiVehicleManager.activeVehicle
+        readonly property bool vehicleConnected: activeVehicle && activeVehicle.vehicleLinkManager
+                                                 && !activeVehicle.vehicleLinkManager.communicationLost
 
         onVisibleChanged: {
             if (!toolDrawer.visible) {
@@ -488,6 +491,8 @@ ApplicationWindow {
                 id:                 toolDrawerToolbarLayout
                 anchors.leftMargin: ScreenTools.defaultFontPixelWidth
                 anchors.left:       parent.left
+                anchors.right:      parent.right
+                anchors.rightMargin: ScreenTools.defaultFontPixelWidth
                 anchors.top:        parent.top
                 anchors.bottom:     parent.bottom
                 spacing:            ScreenTools.defaultFontPixelWidth
@@ -503,8 +508,43 @@ ApplicationWindow {
 
                 QGCLabel {
                     id:             toolbarDrawerText
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     text:           toolDrawer.toolTitle
                     font.pointSize: ScreenTools.largeFontPointSize
+                    elide:          Text.ElideRight
+                }
+
+                QGCLabel {
+                    visible: toolDrawer.width > ScreenTools.defaultFontPixelWidth * 140
+                    text: QGroundControl.stratumVersion
+                    font.pointSize: ScreenTools.smallFontPointSize
+                }
+
+                Rectangle {
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelHeight * 0.6
+                    Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 0.6
+                    radius: width / 2
+                    color: !toolDrawer.activeVehicle ? qgcPal.text
+                           : (toolDrawer.vehicleConnected ? qgcPal.colorGreen : qgcPal.colorOrange)
+                    Accessible.name: connectionLabel.text
+                }
+
+                QGCLabel {
+                    id: connectionLabel
+                    visible: toolDrawer.width > ScreenTools.defaultFontPixelWidth * 90
+                    text: !toolDrawer.activeVehicle ? qsTr("No vehicle")
+                          : (toolDrawer.vehicleConnected ? qsTr("Connected") : qsTr("Comm lost"))
+                }
+
+                Loader {
+                    id: toolHeaderActions
+                    objectName: "tool_headerActions"
+                    Layout.preferredWidth: item ? item.implicitWidth : 0
+                    Layout.preferredHeight: item ? item.implicitHeight : 0
+                    sourceComponent: toolDrawerLoader.item && typeof toolDrawerLoader.item.headerActions !== "undefined"
+                                     ? toolDrawerLoader.item.headerActions : null
+                    visible: status === Loader.Ready
                 }
             }
         }

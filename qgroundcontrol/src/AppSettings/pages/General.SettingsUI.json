@@ -29,8 +29,8 @@
             ]
         },
         {
-            "heading": "General",
-            "keywords": ["language", "locale", "color theme", "color scheme", "high contrast", "normal", "dark mode", "theme", "palette", "follow me", "audio", "volume", "sound", "gstreamer", "debug level", "ui scale", "font size", "zoom", "save path", "storage", "reset", "clear settings", "factory reset"],
+            "heading": "User Interface",
+            "keywords": ["language", "locale", "color theme", "color scheme", "high contrast", "normal", "dark mode", "theme", "palette", "ui scale", "font size", "zoom"],
             "controls": [
                 {
                     "setting": "appSettings.qLocaleLanguage",
@@ -40,8 +40,24 @@
                     "setting": "appSettings.indoorPalette"
                 },
                 {
+                    "setting": "appSettings.uiScalePercent",
+                    "control": "scaler"
+                }
+            ]
+        },
+        {
+            "heading": "Position Streaming",
+            "keywords": ["follow me", "position", "stream", "gcs"],
+            "controls": [
+                {
                     "setting": "appSettings.followTarget"
-                },
+                }
+            ]
+        },
+        {
+            "heading": "Audio",
+            "keywords": ["audio", "volume", "sound", "mute", "test"],
+            "controls": [
                 {
                     "setting": "appSettings.audioVolume",
                     "control": "slider",
@@ -54,14 +70,16 @@
                         "onClicked": "QGroundControl.testAudioOutput()",
                         "enabled": "!_appSettings.audioMuted.rawValue && _appSettings.audioVolume.rawValue > 0"
                     }
-                },
+                }
+            ]
+        },
+        {
+            "heading": "Application",
+            "keywords": ["save path", "storage", "reset", "clear settings", "factory reset"],
+            "controls": [
                 {
                     "setting": "appSettings.androidDontSaveToSDCard",
                     "showWhen": "ScreenTools.isMobile"
-                },
-                {
-                    "setting": "appSettings.uiScalePercent",
-                    "control": "scaler"
                 },
                 {
                     "setting": "appSettings.savePath",

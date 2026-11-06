@@ -28,12 +28,13 @@ RowLayout {
 
     ColumnLayout {
         Layout.fillWidth:    true
-        Layout.minimumWidth: implicitWidth
+        Layout.minimumWidth: 0
         spacing:             0
 
         QGCLabel {
             Layout.fillWidth:   true
             text:               root.label
+            wrapMode:           Text.WordWrap
         }
 
         QGCLabel {

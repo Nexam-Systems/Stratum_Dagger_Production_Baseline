@@ -1,5 +1,27 @@
 # UI Changes to make as per the slide numbers
 
+## KAN-28: adaptive settings and tool navigation
+
+- Generated application settings pages use two equal-width columns when there
+  is room for two 55-character-wide panels plus the gutter; otherwise one column.
+  The breakpoint scales with the UI font size. Pages scroll vertically.
+- Settings cards are collapsible and initially expanded. Collapsing keeps the
+  controls alive and preserves their values. Embedded editors (links, maps,
+  telemetry, etc.) span both columns; standalone custom pages retain their layout.
+- General separates Operational Limits, User Interface, Position Streaming,
+  Audio, and Application, while retaining Vehicle Preferences and Units wherever
+  they were previously visible. Fact bindings, defaults and units are unchanged.
+- Application Settings, Analyze, and Vehicle Configuration share horizontally
+  scrollable tabs. Vehicle section tabs retain completion indicators, search,
+  prerequisites and focused-component navigation; Analyze popouts are unchanged.
+- The tool-selector button, page title, connection state and page actions share
+  one header. Save/Reset appear only for Application Settings, not vehicle
+  parameters. Reset remains confirmed and deferred until the next start.
+- Check wide/narrow windows, increased UI scaling, both themes, dev/client page
+  visibility, keyboard tab scrolling, collapse/expand, and vehicle disconnection.
+  Regression coverage: settings generator tests and
+  `TopLevelViewsTest::_testResponsiveSettings`.
+
 ## Slide-2
 The greenbox title “QGroundControl Daily” should be “STRATUM with version number. 
 

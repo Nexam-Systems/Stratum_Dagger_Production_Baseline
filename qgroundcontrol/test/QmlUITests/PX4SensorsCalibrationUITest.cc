@@ -74,13 +74,13 @@ void PX4SensorsCalibrationUITest::_navigateToSensorsPanel()
     QQuickItem *sensorsBtn = clickSidebarButton(QStringLiteral("vehicleConfig_comp_Sensors"));
     if (QTest::currentTestFailed()) return;
 
-    // Clicking the Sensors button expands its section tree and auto-selects the
+    // Clicking the Sensors tab shows its sections and auto-selects the
     // first section (Compass), since SensorsComponent::showFirstSectionOnRootClick
     // is true
-    QVERIFY2(sensorsBtn->property("expanded").toBool(), "Sensors section tree not expanded after clicking Sensors button");
+    QVERIFY2(sensorsBtn->property("checked").toBool(), "Sensors tab not selected after clicking Sensors button");
     QQuickItem *compassSection = findVisibleItem(_rootItem, QStringLiteral("vehicleConfig_section_Compass"), 3000);
     QVERIFY2(compassSection, "Compass section button not visible after clicking Sensors button");
-    QVERIFY2(QTest::qWaitFor([&] { return compassSection->property("sectionChecked").toBool(); }, 3000),
+    QVERIFY2(QTest::qWaitFor([&] { return compassSection->property("checked").toBool(); }, 3000),
              "Compass section not selected by default after clicking Sensors button");
 
     QVERIFY2(findVisibleItem(_rootItem, QStringLiteral("sensorsSetup_calibrateCompass"), 3000),
@@ -116,11 +116,11 @@ void PX4SensorsCalibrationUITest::_verifySensorsSetupStates(const SensorsSetupSt
     };
     const ButtonCheck checks[] = {
         { "vehicleConfig_comp_Sensors",          "setupComplete",        expected.sensorsComplete },
-        { "vehicleConfig_section_Compass",       "sectionSetupComplete", expected.compassComplete },
-        { "vehicleConfig_section_Gyroscope",     "sectionSetupComplete", expected.gyroscopeComplete },
-        { "vehicleConfig_section_Accelerometer", "sectionSetupComplete", expected.accelerometerComplete },
-        { "vehicleConfig_section_LevelHorizon",  "sectionSetupComplete", expected.levelHorizonComplete },
-        { "vehicleConfig_section_Orientations",  "sectionSetupComplete", expected.orientationsComplete },
+        { "vehicleConfig_section_Compass",       "setupComplete", expected.compassComplete },
+        { "vehicleConfig_section_Gyroscope",     "setupComplete", expected.gyroscopeComplete },
+        { "vehicleConfig_section_Accelerometer", "setupComplete", expected.accelerometerComplete },
+        { "vehicleConfig_section_LevelHorizon",  "setupComplete", expected.levelHorizonComplete },
+        { "vehicleConfig_section_Orientations",  "setupComplete", expected.orientationsComplete },
     };
 
     for (const ButtonCheck &check : checks) {

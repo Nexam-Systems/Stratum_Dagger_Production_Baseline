@@ -573,6 +573,46 @@ class TestGeneratePagesModelQml:
 # ---------------------------------------------------------------------------
 
 class TestRealPageDefinitions:
+    def test_responsive_groups_and_full_width_components(self, repo_root: Path):
+        pages_dir = repo_root / "src" / "AppSettings" / "pages"
+        settings_dir = repo_root / "src" / "Settings"
+        for json_file in pages_dir.glob("*.SettingsUI.json"):
+            page = load_page_def(json_file)
+            qml = generate_page_qml(page, settings_dir, json_context=json_file.name)
+            assert "responsiveColumns: true" in qml
+            assert qml.count("collapsible: true") == qml.count("SettingsGroupLayout {")
+            assert qml.count("Layout.columnSpan: settingsPage.columnCount") == sum(
+                bool(group.component) for group in page.groups
+            )
+
+    def test_general_sections_preserve_settings(self, repo_root: Path):
+        path = repo_root / "src" / "AppSettings" / "pages" / "General.SettingsUI.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        groups = {group["heading"]: group for group in data["groups"]}
+        assert {"STRATUM Operational Limits", "User Interface", "Position Streaming",
+                "Audio", "Application", "Vehicle Preferences", "Units"} <= groups.keys()
+        settings = [
+            control["setting"]
+            for group in data["groups"]
+            for control in group["controls"]
+        ]
+        assert len(settings) == len(set(settings)) == 18
+        assert set(settings) == {
+            "appSettings.stratumProfile",
+            "flyViewSettings.maxGoToLocationDistance", "flyViewSettings.maxAOPDistance",
+            "appSettings.qLocaleLanguage", "appSettings.indoorPalette",
+            "appSettings.uiScalePercent", "appSettings.followTarget",
+            "appSettings.audioVolume", "appSettings.androidDontSaveToSDCard",
+            "appSettings.savePath", "appSettings.clearSettingsNextBoot",
+            "appSettings.preferredFirmwareClass", "appSettings.preferredVehicleClass",
+            "unitsSettings.horizontalDistanceUnits", "unitsSettings.verticalDistanceUnits",
+            "unitsSettings.areaUnits", "unitsSettings.speedUnits", "unitsSettings.temperatureUnits",
+        }
+        audio = groups["Audio"]["controls"][0]
+        assert audio["button"]["onClicked"] == "QGroundControl.testAudioOutput()"
+        assert audio["enableCheckbox"]["checked"] == "!_appSettings.audioMuted.rawValue"
+        assert groups["Units"]["showWhen"] == "QGroundControl.settingsManager.unitsSettings.userVisible"
+
     """Test against real QGC page definition files if available."""
 
     @pytest.fixture
