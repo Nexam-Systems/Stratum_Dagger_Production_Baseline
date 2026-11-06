@@ -555,6 +555,22 @@ ApplicationWindow {
             anchors.right:  parent.right
             anchors.top:    toolDrawerToolbar.bottom
             anchors.bottom: parent.bottom
+
+            onStatusChanged: {
+                if (status === Loader.Error) {
+                    console.error("MainWindow: unable to load tool page:", source)
+                }
+            }
+        }
+
+        QGCLabel {
+            objectName:         "tool_loadError"
+            anchors.centerIn:   toolDrawerLoader
+            width:              Math.max(0, toolDrawerLoader.width - ScreenTools.defaultFontPixelWidth * 4)
+            visible:            toolDrawerLoader.status === Loader.Error
+            wrapMode:           Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+            text:               qsTr("Unable to load %1. See the application log for details.").arg(toolDrawer.toolTitle)
         }
     }
 

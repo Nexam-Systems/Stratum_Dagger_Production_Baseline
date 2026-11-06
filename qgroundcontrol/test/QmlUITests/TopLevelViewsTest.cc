@@ -1,7 +1,10 @@
 #include "TopLevelViewsTest.h"
 
+#include <QtCore/QScopedPointer>
 #include <QtCore/QVariant>
 #include <QtCore/QtMath>
+#include <QtQml/QQmlApplicationEngine>
+#include <QtQml/QQmlComponent>
 #include <QtQuick/QQuickItem>
 #include <QtQuick/QQuickWindow>
 #include <QtTest/QTest>
@@ -10,6 +13,22 @@ UT_REGISTER_TEST(TopLevelViewsTest, TestLabel::Integration)
 
 // This test assumes Advanced UI mode is enabled (the default). All views including
 // Analyze are expected to be visible.
+
+void TopLevelViewsTest::_testToolTabButtonLoads()
+{
+    startUI();
+    if (QTest::currentTestFailed()) return;
+
+    // Load through the real QML modules: QGCPalette is exported by QGroundControl,
+    // not QGroundControl.Controls. A missing import prevents every tool page loading.
+    QQmlComponent component(_engine, QUrl(QStringLiteral("qrc:/qml/QGroundControl/Controls/ToolTabButton.qml")));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> button(component.create());
+    QVERIFY2(!button.isNull(), qPrintable(component.errorString()));
+    QVERIFY(button->setProperty("text", QStringLiteral("General")));
+    QVERIFY(button->property("implicitWidth").toReal() > 0);
+    QVERIFY(button->property("implicitHeight").toReal() >= 40);
+}
 
 void TopLevelViewsTest::_testNavigateViews()
 {

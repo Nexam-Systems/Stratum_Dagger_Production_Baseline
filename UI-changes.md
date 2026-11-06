@@ -21,6 +21,10 @@
   visibility, keyboard tab scrolling, collapse/expand, and vehicle disconnection.
   Regression coverage: settings generator tests and
   `TopLevelViewsTest::_testResponsiveSettings`.
+- Shared tabs must import `QGroundControl` for the C++ palette type, not only
+  `QGroundControl.Controls`. `TopLevelViewsTest::_testToolTabButtonLoads` checks
+  the real module/resource registration. Tool-page load errors are logged and
+  displayed in the main window rather than leaving a blank page.
 
 ## Slide-2
 The greenbox title “QGroundControl Daily” should be “STRATUM with version number. 
