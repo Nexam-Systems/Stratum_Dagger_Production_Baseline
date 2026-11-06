@@ -21,7 +21,9 @@ Button {
     property bool logo: false
     // STRATUM: when set to an opaque colour, the logo SVG is tinted (monochrome) with it
     // instead of rendering its native multi-colour form. Transparent = native (default).
-    property color logoColor: "#00000000"
+    property color logoColor: QGroundControl.globalPalette.lightTheme
+                              ? (checked ? QGroundControl.globalPalette.buttonHighlightText : QGroundControl.globalPalette.text)
+                              : "#00000000"
 
     property real _horizontalMargin: ScreenTools.defaultFontPixelWidth
 
@@ -30,15 +32,15 @@ Button {
     background: Rectangle {
         anchors.fill:   parent
         color:          button.checked ? qgcPal.buttonHighlight : Qt.rgba(0,0,0,0)
-        border.color:   "red"
-        border.width:   QGroundControl.corePlugin.showTouchAreas ? 3 : 0
+        border.color:   QGroundControl.corePlugin.showTouchAreas ? "red" : qgcPal.brandingPurple
+        border.width:   QGroundControl.corePlugin.showTouchAreas ? 3 : (qgcPal.lightTheme && button.activeFocus ? 2 : 0)
 
         // STRATUM: hover affordance -- a soft light tint that works over both the dark
         // neutral ribbon and the red engagement ribbon, plus a subtle bottom accent bar
         // so operators can see the ribbon icon is a real click target.
         Rectangle {
             anchors.fill:   parent
-            color:          Qt.rgba(1, 1, 1, 0.10)
+            color:          qgcPal.lightTheme ? Qt.rgba(qgcPal.brandingPurple.r, qgcPal.brandingPurple.g, qgcPal.brandingPurple.b, 0.12) : Qt.rgba(1, 1, 1, 0.10)
             visible:        button.hovered && !button.checked
         }
         Rectangle {

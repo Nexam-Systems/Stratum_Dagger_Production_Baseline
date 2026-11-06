@@ -12,7 +12,7 @@ Rectangle {
     id: photoVideoControl
     width: mainLayout.width + (_smallMargins * 2)
     height: mainLayout.height + (_smallMargins * 2)
-    color: Qt.rgba(qgcPal.window.r, qgcPal.window.g, qgcPal.window.b, 0.5)
+    color: qgcPal.lightTheme ? qgcPal.window : Qt.rgba(qgcPal.window.r, qgcPal.window.g, qgcPal.window.b, 0.5)
     radius: _margins
     visible: _camera.capturesVideo || _camera.capturesPhotos || _camera.hasTracking || _camera.hasVideoStream
 
@@ -193,7 +193,8 @@ Rectangle {
                 // Record time
                 Rectangle {
                     Layout.alignment: Qt.AlignHCenter
-                    color: _videoCaptureIdle ? "transparent" : videoCaptureButtonPalette.videoCaptureButtonColor
+                    color: _videoCaptureIdle ? "transparent" : QGroundControl.globalPalette.lightTheme
+                           ? QGroundControl.globalPalette.videoCaptureButtonColor : videoCaptureButtonPalette.videoCaptureButtonColor
                     Layout.preferredWidth: videoRecordTime.width + (_smallMargins * 2)
                     Layout.preferredHeight: videoRecordTime.height
                     radius: _smallMargins
@@ -206,6 +207,8 @@ Rectangle {
                         anchors.left: parent.left
                         anchors.top: parent.top
                         text: _videoCaptureIdle ? "00:00:00" : _camera.recordTimeStr
+                        color: recordTimePalette.lightTheme && !_videoCaptureIdle ? QGroundControl.globalPalette.buttonHighlightText : recordTimePalette.text
+                        QGCPalette { id: recordTimePalette; colorGroupEnabled: videoRecordTime.enabled }
                     }
                 }
 

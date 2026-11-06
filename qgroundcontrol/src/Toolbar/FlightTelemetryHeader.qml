@@ -21,7 +21,7 @@ Item {
     property var vehicle: null
     property bool videoLive: false
 
-    readonly property color indicatorColor: headerPalette.highContrast ? headerPalette.text : "#79CBE8"
+    readonly property color indicatorColor: headerPalette.lightTheme ? headerPalette.brandingPurple : (headerPalette.highContrast ? headerPalette.text : "#79CBE8")
 
     function duration(fact) {
         if (!fact || !isFinite(Number(fact.rawValue)))

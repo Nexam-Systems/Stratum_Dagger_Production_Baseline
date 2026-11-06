@@ -30,7 +30,7 @@ RowLayout {
         width:   sizeLabel.height * 0.5
         height:  sizeLabel.height * 0.5
         radius:  width / 2
-        color:   tileSet.complete ? "#31f55b" : "#fc5656"
+        color:   qgcPal.lightTheme ? (tileSet.complete ? qgcPal.colorGreen : qgcPal.colorRed) : (tileSet.complete ? "#31f55b" : "#fc5656")
         opacity: sizeLabel.text.length > 0 ? 1 : 0
     }
 

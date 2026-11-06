@@ -399,7 +399,7 @@ AnalyzePage {
                                         height: width
                                         radius: width / 2
                                         color: QGroundControl.globalPalette.colorYellow
-                                        border.color: "white"
+                                        border.color: qgcPal.lightTheme ? qgcPal.groupBorder : "white"
                                         border.width: 2
                                     }
                                 }

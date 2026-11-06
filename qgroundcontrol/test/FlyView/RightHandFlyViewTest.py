@@ -25,12 +25,21 @@ class DisplayMode(QObject):
     def __init__(self):
         super().__init__()
         self._contrast = True
+        self._light = False
 
     def set_contrast(self, value):
         self._contrast = value
+        self._light = False
+        self.changed.emit()
+
+    def set_light(self, value):
+        self._light = value
+        if value:
+            self._contrast = False
         self.changed.emit()
 
     highContrast = Property(bool, lambda self: self._contrast, set_contrast, notify=changed)
+    lightTheme = Property(bool, lambda self: self._light, set_light, notify=changed)
 
 
 class RightHandFlyViewTest(unittest.TestCase):
@@ -103,6 +112,7 @@ class RightHandFlyViewTest(unittest.TestCase):
             "QGCPalette.qml": '''import QtQuick
 QtObject {
 property bool highContrast: displayMode.highContrast
+property bool lightTheme: displayMode.lightTheme
 property bool colorGroupEnabled: true
 property color window: "#050A06"
 property color windowShade: "#101910"
@@ -137,11 +147,19 @@ contentItem: Text { text: control.text; color: control.textColor; font: control.
         palette_source = (self.root / 'src/QmlControls/QGCPalette.cc').read_text(encoding='utf-8')
         contrast_colors = dict(re.findall(r'\{"(\w+)", "(#[0-9A-F]+)"\}', palette_source))
         normal_colors = dict(re.findall(r'DECLARE_QGC_COLOR\(\s*(\w+),\s*"[^"]+",\s*"[^"]+",\s*"[^"]+",\s*"([^"]+)"', palette_source))
+        light_colors = {name: (disabled, enabled) for name, disabled, enabled in re.findall(
+            r'DECLARE_QGC_COLOR\(\s*(\w+),\s*"([^"]+)",\s*"([^"]+)",\s*"[^"]+",\s*"[^"]+"', palette_source)}
         palette = (self.folder / 'QGCPalette.qml').read_text()
-        for name, color in contrast_colors.items():
-            normal = normal_colors.get(name, color)
-            palette = re.sub(r'property color ' + name + r': "[^"]+"',
-                             f'property color {name}: highContrast ? "{color}" : "{normal}"', palette)
+        for name in sorted(set(contrast_colors) | set(normal_colors)):
+            normal = normal_colors[name] if name in normal_colors else contrast_colors[name]
+            color = contrast_colors.get(name, normal)
+            disabled, enabled = light_colors.get(name, (normal, normal))
+            declaration = f'property color {name}: lightTheme ? (colorGroupEnabled ? "{enabled}" : "{disabled}") : highContrast ? "{color}" : "{normal}"'
+            pattern = r'property color ' + name + r': "[^"]+"'
+            if re.search(pattern, palette):
+                palette = re.sub(pattern, declaration, palette)
+            else:
+                palette = palette.rsplit('}', 1)[0] + declaration + '\n}'
         (self.folder / 'QGCPalette.qml').write_text(palette, encoding='utf-8')
         for filename in ["MissionHoldButton.qml", "RightMissionPanel.qml"]:
             source = (self.root / "src/FlyView" / filename).read_text(encoding="utf-8")
@@ -511,6 +529,31 @@ actionModel: [modeAction]
         QTest.qWait(50)
         self.assertEqual(self.item.property("engageRequests"), 1)
         QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, engage_point.toPoint())
+        self.assertFalse(self.errors, self.errors)
+
+    def test_light_panel_and_command_contrast(self):
+        self.panel_scene(1366, 768)
+        self.display_mode.lightTheme = True
+        QTest.qWait(80)
+        panel = self.item.property("panel")
+        self.assertEqual(panel.property("color"), QColor("white"))
+
+        def luminance(color):
+            channels = (color.redF(), color.greenF(), color.blueF())
+            linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
+            return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+
+        for name in ["missionTakeoff", "missionAbort", "missionStandoff", "missionEngage"]:
+            button = self.item.findChild(QObject, name)
+            self.assertIsNotNone(button)
+            foreground = button.property("foreground")
+            background = button.property("background").property("color")
+            low, high = sorted((luminance(foreground), luminance(background)))
+            self.assertGreaterEqual((high + 0.05) / (low + 0.05), 4.5, name)
+        output = os.environ.get("STRATUM_RIGHT_PANEL_SCREENSHOTS")
+        if output:
+            self.window.grabWindow().save(str(Path(output) / "stratum-light-mission-panel.png"))
+        self.assertEqual(self.item.property("engageRequests"), 0)
         self.assertFalse(self.errors, self.errors)
 
     def test_normal_colors_and_live_high_contrast_restore(self):

@@ -78,16 +78,24 @@ Rectangle {
     // the normal and high-contrast themes (safety-critical, must stay recognisable);
     // every other command uses the neutral theme button colour. A coloured edge glow is
     // kept on all buttons. accentGlow follows the active theme accent.
-    readonly property color accentGlow: panelPalette.highContrast ? "#2EE62E" : "#79CBE8"
+    readonly property color accentGlow: panelPalette.lightTheme ? panelPalette.brandingPurple : (panelPalette.highContrast ? "#2EE62E" : "#79CBE8")
     function actionSpecial(role) { return role === "engage" || role === "abort" }
 
     function actionFill(role) {
+        if (panelPalette.lightTheme) {
+            if (role === "engage") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorRed.r, panelPalette.colorRed.g, panelPalette.colorRed.b, 0.12))
+            if (role === "abort") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorOrange.r, panelPalette.colorOrange.g, panelPalette.colorOrange.b, 0.12))
+        }
         if (role === "engage") return "#7C202C"
         if (role === "abort")  return "#7A3E12"
         return panelPalette.button
     }
 
     function actionBorder(role) {
+        if (panelPalette.lightTheme) {
+            if (role === "engage") return panelPalette.colorRed
+            if (role === "abort") return panelPalette.colorOrange
+        }
         if (role === "engage") return "#FF7A89"
         if (role === "abort")  return "#FF9F45"
         return root.accentGlow
@@ -95,7 +103,7 @@ Rectangle {
 
     border.color: panelPalette.groupBorder
     border.width: 1
-    color: panelPalette.highContrast ? panelPalette.window : Qt.rgba(panelPalette.window.r, panelPalette.window.g, panelPalette.window.b, 0.80)
+    color: panelPalette.highContrast || panelPalette.lightTheme ? panelPalette.window : Qt.rgba(panelPalette.window.r, panelPalette.window.g, panelPalette.window.b, 0.80)
 
     onContextActiveChanged: if (!contextActive)
         cancelHolds()
@@ -438,7 +446,8 @@ Rectangle {
         id: actionButton
         QGCPalette { id: commandPalette; colorGroupEnabled: actionButton.enabled }
         property string visualRole: "navigation"
-        readonly property color foreground: !enabled ? (panelPalette.highContrast ? "#B5BDB0" : "#9FB1BE")
+        readonly property color foreground: panelPalette.lightTheme ? (enabled && !root.actionSpecial(visualRole) && (down || checked) ? commandPalette.buttonHighlightText : commandPalette.buttonText)
+                                                     : !enabled ? (panelPalette.highContrast ? "#B5BDB0" : "#9FB1BE")
                                                      : (panelPalette.highContrast && (down || checked) ? panelPalette.buttonHighlightText : panelPalette.buttonText)
         textColor: foreground
         Accessible.name: text
@@ -474,13 +483,17 @@ Rectangle {
         }
         background: Rectangle {
             readonly property bool _special: root.actionSpecial(actionButton.visualRole)
-            readonly property color baseFill: actionButton.enabled ? root.actionFill(actionButton.visualRole) : "#172A34"
+            readonly property color baseFill: actionButton.enabled ? root.actionFill(actionButton.visualRole)
+                                             : panelPalette.lightTheme ? commandPalette.button : "#172A34"
             // Engage(red)/Abort(orange) keep their saturated fill in BOTH themes; every
             // other button uses the neutral theme button colour.
-            color: _special ? (panelPalette.highContrast ? baseFill : Qt.rgba(baseFill.r, baseFill.g, baseFill.b, 0.9))
+            color: panelPalette.lightTheme ? (_special ? Qt.darker(baseFill, actionButton.down ? 1.08 : actionButton.hovered ? 1.04 : 1)
+                                                       : actionButton.down || actionButton.checked ? commandPalette.buttonHighlight
+                                                       : actionButton.hovered && actionButton.enabled ? commandPalette.toolStripHoverColor : baseFill)
+                            : _special ? (panelPalette.highContrast ? baseFill : Qt.rgba(baseFill.r, baseFill.g, baseFill.b, 0.9))
                             : (panelPalette.highContrast ? ((actionButton.down || actionButton.checked) ? commandPalette.buttonHighlight : commandPalette.button)
                                                          : Qt.rgba(baseFill.r, baseFill.g, baseFill.b, 0.82))
-            border.color: !actionButton.enabled ? "#617886"
+            border.color: !actionButton.enabled ? (panelPalette.lightTheme ? commandPalette.buttonBorder : "#617886")
                           : _special ? root.actionBorder(actionButton.visualRole)
                                       : (panelPalette.highContrast ? commandPalette.buttonBorder : root.actionBorder(actionButton.visualRole))
             border.width: 2
@@ -498,9 +511,11 @@ Rectangle {
     }
     component HoldCommand: MissionHoldButton {
         id: holdButton
+        QGCPalette { id: holdPalette; colorGroupEnabled: holdButton.enabled }
         property string iconSource: ""
         property string visualRole: "navigation"
-        readonly property color foreground: enabled ? panelPalette.buttonText : (panelPalette.highContrast ? "#B5BDB0" : "#9FB1BE")
+        readonly property color foreground: panelPalette.lightTheme ? holdPalette.buttonText
+                                            : enabled ? panelPalette.buttonText : (panelPalette.highContrast ? "#B5BDB0" : "#9FB1BE")
 
         Layout.fillWidth: true
         Layout.preferredHeight: 46
@@ -511,12 +526,15 @@ Rectangle {
 
         background: Rectangle {
             readonly property bool _special: root.actionSpecial(holdButton.visualRole)
-            readonly property color baseFill: holdButton.enabled ? root.actionFill(holdButton.visualRole) : "#172A34"
+            readonly property color baseFill: holdButton.enabled ? root.actionFill(holdButton.visualRole)
+                                             : panelPalette.lightTheme ? holdPalette.button : "#172A34"
             // Abort(orange)/Engage(red) keep their saturated fill in BOTH themes.
-            color: _special ? (panelPalette.highContrast ? baseFill : Qt.rgba(baseFill.r, baseFill.g, baseFill.b, holdButton.down ? 1.0 : 0.9))
+            color: panelPalette.lightTheme ? (_special ? Qt.darker(baseFill, holdButton.down ? 1.08 : 1)
+                                                       : holdButton.down ? holdPalette.toolStripHoverColor : baseFill)
+                            : _special ? (panelPalette.highContrast ? baseFill : Qt.rgba(baseFill.r, baseFill.g, baseFill.b, holdButton.down ? 1.0 : 0.9))
                             : (panelPalette.highContrast ? (holdButton.down ? panelPalette.windowShadeLight : panelPalette.button)
                                                          : Qt.rgba(baseFill.r, baseFill.g, baseFill.b, 0.82))
-            border.color: !holdButton.enabled ? "#617886"
+            border.color: !holdButton.enabled ? (panelPalette.lightTheme ? holdPalette.buttonBorder : "#617886")
                           : _special ? root.actionBorder(holdButton.visualRole)
                                       : (panelPalette.highContrast ? panelPalette.buttonBorder : root.actionBorder(holdButton.visualRole))
             border.width: 2

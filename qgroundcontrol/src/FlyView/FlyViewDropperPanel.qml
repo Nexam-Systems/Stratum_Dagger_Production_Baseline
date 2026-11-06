@@ -14,16 +14,16 @@ Rectangle {
     property var dropperAction
 
     QGCPalette { id: contrastPalette; colorGroupEnabled: true }
-    readonly property color _accent:    contrastPalette.highContrast ? contrastPalette.buttonBorder : "#79CBE8"
-    readonly property color _accentDim:  contrastPalette.highContrast ? contrastPalette.text : "#BCD7E4"
-    readonly property color _danger:     "#EF5350"
-    readonly property color _dangerFill: "#B71C1C"
+    readonly property color _accent:    contrastPalette.lightTheme ? contrastPalette.brandingPurple : (contrastPalette.highContrast ? contrastPalette.buttonBorder : "#79CBE8")
+    readonly property color _accentDim: contrastPalette.lightTheme ? contrastPalette.colorGrey : (contrastPalette.highContrast ? contrastPalette.text : "#BCD7E4")
+    readonly property color _danger:     contrastPalette.lightTheme ? contrastPalette.colorRed : "#EF5350"
+    readonly property color _dangerFill: contrastPalette.lightTheme ? contrastPalette.colorRed : "#B71C1C"
 
     property var _state: dropperAction ? dropperAction._dropperState : ({ selectedMode: null, selectedPayloadIdx: null, dropped: [false, false, false, false], loaded: [false, false, false, false] })
 
     width: ScreenTools.defaultFontPixelWidth * 30
     implicitHeight: contentColumn.implicitHeight + (ScreenTools.defaultFontPixelWidth * 1.5)
-    color: contrastPalette.highContrast ? contrastPalette.window : Qt.rgba(0, 0, 0, 0.86)
+    color: contrastPalette.highContrast || contrastPalette.lightTheme ? contrastPalette.window : Qt.rgba(0, 0, 0, 0.86)
     radius: ScreenTools.defaultBorderRadius
     border.color: _accent
     border.width: 1
@@ -50,7 +50,7 @@ Rectangle {
 
         QGCLabel {
             text: dropperAction ? dropperAction._dropperStatusText : qsTr("Dropper ready")
-            color: "#BFDBFE"
+            color: contrastPalette.lightTheme ? contrastPalette.text : "#BFDBFE"
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
         }
@@ -90,7 +90,7 @@ Rectangle {
 
             QGCLabel {
                 text: qsTr("SELECT PAYLOAD OR BURST, THEN DROP")
-                color: "#FF9800"
+                color: contrastPalette.lightTheme ? contrastPalette.colorOrange : "#FF9800"
                 font.pointSize: ScreenTools.smallFontPointSize
             }
 
@@ -126,8 +126,8 @@ Rectangle {
                 text: qsTr("▼ DROP")
                 Layout.fillWidth: true
                 enabled: dropperAction && panel._state.selectedMode !== null
-                backgroundColor: enabled ? panel._dangerFill : Qt.rgba(0.3, 0.1, 0.1, 0.4)
-                textColor: enabled ? "white" : "#88FFFFFF"
+                backgroundColor: enabled ? panel._dangerFill : contrastPalette.lightTheme ? contrastPalette.windowShade : Qt.rgba(0.3, 0.1, 0.1, 0.4)
+                textColor: enabled ? "white" : contrastPalette.lightTheme ? contrastPalette.colorGrey : "#88FFFFFF"
                 onClicked: dropperAction ? dropperAction._requestDrop() : undefined
             }
 
@@ -147,7 +147,7 @@ Rectangle {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                color: "#FBBF24"
+                color: contrastPalette.lightTheme ? contrastPalette.colorOrange : "#FBBF24"
                 font.pointSize: ScreenTools.smallFontPointSize
                 text: qsTr("Overriding safety checks may release the payload in an unintended location.")
             }

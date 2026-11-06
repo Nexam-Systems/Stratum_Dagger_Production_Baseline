@@ -17,6 +17,7 @@ ColumnLayout {
     required property var logViewerController
 
     property bool xAxisShowLocalTime: false
+    QGCPalette { id: chartPalette }
 
     spacing: ScreenTools.defaultFontPixelHeight * 0.5
 
@@ -73,11 +74,11 @@ ColumnLayout {
     // Color helpers (public — parent may call fieldColor() for the field list)
     // -------------------------------------------------------------------------
     function eventColor(eventType) {
-        return logViewerController.eventColor(eventType)
+        return _themeColor(logViewerController.eventColor(eventType))
     }
 
     function modeColor(modeName) {
-        return logParser.modeColor(String(modeName))
+        return _themeColor(logParser.modeColor(String(modeName)))
     }
 
     function modeLegendEntries() {
@@ -87,9 +88,14 @@ ColumnLayout {
     function fieldColor(fieldName) {
         const idx = logViewerController.selectedFields.indexOf(fieldName)
         if (idx >= 0) {
-            return _fieldChartColors[idx % _fieldChartColors.length]
+            return _themeColor(_fieldChartColors[idx % _fieldChartColors.length])
         }
-        return logViewerController.fieldColor(fieldName)
+        return _themeColor(logViewerController.fieldColor(fieldName))
+    }
+
+    function _themeColor(color) {
+        // Keep series hues, but give chart lines and their text legends contrast on white.
+        return chartPalette.lightTheme ? Qt.darker(color, 2.4) : color
     }
 
     function eventTypeLabel(eventType) {
@@ -292,6 +298,15 @@ ColumnLayout {
     // -------------------------------------------------------------------------
     // Internal connections
     // -------------------------------------------------------------------------
+    Connections {
+        target: chartPalette
+        function onPaletteChanged() {
+            for (const field of Object.keys(_seriesByField)) _seriesByField[field].color = fieldColor(field)
+            for (const type of Object.keys(_eventSeriesByType)) _eventSeriesByType[type].color = eventColor(type)
+            if (_base.markerVisible) _queryCursorValues()
+        }
+    }
+
     Connections {
         target: logViewerController
         function onSelectedFieldsChanged() {

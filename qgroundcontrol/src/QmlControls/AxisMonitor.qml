@@ -43,7 +43,7 @@ Item {
         anchors.horizontalCenter:   parent.horizontalCenter
         width:                      ScreenTools.defaultFontPixelWidth / 2
         height:                     parent.height
-        color:                      qgcPal.window
+        color:                      qgcPal.lightTheme ? qgcPal.buttonBorder : qgcPal.window
     }
 
     // Indicator

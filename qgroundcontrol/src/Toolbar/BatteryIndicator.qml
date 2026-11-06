@@ -164,7 +164,7 @@ Item {
     }
 
     QGCPalette { id: qgcPal }
-    readonly property color indicatorColor: qgcPal.highContrast ? qgcPal.text : "#79CBE8"
+    readonly property color indicatorColor: qgcPal.lightTheme ? qgcPal.brandingPurple : (qgcPal.highContrast ? qgcPal.text : "#79CBE8")
 
     RowLayout {
         id:             batteryIndicatorRow

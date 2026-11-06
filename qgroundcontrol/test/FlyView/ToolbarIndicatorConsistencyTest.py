@@ -23,10 +23,12 @@ class ToolbarIndicatorConsistencyTest(unittest.TestCase):
                      "BatteryIndicator", "SignalStrength"]:
             line = re.search(r"indicatorColor:\s*(.+)", self.files[name]).group(1)
             self.assertIn('qgcPal.highContrast ? qgcPal.text : "#79CBE8"', line, name)
+            self.assertIn('qgcPal.lightTheme ? qgcPal.brandingPurple', line, name)
 
     def test_flight_header_uses_shared_indicator_color(self):
         header = self.files["FlightTelemetryHeader"]
-        self.assertIn('readonly property color indicatorColor: headerPalette.highContrast ? headerPalette.text : "#79CBE8"', header)
+        self.assertIn('headerPalette.highContrast ? headerPalette.text : "#79CBE8"', header)
+        self.assertIn('headerPalette.lightTheme ? headerPalette.brandingPurple', header)
         self.assertNotIn("headerPalette.buttonBorder", header)
 
     def test_rc_rssi_label_not_bold_or_demibold(self):

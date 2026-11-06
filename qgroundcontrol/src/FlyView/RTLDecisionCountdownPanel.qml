@@ -36,7 +36,7 @@ Rectangle {
     // Home -> Vehicle horizontal (great-circle) distance, shown in app distance units.
     readonly property real _homeVehM: (_soHome && _vehCoord) ? _soHome.distanceTo(vehicle.coordinate) : Number.NaN
 
-    readonly property color _normalColor:   panelPalette.highContrast ? panelPalette.text : "#79CBE8"
+    readonly property color _normalColor:   panelPalette.lightTheme ? panelPalette.brandingPurple : (panelPalette.highContrast ? panelPalette.text : "#79CBE8")
     readonly property color _warnColor:     panelPalette.colorOrange
     readonly property color _criticalColor: panelPalette.colorRed
     readonly property color _accentColor: {
@@ -52,7 +52,7 @@ Rectangle {
     radius:         4
     border.width:   1
     border.color:   _accentColor
-    color:          panelPalette.highContrast ? panelPalette.window
+    color:          panelPalette.highContrast || panelPalette.lightTheme ? panelPalette.window
                                               : Qt.rgba(panelPalette.window.r, panelPalette.window.g, panelPalette.window.b, 0.85)
     visible:        !!estimator
 

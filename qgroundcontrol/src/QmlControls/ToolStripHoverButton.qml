@@ -34,7 +34,7 @@ Button {
     // strip can encode live vehicle state (green flying / red engagement / blue on
     // ground) while keeping the olive default for the no-vehicle case.
     property color accentColor:      qgcPal.brandingPurple
-    property color accentTextColor:  "#1A1A1A"
+    property color accentTextColor:  qgcPal.lightTheme ? qgcPal.primaryButtonText : "#1A1A1A"
 
     // STRATUM: optional per-action accent override. A QML ToolStripAction may declare
     // accentColorOverride / accentTextColorOverride (e.g. the crimson Set Standoff
@@ -45,9 +45,10 @@ Button {
 
     // STRATUM: on accent buttons the content colour is paired with the fill by the
     // caller (dark on the light olive default, white on the saturated state colours).
-    property color _currentContentColor:  qgcPal.highContrast ? ((checked || pressed) ? qgcPal.buttonHighlightText : qgcPal.buttonText) : accentButtons ? _accentContent :
+    property color _currentContentColor:  qgcPal.lightTheme && !enabled ? qgcPal.buttonText
+                                              : qgcPal.highContrast ? ((checked || pressed) ? qgcPal.buttonHighlightText : qgcPal.buttonText) : accentButtons ? _accentContent :
                                               ((checked || pressed) ? qgcPal.buttonHighlightText : qgcPal.text)
-    property color _currentContentColorSecondary:  (checked || pressed) ? qgcPal.text : qgcPal.buttonHighlight
+    property color _currentContentColorSecondary:  (checked || pressed) ? (qgcPal.lightTheme ? qgcPal.buttonHighlightText : qgcPal.text) : qgcPal.buttonHighlight
 
     signal dropped(int index)
 
@@ -142,21 +143,22 @@ Button {
                 elide:                      Text.ElideRight
                 anchors.horizontalCenter:   parent.horizontalCenter
                 font.bold:                  !innerImage.visible && !innerImageColorful.visible
-                opacity:                    qgcPal.highContrast ? 1.0 : (!innerImage.visible ? 0.8 : 1.0)
+                opacity:                    qgcPal.highContrast || qgcPal.lightTheme ? 1.0 : (!innerImage.visible ? 0.8 : 1.0)
             }
         }
     }
 
     background: Rectangle {
         id:     buttonBkRect
-        color:  qgcPal.highContrast ? ((control.checked || control.pressed) ? qgcPal.buttonHighlight : qgcPal.button) : (control.checked || control.pressed) ?
+        color:  qgcPal.lightTheme && !control.enabled ? qgcPal.button
+                : qgcPal.highContrast ? ((control.checked || control.pressed) ? qgcPal.buttonHighlight : qgcPal.button) : (control.checked || control.pressed) ?
                     qgcPal.buttonHighlight :
                     ((control.enabled && control.hovered) ? qgcPal.toolStripHoverColor :
                         (control.accentButtons ? control._accentFill : "transparent"))
         // STRATUM: dim the accent fill when the action is unavailable so disabled
         // commands remain visibly inert rather than reading as armed.
-        opacity: qgcPal.highContrast ? 1.0 : ((control.accentButtons && !control.enabled) ? 0.35 : 1.0)
-        border.width: qgcPal.highContrast ? 2 : 0
+        opacity: qgcPal.highContrast || qgcPal.lightTheme ? 1.0 : ((control.accentButtons && !control.enabled) ? 0.35 : 1.0)
+        border.width: qgcPal.highContrast ? 2 : qgcPal.lightTheme ? (control.activeFocus ? 2 : 1) : 0
         border.color: qgcPal.buttonBorder
     }
 }

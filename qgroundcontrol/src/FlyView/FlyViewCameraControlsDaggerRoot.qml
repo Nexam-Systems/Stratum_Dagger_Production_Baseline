@@ -25,8 +25,8 @@ Item {
     readonly property var _vs: QGroundControl.settingsManager.videoSettings
 
     QGCPalette { id: contrastPalette; colorGroupEnabled: true }
-    readonly property color _accent:    contrastPalette.highContrast ? contrastPalette.buttonBorder : "#79CBE8"
-    readonly property color _accentDim: contrastPalette.highContrast ? contrastPalette.text : "#BCD7E4"
+    readonly property color _accent:    contrastPalette.lightTheme ? contrastPalette.brandingPurple : (contrastPalette.highContrast ? contrastPalette.buttonBorder : "#79CBE8")
+    readonly property color _accentDim: contrastPalette.lightTheme ? contrastPalette.colorGrey : (contrastPalette.highContrast ? contrastPalette.text : "#BCD7E4")
     readonly property real  _spacing:   ScreenTools.defaultFontPixelWidth * 0.4
     readonly property real  _pad:       overlayMode ? ScreenTools.defaultFontPixelWidth * 0.75 : 0
 
@@ -36,7 +36,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         visible: root.overlayMode
-        color: contrastPalette.highContrast ? contrastPalette.window : Qt.rgba(0, 0, 0, 0.72)
+        color: contrastPalette.highContrast || contrastPalette.lightTheme ? contrastPalette.window : Qt.rgba(0, 0, 0, 0.72)
         radius: ScreenTools.defaultBorderRadius
         border.color: root._accent
         border.width: 1

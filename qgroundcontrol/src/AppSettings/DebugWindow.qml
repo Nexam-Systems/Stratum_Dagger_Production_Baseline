@@ -306,7 +306,7 @@ Item {
                 color:      colorValue
                 Text {
                     text:   colorValue
-                    color:  "#202020"
+                    color:  qgcPal.lightTheme ? qgcPal.windowShade : "#202020"
                     font.pointSize:     _textMeasure.font.pointSize * 0.75
                     anchors.centerIn:   parent
                 }

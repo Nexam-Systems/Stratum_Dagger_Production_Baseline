@@ -25,7 +25,7 @@ Item {
     property string _nSatText:      _gps && _gps.count ? _gps.count.valueString : qsTr("--")
 
     QGCPalette { id: qgcPal }
-    readonly property color indicatorColor: qgcPal.highContrast ? qgcPal.text : "#79CBE8"
+    readonly property color indicatorColor: qgcPal.lightTheme ? qgcPal.brandingPurple : (qgcPal.highContrast ? qgcPal.text : "#79CBE8")
 
     Row {
         id:             gpsIndicatorRow

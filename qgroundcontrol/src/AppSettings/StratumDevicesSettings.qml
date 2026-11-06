@@ -206,7 +206,7 @@ Rectangle {
                             implicitWidth:    ScreenTools.defaultFontPixelHeight * 0.5
                             implicitHeight:   implicitWidth
                             radius:           implicitWidth / 2
-                            color:            assetRow._connected ? qgcPal.colorGreen : "#808080"
+                            color:            assetRow._connected ? qgcPal.colorGreen : (qgcPal.lightTheme ? qgcPal.colorGrey : "#808080")
                             Layout.alignment: Qt.AlignVCenter
                         }
                         QGCLabel {

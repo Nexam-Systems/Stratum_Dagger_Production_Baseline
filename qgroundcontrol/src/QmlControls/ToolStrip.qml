@@ -19,7 +19,7 @@ Rectangle {
     // colour; callers (e.g. FlyViewToolStrip) override accentColor to encode live
     // vehicle state - green flying, red engagement, blue on ground.
     property color  accentColor:        qgcPal.brandingPurple
-    property color  accentTextColor:    "#1A1A1A"
+    property color  accentTextColor:    qgcPal.lightTheme ? qgcPal.primaryButtonText : "#1A1A1A"
 
     property var _dropPanel: dropPanel
 

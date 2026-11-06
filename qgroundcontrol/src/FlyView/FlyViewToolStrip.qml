@@ -33,16 +33,16 @@ ToolStrip {
     // law -- so coordinate Engagement, Vision Engagement and PN Engagement are treated
     // alike. When a fourth engagement mode appears, extend this list and both mirrors
     // in the same commit.
-    accentColor:     !_activeVehicle ? "#6B7280" :
-                         _activeVehicle.flightMode === qsTr("Abort") ? "#F59E0B" :
+    accentColor:     !_activeVehicle ? (qgcPal.lightTheme ? qgcPal.colorGrey : "#6B7280") :
+                         _activeVehicle.flightMode === qsTr("Abort") ? (qgcPal.lightTheme ? qgcPal.colorOrange : "#F59E0B") :
                          (_activeVehicle.flightMode === qsTr("Engagement") ||
                           _activeVehicle.flightMode === qsTr("Vision Engagement") ||
-                          _activeVehicle.flightMode === qsTr("PN Engagement")) ? "#DC2626" :
+                          _activeVehicle.flightMode === qsTr("PN Engagement")) ? (qgcPal.lightTheme ? qgcPal.colorRed : "#DC2626") :
                              (_activeVehicle.flightMode === qsTr("Standoff") ||
                               _activeVehicle.flightMode === qsTr("Takeoff") ||
                               _activeVehicle.flightMode === _activeVehicle.pauseFlightMode ||
-                              _activeVehicle.flying) ? "#22C55E" : "#1E88E5"
-    accentTextColor: _activeVehicle ? "#FFFFFF" : "#1A1A1A"
+                              _activeVehicle.flying) ? (qgcPal.lightTheme ? qgcPal.colorGreen : "#22C55E") : (qgcPal.lightTheme ? qgcPal.colorBlue : "#1E88E5")
+    accentTextColor: _activeVehicle || qgcPal.lightTheme ? "#FFFFFF" : "#1A1A1A"
 
     signal displayPreFlightChecklist
     signal defineAOP

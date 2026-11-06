@@ -1,5 +1,30 @@
 # UI Changes to make as per the slide numbers
 
+## KAN-29: Light theme
+
+- Color Theme offers Normal, High Contrast, and Light. Saved values remain
+  `1 = Normal`, `0 = High Contrast`; `2 = Light` is new. Existing defaults and
+  persisted selections are unchanged.
+- Light uses the shared white/light-gray palette, dark text, darker cyan accents,
+  visible control borders, and readable green/orange/red/gray status colors.
+  The existing Dark palette values and High Contrast override map are unchanged.
+- The native Qt control palette also follows Light, including disabled controls,
+  placeholders and tooltips. Switching back restores the original native palette.
+  OS-managed dialog chrome remains under the platform's control.
+- Settings cards, tool navigation, vehicle/Analyze views, charts, status bars,
+  Dagger/Dropper panels and camera controls use the new palette. Canvas indicators
+  repaint on palette changes; existing chart series recolor without resetting data
+  or zoom. No vehicle commands, thresholds, or readiness rules are changed.
+- Map/video imagery and instrument graphics are not recolored. Light control
+  panels over imagery are opaque for readability; media HUDs retain their
+  contrasting outlines/backplates. Safety colors remain red/orange, including a
+  light-red safety ribbon and tinted command buttons in Light only.
+- Validation: theme dropdown/persistence tests, palette contrast checks, native
+  palette/legacy-theme restoration tests, QML load/render checks, and comparison
+  against the pre-change Normal/High Contrast palette definitions. Check actual
+  Getac scaling, connected/disconnected telemetry and camera streams in all three
+  themes on the full application build.
+
 ## KAN-28: adaptive settings and tool navigation
 
 The dark concept in issue #64 is the visual target (including its colors), per

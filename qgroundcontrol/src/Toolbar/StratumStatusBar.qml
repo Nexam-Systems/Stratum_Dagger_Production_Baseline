@@ -48,15 +48,16 @@ Item {
     // VehicleMessageList) resolve the active vehicle from this component's scope.
     readonly property var  _activeVehicle: vehicle
 
-    // Theme-aware palette matching the two approved mockups:
+    // Theme-aware status-bar palette:
     //   - Normal theme:        cyan accent. Labels/dividers cyan, data values white.
     //   - High-contrast theme: neon-green accent. Labels white, data values green.
+    //   - Light theme: dark cyan labels and dark values on white.
     // Status values (STATE / BATT) carry their own health colours in both themes.
     readonly property bool  _hc:         qgcPal.highContrast
-    readonly property color _accent:     _hc ? "#2EE62E" : "#79CBE8"
+    readonly property color _accent:     qgcPal.lightTheme ? qgcPal.brandingPurple : (_hc ? "#2EE62E" : "#79CBE8")
     readonly property color _labelColor: _hc ? qgcPal.text : _accent
     readonly property color _valueColor: _hc ? _accent : qgcPal.text
-    readonly property color _dimColor:   Qt.rgba(qgcPal.text.r, qgcPal.text.g, qgcPal.text.b, 0.55)
+    readonly property color _dimColor:   qgcPal.lightTheme ? qgcPal.colorGrey : Qt.rgba(qgcPal.text.r, qgcPal.text.g, qgcPal.text.b, 0.55)
 
     // Larger, tightly-packed cell typography (KAN-17 feedback).
     readonly property real  _labelFontSize: ScreenTools.smallFontPointSize
@@ -131,7 +132,7 @@ Item {
     readonly property bool  _isDagger:    QGroundControl.settingsManager.appSettings.stratumProfile.rawValue === 2
     // Distinct amber stand-out colour so RTL PNR / ABORTS read apart from the cyan /
     // neon-green telemetry, in both the normal and high-contrast themes.
-    readonly property color _standoutColor: _hc ? "#FFD54A" : "#FFB300"
+    readonly property color _standoutColor: qgcPal.lightTheme ? qgcPal.colorOrange : (_hc ? "#FFD54A" : "#FFB300")
     readonly property color _pnrColor: {
         if (rtlPnrEstimator.pnrStatus === "PNR_REACHED" || rtlPnrEstimator.batteryCritical) return qgcPal.colorRed
         if (!_pnrHasTimer)      return _standoutColor

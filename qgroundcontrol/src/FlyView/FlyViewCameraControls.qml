@@ -63,8 +63,8 @@ Item {
         return Math.max(1, Math.min(127, Math.round(raw)))
     }
 
-    readonly property color _accent:    btnPal.highContrast ? btnPal.buttonBorder : "#79CBE8"
-    readonly property color _accentDim:  btnPal.highContrast ? btnPal.text : "#BCD7E4"
+    readonly property color _accent:    btnPal.lightTheme ? btnPal.brandingPurple : (btnPal.highContrast ? btnPal.buttonBorder : "#79CBE8")
+    readonly property color _accentDim: btnPal.lightTheme ? btnPal.colorGrey : (btnPal.highContrast ? btnPal.text : "#BCD7E4")
     readonly property real  _btnHeight:  ScreenTools.defaultFontPixelHeight * (compact ? 1.9 : 2.3)
     readonly property real  _iconSize:   Math.round(_btnHeight * 0.45)
     readonly property real  _spacing:    ScreenTools.defaultFontPixelWidth * 0.7
@@ -160,7 +160,8 @@ Item {
         property string iconSource: ""
         property bool primary: false
         readonly property bool _highlight: enabled && (pressed || checked)
-        readonly property color _fg: !enabled && btnPal.highContrast ? "#B5BDB0" : _highlight ? btnPal.buttonHighlightText
+        readonly property color _fg: !enabled && btnPal.lightTheme ? btnPal.colorGrey
+                                    : !enabled && btnPal.highContrast ? "#B5BDB0" : _highlight ? btnPal.buttonHighlightText
                                                 : (primary ? btnPal.primaryButtonText : btnPal.buttonText)
         hoverEnabled: !ScreenTools.isMobile
         focusPolicy: Qt.ClickFocus
@@ -178,7 +179,7 @@ Item {
             radius: ScreenTools.defaultBorderRadius
             border.width: btnPal.highContrast ? 2 : 1
             border.color: btnPal.buttonBorder
-            color: iconBtn.primary ? btnPal.primaryButton : btnPal.button
+            color: btnPal.lightTheme && !iconBtn.enabled ? btnPal.windowShadeDark : iconBtn.primary ? btnPal.primaryButton : btnPal.button
             Rectangle {
                 anchors.fill: parent
                 radius: parent.radius
@@ -236,7 +237,7 @@ Item {
             }
         }
         background: Rectangle {
-            color: btnPal.highContrast ? btnPal.window : Qt.rgba(0.05, 0.06, 0.07, 0.94)
+            color: btnPal.highContrast || btnPal.lightTheme ? btnPal.window : Qt.rgba(0.05, 0.06, 0.07, 0.94)
             radius: ScreenTools.defaultBorderRadius
             border.color: root._accent
             border.width: 1
@@ -376,7 +377,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         visible: root.overlayMode
-        color: btnPal.highContrast ? btnPal.window : Qt.rgba(0, 0, 0, 0.72)
+        color: btnPal.highContrast || btnPal.lightTheme ? btnPal.window : Qt.rgba(0, 0, 0, 0.72)
         radius: ScreenTools.defaultBorderRadius
         border.color: root._accent
         border.width: 1

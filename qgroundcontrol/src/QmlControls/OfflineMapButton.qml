@@ -58,7 +58,7 @@ Button {
             width:   sizeLabel.height * 0.5
             height:  sizeLabel.height * 0.5
             radius:  width / 2
-            color:   complete ? "#31f55b" : "#fc5656"
+            color:   qgcPal.lightTheme ? (complete ? qgcPal.colorGreen : qgcPal.colorRed) : (complete ? "#31f55b" : "#fc5656")
             opacity: sizeLabel.text.length > 0 ? 1 : 0
             anchors.verticalCenter: parent.verticalCenter
         }

@@ -259,7 +259,7 @@ Item {
             width: Math.min(176, flightSurface.width * 0.22)
             height: Math.min(flightSurface.height - 16, Math.max(180, cameraControlsScroll.contentHeight + 16))
             visible: _root._cameraMaximized && _root._cameraControlsExpanded && !QGroundControl.videoManager.fullScreen
-            color: qgcPal.highContrast ? qgcPal.window : Qt.rgba(qgcPal.window.r, qgcPal.window.g, qgcPal.window.b, 0.84)
+            color: qgcPal.highContrast || qgcPal.lightTheme ? qgcPal.window : Qt.rgba(qgcPal.window.r, qgcPal.window.g, qgcPal.window.b, 0.84)
             border.color: qgcPal.groupBorder
             border.width: 1
             radius: 4
@@ -331,7 +331,7 @@ Item {
 
             // STRATUM: theme-aware accent (cyan normal / neon-green high-contrast),
             // matching the top status bar.
-            readonly property color _holdAccent: qgcPal.highContrast ? "#2EE62E" : "#79CBE8"
+            readonly property color _holdAccent: qgcPal.lightTheme ? qgcPal.brandingPurple : (qgcPal.highContrast ? "#2EE62E" : "#79CBE8")
 
             color: qgcPal.window
             border.color: _holdAccent

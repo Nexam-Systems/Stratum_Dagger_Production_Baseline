@@ -17,7 +17,7 @@ Canvas {
 
     Connections {
         target:                 _qgcPal
-        function onGlobalThemeChanged() { control.requestPaint() }
+        function onPaletteChanged() { control.requestPaint() }
     }
 
     onPaint: {
