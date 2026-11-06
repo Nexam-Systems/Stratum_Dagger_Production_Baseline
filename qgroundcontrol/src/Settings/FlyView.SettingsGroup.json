@@ -74,6 +74,7 @@
             "units": "m",
             "default": 1000,
             "min": 1,
+            "max": 15000,
             "label": "Max Standoff Distance",
             "keywords": "goto,go to,standoff,stratum,limit,distance"
         },
@@ -84,6 +85,7 @@
             "units": "m",
             "default": 2000,
             "min": 1,
+            "max": 20000,
             "label": "Max AOP Distance",
             "keywords": "aop,area of operations,geofence,stratum,limit,distance"
         },
