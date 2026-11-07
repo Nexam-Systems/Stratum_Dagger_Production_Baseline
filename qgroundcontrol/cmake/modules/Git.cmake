@@ -158,6 +158,16 @@ endif()
 # cmake_print_variables(QGC_APP_VERSION QGC_APP_VERSION_MAJOR QGC_APP_VERSION_MINOR QGC_APP_VERSION_PATCH)
 
 # ----------------------------------------------------------------------------
+# STRATUM: product version tracks the release tag
+# ----------------------------------------------------------------------------
+# The STRATUM product version (window title, status bar, FlyView wordmark — all via
+# QGroundControl.stratumVersion) is derived from the Git tag here instead of the
+# hardcoded CustomOptions default, so every surface reports the actual built version.
+if(QGC_APP_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+")
+    set(STRATUM_VERSION "${QGC_APP_VERSION}")
+endif()
+
+# ----------------------------------------------------------------------------
 # Generate Version Header
 # ----------------------------------------------------------------------------
 configure_file(

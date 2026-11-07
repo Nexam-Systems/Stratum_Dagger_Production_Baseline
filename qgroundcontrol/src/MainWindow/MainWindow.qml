@@ -521,7 +521,7 @@ ApplicationWindow {
 
                 QGCLabel {
                     visible: toolDrawer.width > ScreenTools.defaultFontPixelWidth * 95
-                    text: QGroundControl.stratumVersion
+                    text: "v" + QGroundControl.stratumVersion
                     font.pointSize: ScreenTools.smallFontPointSize
                 }
 

@@ -74,6 +74,13 @@ public:
     /// Cryptographically random 64-char hex string (32 bytes).
     Q_INVOKABLE static QString generateRandomHexKey();
 
+    /// STRATUM: Deterministically derive a 64-char hex signing key from the admin Device Info Key
+    /// (the 16-byte / 32-hex daggerDeviceKey) via PBKDF2-HMAC-SHA256 with a fixed salt. The same
+    /// device key always yields the same signing key, so the key pushed to the Nano board is
+    /// reproducible across builds/installs (a "locked" key) instead of random. Returns an empty
+    /// string if deviceKeyHex does not decode to exactly 16 bytes.
+    Q_INVOKABLE static QString deriveHexKeyFromDeviceKey(const QString& deviceKeyHex);
+
     Q_INVOKABLE void removeKey(const QString& name);
 
     /// Used by tests and full reset.
@@ -137,6 +144,9 @@ private:
     /// Fixed app-wide salt — keeps passphrase→key derivation deterministic across installs (portable shared secret).
     /// Bumping the version suffix invalidates all stored passphrase keys; coordinate with deployment.
     static constexpr QByteArrayView kPbkdf2Salt = QByteArrayView("QGroundControl-MAVLink-Signing-v1");
+    /// STRATUM: distinct fixed salt for the Device-Info-Key → signing-key derivation so it never collides
+    /// with the passphrase derivation above. Deterministic: same device key always yields the same signing key.
+    static constexpr QByteArrayView kDeviceKeySigningSalt = QByteArrayView("STRATUM-DeviceKey-Signing-v1");
     /// OWASP 2023+ floor for PBKDF2-HMAC-SHA256; ~250ms per addKey on a 2024 laptop.
     static constexpr int kPbkdf2Iterations = 600'000;
 

@@ -102,6 +102,7 @@
         },
         {
             "heading": "Instrument Panel",
+            "showWhen": "QGroundControl.corePlugin.stratumDevBuild",
             "keywords": ["compass", "indicators", "hud", "instrument", "nose up"],
             "controls": [
                 {

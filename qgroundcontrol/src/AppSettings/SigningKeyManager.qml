@@ -116,7 +116,16 @@ SettingsGroupLayout {
 
                     QGCButton {
                         text:       qsTr("Generate")
-                        onClicked:  rawKeyField.text = QGroundControl.mavlinkSigningKeys.generateRandomHexKey()
+                        onClicked:  {
+                            var deviceKeyHex = QGroundControl.settingsManager.videoSettings.daggerDeviceKey.rawValue
+                            var derived = QGroundControl.mavlinkSigningKeys.deriveHexKeyFromDeviceKey(deviceKeyHex)
+                            if (derived.length === 64) {
+                                rawKeyField.text = derived
+                                errorLabel.text = ""
+                            } else {
+                                errorLabel.text = qsTr("Set a valid Device Info Key (32 hex characters) in Admin Settings before generating a locked signing key.")
+                            }
+                        }
                     }
                 }
 
