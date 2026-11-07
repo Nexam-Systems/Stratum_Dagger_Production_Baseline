@@ -94,11 +94,18 @@ Rectangle {
         for (let i = 0; i < lm.linkConfigurations.count; ++i) {
             const existing = lm.linkConfigurations.get(i)
             if (existing && existing.name === linkName) {
+                // Self-heal older entries saved without a local port (UDP configs only).
+                if (r.port && existing.localPort !== undefined && existing.localPort === 0) {
+                    existing.localPort = r.port
+                }
                 lm.createConnectedLink(existing)
                 return true
             }
         }
         const cfg = lm.createConfiguration(LinkConfiguration.TypeUdp, linkName)
+        // Bind QGC to the decoded data-link port as well as targeting the vehicle there;
+        // without a local port the UDP socket can't establish the connection.
+        cfg.localPort = r.port
         cfg.addHost(r.dataIp, r.port)
         lm.endCreateConfiguration(cfg)
         lm.createConnectedLink(cfg)

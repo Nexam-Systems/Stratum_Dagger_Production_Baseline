@@ -7,7 +7,24 @@ include_guard(GLOBAL)
 
 find_package(Git QUIET)
 
-if(NOT GIT_FOUND OR NOT EXISTS "${CMAKE_SOURCE_DIR}/.git")
+# Detect a Git work tree via rev-parse rather than a literal ".git" in CMAKE_SOURCE_DIR.
+# STRATUM vendors QGC under qgroundcontrol/ inside a repo whose .git lives at the parent
+# root, so a filesystem check for "${CMAKE_SOURCE_DIR}/.git" wrongly reports "no repo" and
+# drops the real tag version (STRATUM_VERSION / QGC_APP_VERSION fall back to 0.x). The git
+# commands below already run with WORKING_DIRECTORY = CMAKE_SOURCE_DIR and walk up to the
+# parent .git, so only this guard needed fixing.
+set(_git_inside_worktree "false")
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --is-inside-work-tree
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE _git_inside_worktree
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+endif()
+
+if(NOT GIT_FOUND OR NOT _git_inside_worktree STREQUAL "true")
     message(WARNING "QGC: Git not found or not a git repository. Using fallback version info.")
     set(QGC_GIT_BRANCH "unknown")
     set(QGC_GIT_HASH "0000000")
