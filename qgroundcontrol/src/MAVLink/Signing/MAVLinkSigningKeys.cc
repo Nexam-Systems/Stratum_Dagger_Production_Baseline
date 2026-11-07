@@ -203,6 +203,26 @@ QString MAVLinkSigningKeys::generateRandomHexKey()
     return QString::fromLatin1(bytes.toHex());
 }
 
+QString MAVLinkSigningKeys::deriveHexKeyFromDeviceKey(const QString& deviceKeyHex)
+{
+    QByteArray deviceKey = QByteArray::fromHex(deviceKeyHex.trimmed().toLatin1());
+    if (deviceKey.size() != 16) {
+        qCWarning(MAVLinkSigningKeysLog)
+            << "Device Info Key must decode to 16 bytes (32 hex chars), got" << deviceKey.size();
+        QGC::secureZero(deviceKey);
+        return QString();
+    }
+
+    // Deterministic: fixed salt + device key → same 32-byte signing key on every build/install.
+    const QByteArray salt(kDeviceKeySigningSalt.constData(), kDeviceKeySigningSalt.size());
+    QByteArray derived = QPasswordDigestor::deriveKeyPbkdf2(QCryptographicHash::Sha256, deviceKey, salt,
+                                                            _effectivePbkdf2Iterations(), kSigningKeySize);
+    QGC::secureZero(deviceKey);
+    const QString hex = QString::fromLatin1(derived.toHex());
+    QGC::secureZero(derived);
+    return hex;
+}
+
 QString MAVLinkSigningKeys::keyHexByName(const QString& name) const
 {
     const auto key = keyBytesByName(name);

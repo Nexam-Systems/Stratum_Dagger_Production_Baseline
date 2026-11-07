@@ -24,7 +24,12 @@ Rectangle {
     property int  _expandedRevision: 0  // bumped to trigger re-evaluation
     property string _searchQuery: ""
 
-    readonly property string headerTitle: QGroundControl.appName
+    // The internal applicationName carries a " Daily" suffix on daily builds to isolate the
+    // settings space; strip it so the settings header shows the clean product name.
+    readonly property string headerTitle: {
+        var n = QGroundControl.appName
+        return n.endsWith(" Daily") ? n.slice(0, n.length - 6) : n
+    }
 
     property Component headerActions: RowLayout {
         spacing: ScreenTools.defaultFontPixelWidth

@@ -34,6 +34,7 @@ DECLARE_SETTINGGROUP(Admin, "Admin")
 
 DECLARE_SETTINGSFACT(AdminSettings, trackerBoxSizePx)
 DECLARE_SETTINGSFACT(AdminSettings, c12GimbalMaxSpeed)
+DECLARE_SETTINGSFACT(AdminSettings, escCriticalTempC)
 DECLARE_SETTINGSFACT(AdminSettings, passwordHashOverride)
 DECLARE_SETTINGSFACT(AdminSettings, firmwareCompatibilityChecksEnabled)
 DECLARE_SETTINGSFACT(AdminSettings, requiredPx4MajorVersion)

@@ -207,6 +207,24 @@ QGCPopupDialog {
                 QGCLabel {
                     text: _admin ? qsTr("%1").arg(Number(_admin.c12GimbalMaxSpeed.rawValue)) : "100"
                 }
+
+                QGCLabel { text: qsTr("Motor critical temp") }
+                Slider {
+                    id: escCriticalTempSlider
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 22
+                    from: 40
+                    to: 150
+                    stepSize: 1
+                    value: _admin ? Number(_admin.escCriticalTempC.rawValue) : 80
+                    onMoved: {
+                        if (_admin) {
+                            _admin.escCriticalTempC.rawValue = Math.round(value)
+                        }
+                    }
+                }
+                QGCLabel {
+                    text: _admin ? qsTr("%1 °C").arg(Number(_admin.escCriticalTempC.rawValue)) : "80 °C"
+                }
             }
 
             QGCLabel {

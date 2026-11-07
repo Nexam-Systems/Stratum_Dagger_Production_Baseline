@@ -42,7 +42,8 @@
             "name": "Comm Links",
             "qml": "CommLinksSettings.qml",
             "icon": "qrc:/InstrumentValueIcons/usb.svg",
-            "pageDefinition": "CommLinks.SettingsUI.json"
+            "pageDefinition": "CommLinks.SettingsUI.json",
+            "visible": "QGroundControl.corePlugin.stratumDevBuild"
         },
         {
             "name": "Joystick",
@@ -101,7 +102,7 @@
             "qml": "VideoSettings.qml",
             "icon": "qrc:/InstrumentValueIcons/camera.svg",
             "pageDefinition": "Video.SettingsUI.json",
-            "visible": "QGroundControl.settingsManager.videoSettings.userVisible"
+            "visible": "QGroundControl.corePlugin.stratumDevBuild && QGroundControl.settingsManager.videoSettings.userVisible"
         },
         {
             "name": "Assets",

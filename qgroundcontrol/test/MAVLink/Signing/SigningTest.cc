@@ -343,6 +343,34 @@ void SigningTest::_testGenerateRandomHexKey()
     QVERIFY(key1 != key2);
 }
 
+void SigningTest::_testDeriveHexKeyFromDeviceKey()
+{
+    // 16-byte (32 hex) Device Info Key -> deterministic 32-byte (64 hex) signing key.
+    const QString deviceKey = QStringLiteral("A1B2C3D4E5F60718293A4B5C6D7E8F90");
+    const QString key1 = MAVLinkSigningKeys::deriveHexKeyFromDeviceKey(deviceKey);
+    const QString key2 = MAVLinkSigningKeys::deriveHexKeyFromDeviceKey(deviceKey);
+
+    QCOMPARE(key1.length(), 64);
+    QCOMPARE(QByteArray::fromHex(key1.toLatin1()).size(), 32);
+    // Locked: the same device key always yields the same signing key.
+    QCOMPARE(key1, key2);
+
+    // Separators / surrounding whitespace / case are ignored on input.
+    QCOMPARE(MAVLinkSigningKeys::deriveHexKeyFromDeviceKey(
+                 QStringLiteral(" a1b2c3d4-e5f6-0718-293a-4b5c6d7e8f90 ")), key1);
+
+    // A different device key yields a different signing key.
+    const QString other = MAVLinkSigningKeys::deriveHexKeyFromDeviceKey(
+        QStringLiteral("00112233445566778899AABBCCDDEEFF"));
+    QVERIFY(other != key1);
+
+    // Wrong-length device key is rejected (empty result + warning).
+    expectLogMessage("MAVLink.SigningKeys", QtWarningMsg,
+                     QRegularExpression("Device Info Key must decode to 16 bytes"));
+    QVERIFY(MAVLinkSigningKeys::deriveHexKeyFromDeviceKey(QStringLiteral("DEADBEEF")).isEmpty());
+    verifyExpectedLogMessage();
+}
+
 void SigningTest::_testRemoveKeyNonexistent()
 {
     auto* signingKeys = MAVLinkSigningKeys::instance();

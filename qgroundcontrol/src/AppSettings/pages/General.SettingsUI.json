@@ -106,6 +106,7 @@
         },
         {
             "heading": "Vehicle Preferences",
+            "showWhen": "QGroundControl.corePlugin.stratumDevBuild",
             "keywords": ["firmware", "ardupilot", "px4", "vehicle", "multirotor", "fixed wing", "vtol", "rover", "sub"],
             "controls": [
                 {

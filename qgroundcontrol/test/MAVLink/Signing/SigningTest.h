@@ -21,6 +21,7 @@ private slots:
     void _testAddRawKey();
     void _testMaxKeyLimit();
     void _testGenerateRandomHexKey();
+    void _testDeriveHexKeyFromDeviceKey();
     void _testRemoveKeyNonexistent();
     void _testKeyAtOutOfBounds();
     void _testSetMessageSigned();

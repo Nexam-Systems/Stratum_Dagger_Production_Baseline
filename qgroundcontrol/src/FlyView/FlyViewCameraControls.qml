@@ -410,6 +410,28 @@ Item {
             }
         }
 
+        // ---- Video feed on/off: hide the live stream when the operator doesn't want it ----
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: root._spacing
+
+            Switch {
+                id: feedToggle
+                text: qsTr("Video feed")
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Show / hide the live video stream")
+                ToolTip.delay: 400
+                // Bound to feedVisible: toggling it stops/resumes the RTSP receivers (dropping
+                // network + decode load), and is independent of TV/IR switching so it never
+                // auto-reverts.
+                checked: QGroundControl.videoManager.feedVisible
+                onToggled: {
+                    QGroundControl.videoManager.feedVisible = checked
+                    root.statusMessage(checked ? qsTr("Video feed on") : qsTr("Video feed off"))
+                }
+            }
+        }
+
         // ---- Gimbal: pan / tilt cross (hold-to-move) -----------------------
         SectionLabel { text: qsTr("GIMBAL") }
 
@@ -493,9 +515,11 @@ Item {
         }
 
         // ---- Tools: angles panel / target GPS / absolute angles ------------
+        // Client build hides these operator-facing diagnostics; dev build keeps them.
         RowLayout {
             Layout.fillWidth: true
             spacing: root._spacing
+            visible: QGroundControl.corePlugin.stratumDevBuild
 
             IconButton {
                 iconSource: "/InstrumentValueIcons/dashboard.svg"

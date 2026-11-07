@@ -57,6 +57,30 @@ int main()
     state = {}; // Link loss/reconnect clears all live data and ground proof.
     CHECK(state.evaluate(4000, 3000).freshCount == 0);
     CHECK(!state.confirmedGround(4000, 3000));
+
+    // Admin-configurable critical threshold: the blocking limit follows setCriticalC().
+    {
+        State dyn;
+        dyn.updatePhase(State::Phase::Ground, 0);
+        for (int i = 0; i < State::SensorCount; ++i) CHECK(dyn.update(i, 81, true, 0));
+        CHECK(dyn.blocksGroundCommands(0, 3000)); // Default 80 °C: 81 is hot.
+
+        dyn.setCriticalC(90); // Raise the limit.
+        CHECK(dyn.severityOf(81) == State::Severity::Warning);
+        CHECK(dyn.evaluate(0, 3000).criticalMask == 0);
+        CHECK(!dyn.blocksGroundCommands(0, 3000)); // 81 < 90: no longer hot.
+        CHECK(dyn.severityOf(90.01) == State::Severity::Critical);
+
+        dyn.setCriticalC(60); // Lower the limit.
+        CHECK(dyn.severityOf(65) == State::Severity::Critical);
+        CHECK(dyn.blocksGroundCommands(0, 3000)); // 81 >> 60: hot again.
+
+        dyn.setCriticalC(-5); // Invalid values are ignored.
+        CHECK(dyn.criticalC == 60);
+        dyn.setCriticalC(std::numeric_limits<double>::quiet_NaN());
+        CHECK(dyn.criticalC == 60);
+    }
+
     std::puts("Thermal policy: four ESCs, thresholds, averaging, freshness and flight-phase checks passed.");
     return 0;
 }

@@ -26,8 +26,9 @@ endif()
 
 # STRATUM: global product rename. Drives window title, settings space, save paths.
 set(QGC_APP_NAME "STRATUM" CACHE STRING "Application name")
-# STRATUM: dedicated product version, decoupled from upstream QGC git versioning.
-# Surfaced to QML via QGroundControl.stratumVersion and rendered in the window title.
+# STRATUM: dedicated product version. This is only the fallback default — Git.cmake
+# overrides it with the actual release tag (e.g. 1.1.0) so QGroundControl.stratumVersion
+# reflects the real built version everywhere (window title, status bar, FlyView wordmark).
 set(STRATUM_VERSION "0.1.0" CACHE STRING "STRATUM product version")
 string(TIMESTAMP _copyright_year "%Y")
 set(QGC_APP_COPYRIGHT "Copyright (c) ${_copyright_year} QGroundControl. All rights reserved." CACHE STRING "Copyright notice")
