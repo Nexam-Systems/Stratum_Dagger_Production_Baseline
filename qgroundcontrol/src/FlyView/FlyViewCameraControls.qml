@@ -421,8 +421,9 @@ Item {
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Show / hide the live video stream")
                 ToolTip.delay: 400
-                // Bound to the UI-only feedVisible intent: it does not touch the stream
-                // pipeline, so it stays put when switching TV/IR and never auto-reverts.
+                // Bound to feedVisible: toggling it stops/resumes the RTSP receivers (dropping
+                // network + decode load), and is independent of TV/IR switching so it never
+                // auto-reverts.
                 checked: QGroundControl.videoManager.feedVisible
                 onToggled: {
                     QGroundControl.videoManager.feedVisible = checked

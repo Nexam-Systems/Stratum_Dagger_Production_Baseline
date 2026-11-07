@@ -125,8 +125,8 @@ public:
     bool autoStreamConfigured() const;
     bool decoding() const { return _decoding; }
     bool fullScreen() const { return _fullScreen; }
-    // STRATUM: operator show/hide toggle for the live video feed. UI-only intent (does not
-    // stop the stream pipeline, which auto-reconnects), so it stays put regardless of TV/IR
+    // STRATUM: operator show/hide toggle for the live video feed. Setting it false stops the
+    // video receivers (RTSP stream + decode drop); true resumes them. Independent of TV/IR
     // feed switching.
     bool feedVisible() const { return _feedVisible; }
     bool hasThermal() const;

@@ -1316,6 +1316,14 @@ void VideoManager::setFeedVisible(bool on)
     if (on != _feedVisible) {
         _feedVisible = on;
         emit feedVisibleChanged();
+        // Actually drop / resume the RTSP stream so the network + decode load follows the
+        // toggle. _startReceiver is gated on _feedVisible, so stopVideo() here does NOT get
+        // auto-restarted by onStopComplete while the feed is off.
+        if (on) {
+            startVideo();
+        } else {
+            stopVideo();
+        }
     }
 }
 
@@ -1805,6 +1813,15 @@ void VideoManager::_startReceiver(VideoReceiver *receiver)
 {
     if (!receiver) {
         qCDebug(VideoManagerLog) << "VideoReceiver is NULL";
+        return;
+    }
+
+    // STRATUM: operator turned the feed off — keep every receiver stopped. This is the single
+    // choke point all start paths funnel through (startVideo, _restartAllVideos, the
+    // onStopComplete auto-restart, TV/IR source changes), so gating here reliably prevents the
+    // stream from coming back until feedVisible is set true again.
+    if (!_feedVisible) {
+        qCDebug(VideoManagerLog) << "Feed hidden by operator; not starting" << receiver->name();
         return;
     }
 
