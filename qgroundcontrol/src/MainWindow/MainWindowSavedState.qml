@@ -33,22 +33,11 @@ Item {
         if (ScreenTools.isFakeMobile) {
             window.width = ScreenTools.screenWidth
             window.height = ScreenTools.screenHeight
-        } else if (ScreenTools.isMobile) {
-            window.showFullScreen();
-        } else if (QGroundControl.corePlugin.options.enableSaveMainWindowPosition) {
-            window.minimumWidth = Math.min(ScreenTools.defaultFontPixelWidth * 100, Screen.width)
-            window.minimumHeight = Math.min(ScreenTools.defaultFontPixelWidth * 50, Screen.height)
-            if (s.width && s.height) {
-                window.x = s.x;
-                window.y = s.y;
-                window.width = s.width;
-                window.height = s.height;
-                window.visibility = s.visibility;
-            } else {
-                _setDefaultDesktopWindowSize()
-            }
         } else {
-            _setDefaultDesktopWindowSize()
+            // STRATUM: always launch full screen (kiosk) so STRATUM covers the whole
+            // display with no title bar / minimize / maximize / close chrome. This
+            // intentionally overrides any saved windowed geometry.
+            window.showFullScreen();
         }
     }
 
