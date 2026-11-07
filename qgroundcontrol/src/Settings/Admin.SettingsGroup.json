@@ -107,6 +107,18 @@
             "label": "C12 max gimbal speed"
         },
         {
+            "name": "escCriticalTempC",
+            "shortDesc": "Motor (ESC) critical temperature limit",
+            "longDesc": "When any motor's ESC temperature exceeds this limit while the vehicle is confirmed on the ground, STRATUM blocks arm/disarm and flight-mode changes. While airborne it only warns and never changes vehicle state. Degrees Celsius.",
+            "type": "double",
+            "default": 80,
+            "min": 40,
+            "max": 150,
+            "units": "°C",
+            "decimalPlaces": 0,
+            "label": "Motor critical temperature"
+        },
+        {
             "name": "passwordHashOverride",
             "shortDesc": "Runtime admin password hash override",
             "longDesc": "SHA-256 hex of the admin password set at runtime from the hidden admin dialog. Empty means use the compile-time hash.",

@@ -47,12 +47,30 @@ public:
         return Availability::Fresh;
     }
 
-    static Severity severity(double temperatureC)
+    static Severity severity(double temperatureC, double warnLimit, double critLimit)
     {
         if (!std::isfinite(temperatureC)) return Severity::Unknown;
-        if (temperatureC > CriticalC) return Severity::Critical;
-        if (temperatureC >= WarningC) return Severity::Warning;
+        if (temperatureC > critLimit) return Severity::Critical;
+        if (temperatureC >= warnLimit) return Severity::Warning;
         return Severity::Normal;
+    }
+
+    // Default-threshold classifier (baseline 70/80 °C); used by callers/tests on the defaults.
+    static Severity severity(double temperatureC)
+    {
+        return severity(temperatureC, WarningC, CriticalC);
+    }
+
+    // Instance classifier honoring the admin-configured critical limit (criticalC).
+    Severity severityOf(double temperatureC) const
+    {
+        return severity(temperatureC, WarningC, criticalC);
+    }
+
+    // Override the critical limit (e.g. from the admin panel). Invalid values are ignored.
+    void setCriticalC(double limitC)
+    {
+        if (std::isfinite(limitC) && limitC > 0.0) criticalC = limitC;
     }
 
     Result evaluate(int64_t now, int64_t timeout) const
@@ -66,7 +84,7 @@ public:
             }
             ++result.freshCount;
             sum += readings[i].temperatureC;
-            const Severity current = severity(readings[i].temperatureC);
+            const Severity current = severityOf(readings[i].temperatureC);
             if (current > worst) worst = current;
             if (current == Severity::Critical) result.criticalMask |= 1U << i;
         }
@@ -96,4 +114,5 @@ public:
     std::array<Reading, SensorCount> readings{};
     Phase phase = Phase::Unknown;
     int64_t phaseReceivedAtMs = -1;
+    double criticalC = CriticalC;  // critical limit in °C; overridable via setCriticalC()
 };

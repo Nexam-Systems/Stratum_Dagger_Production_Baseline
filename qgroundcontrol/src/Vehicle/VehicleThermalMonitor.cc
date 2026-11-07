@@ -1,8 +1,11 @@
 #include "VehicleThermalMonitor.h"
 
+#include "AdminSettings.h"
 #include "AppMessages.h"
+#include "Fact.h"
 #include "MAVLinkLib.h"
 #include "QGCLoggingCategory.h"
+#include "SettingsManager.h"
 #include "Vehicle.h"
 #include "VehicleLinkManager.h"
 
@@ -100,6 +103,10 @@ QString VehicleThermalMonitor::_stateText(ThermalState::Availability available, 
 void VehicleThermalMonitor::refresh()
 {
     const int64_t now = _clock.elapsed();
+    // Critical limit is admin-configurable (hidden admin panel); applied before evaluating.
+    if (AdminSettings *admin = SettingsManager::instance()->adminSettings()) {
+        _state.setCriticalC(admin->escCriticalTempC()->rawValue().toDouble());
+    }
     _result = _state.evaluate(now, FreshnessTimeoutMs);
     _confirmedGround = _state.confirmedGround(now, FreshnessTimeoutMs)
                        && !_vehicle->flying() && !_vehicle->landing()
@@ -111,21 +118,21 @@ void VehicleThermalMonitor::refresh()
         const auto &reading = _state.readings[i];
         const auto available = _state.availability(i, now, FreshnessTimeoutMs);
         const bool fresh = available == ThermalState::Availability::Fresh;
-        const auto severity = fresh ? ThermalState::severity(reading.temperatureC) : ThermalState::Severity::Unknown;
+        const auto severity = fresh ? _state.severityOf(reading.temperatureC) : ThermalState::Severity::Unknown;
         const QString state = _stateText(available, severity);
         _sensors.append(QVariantMap{
             {QStringLiteral("name"), _sensorName(i)}, {QStringLiteral("temperatureC"), fresh ? reading.temperatureC : qQNaN()},
             {QStringLiteral("severity"), static_cast<int>(severity)}
         });
         if (_result.criticalMask & (1U << i)) hot << tr("%1: %2 °C").arg(_sensorName(i)).arg(reading.temperatureC, 0, 'f', 2);
-        if (fresh && reading.temperatureC <= 77.0) _alertLatch &= ~(1U << i);
+        if (fresh && reading.temperatureC <= _state.criticalC - 3.0) _alertLatch &= ~(1U << i);
         if (_lastStates[i] != state) {
             qCInfo(VehicleThermalLog) << "Vehicle" << _vehicle->id() << _sensorName(i) << state
                                      << reading.temperatureC << "phase" << static_cast<int>(_state.phase);
             _lastStates[i] = state;
         }
     }
-    _reason = !hot.isEmpty() ? tr("Temperature too high (limit 80 °C): %1.").arg(hot.join(QStringLiteral(", ")))
+    _reason = !hot.isEmpty() ? tr("Temperature too high (limit %1 °C): %2.").arg(_state.criticalC, 0, 'f', 0).arg(hot.join(QStringLiteral(", ")))
                             : QString();
     const unsigned newHot = _result.criticalMask & ~_alertLatch;
     if (newHot && !_confirmedGround && (_vehicle->armed() || _vehicle->flying() || _vehicle->landing())) {
