@@ -1,6 +1,9 @@
 #pragma once
 
 #include <QtQmlIntegration/QtQmlIntegration>
+#include <QtGui/QPalette>
+
+#include <optional>
 
 #include "SettingsGroup.h"
 
@@ -127,6 +130,8 @@ private slots:
     void _qLocaleLanguageChanged();
 
 private:
+    void _updateNativePalette(bool lightTheme);
+    std::optional<QPalette> _paletteBeforeLight;
     static QLocale::Language _qLocaleLanguageEarlyAccess(void);
 
     static QList<QLocale::Language> _rgReleaseLanguages;

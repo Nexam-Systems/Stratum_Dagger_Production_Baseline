@@ -200,7 +200,7 @@ Item {
                 width:              aopRangeRejectLabel.width + _toolsMargin * 3
                 height:             aopRangeRejectLabel.height + _toolsMargin * 1.5
                 radius:             _margins / 2
-                color:              "#EF5350"
+                color:              qgcPal.lightTheme ? qgcPal.colorRed : "#EF5350"
 
                 QGCLabel {
                     id:                     aopRangeRejectLabel
@@ -561,7 +561,7 @@ Item {
             QGCLabel {
                 Layout.columnSpan:  2
                 visible:            !_activeVehicle
-                color:              "#F2C200"
+                color:              qgcPal.lightTheme ? qgcPal.colorYellow : "#F2C200"
                 text:               qsTr("No vehicle connected.")
             }
 
@@ -571,7 +571,7 @@ Item {
                 Layout.columnSpan:   2
                 Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 34
                 visible:             standoffPanel._aopReject
-                color:               "#EF5350"
+                color:               qgcPal.lightTheme ? qgcPal.colorRed : "#EF5350"
                 wrapMode:            Text.WordWrap
                 text:                qsTr("Target is outside the defined AOP boundary — standoff rejected.")
             }

@@ -36,7 +36,7 @@
             "heading": "User Interface",
             "sectionNumber": "02",
             "icon": "/InstrumentValueIcons/computer-desktop.svg",
-            "keywords": ["language", "locale", "color theme", "color scheme", "high contrast", "normal", "dark mode", "theme", "palette", "ui scale", "font size", "zoom"],
+            "keywords": ["language", "locale", "color theme", "color scheme", "high contrast", "normal", "dark mode", "light mode", "white", "theme", "palette", "ui scale", "font size", "zoom"],
             "controls": [
                 {
                     "setting": "appSettings.qLocaleLanguage",

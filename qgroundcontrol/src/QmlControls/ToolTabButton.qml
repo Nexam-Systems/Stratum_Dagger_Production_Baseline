@@ -32,7 +32,9 @@ Button {
 
     background: Rectangle {
         radius: 3
-        color: control.checked || control.hovered ? theme.input : theme.header
+        color: theme.lightTheme && !control.enabled ? palette.button
+               : theme.lightTheme && control.down ? palette.windowShadeDark
+               : control.checked || control.hovered ? theme.input : theme.header
         border.width: control.activeFocus || theme.highContrast ? 2 : 1
         border.color: control.activeFocus ? theme.accent : theme.border
 
@@ -77,12 +79,12 @@ Button {
                 Layout.preferredHeight: Layout.preferredWidth
                 source: control.icon.source
                 visible: source.toString() !== ""
-                color: control.checked ? theme.accent : theme.text
+                color: theme.lightTheme && !control.enabled ? palette.buttonText : (control.checked ? theme.accent : theme.text)
             }
 
             QGCLabel {
                 text: control.text.toUpperCase()
-                color: control.checked ? theme.accent : theme.text
+                color: theme.lightTheme && !control.enabled ? palette.buttonText : (control.checked ? theme.accent : theme.text)
                 font.bold: control.checked
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter

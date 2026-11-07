@@ -221,14 +221,14 @@
         },
         {
             "name": "indoorPalette",
-            "shortDesc": "Select High Contrast or Normal display colors.",
-            "longDesc": "High Contrast uses black surfaces and yellow-green outlines. Normal uses dark surfaces, cyan details and teal controls. The selection is saved across restarts.",
+            "shortDesc": "Select Normal, High Contrast or Light display colors.",
+            "longDesc": "Normal uses dark surfaces and cyan accents. High Contrast uses black surfaces and yellow-green outlines. Light uses white surfaces, dark text and cyan accents. The selection is saved across restarts.",
             "type": "uint32",
-            "enumStrings": "High Contrast,Normal",
-            "enumValues": "0,1",
+            "enumStrings": "Normal,High Contrast,Light",
+            "enumValues": "1,0,2",
             "default": 0,
             "label": "Color Theme",
-            "keywords": "palette,high contrast,normal,theme,color scheme"
+            "keywords": "palette,high contrast,normal,light,white,theme,color scheme"
         },
         {
             "name": "savePath",

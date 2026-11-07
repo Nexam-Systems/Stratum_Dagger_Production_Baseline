@@ -18,7 +18,7 @@ Item {
     property bool showIndicator: (_activeVehicle && _activeVehicle.supports && _activeVehicle.supports.radio) || _hasTelemetry
 
     property var  _activeVehicle:   QGroundControl.multiVehicleManager.activeVehicle
-    readonly property color indicatorColor: qgcPal.highContrast ? qgcPal.text : "#79CBE8"
+    readonly property color indicatorColor: qgcPal.lightTheme ? qgcPal.brandingPurple : (qgcPal.highContrast ? qgcPal.text : "#79CBE8")
     property var  _radioStatus:     _activeVehicle ? _activeVehicle.radioStatus : null
     property bool _hasTelemetry:    _radioStatus && _radioStatus.lrssi && Number(_radioStatus.lrssi.rawValue) !== 0
 

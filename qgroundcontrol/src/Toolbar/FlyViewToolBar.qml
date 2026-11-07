@@ -30,18 +30,20 @@ Item {
 
     // STRATUM: the fly-view ribbon stays a single neutral chrome band so operators are
     // not conditioned to a rotating rainbow of state colours. Only the Engagement flight
-    // mode -- the safety-critical live-fire state -- turns the ribbon solid red. Every
+    // mode -- the safety-critical live-fire state -- turns the ribbon red. Light uses
+    // a pale-red fill with a red rule so dark telemetry text remains readable. Every
     // other state (Standoff, Takeoff, Hold, Manual, Abort, disconnected, ...) keeps the
-    // same dark graphite background; individual telemetry chips (RSSI, comms, battery)
+    // same theme background; individual telemetry chips (RSSI, comms, battery)
     // still colour themselves for warning/critical thresholds.
     readonly property string _engagementModeName: qsTr("Engagement")
     property color _ribbonColor: {
         if (_activeVehicle && _activeVehicle.flightMode === _engagementModeName) {
+            if (qgcPal.lightTheme) return Qt.tint(qgcPal.window, Qt.rgba(qgcPal.colorRed.r, qgcPal.colorRed.g, qgcPal.colorRed.b, 0.12))
             return "#DC2626"                    // engagement (live-fire safety colour)
         }
         return qgcPal.window
     }
-    // STRATUM: light-on-dark ribbon text. Red engagement bg still reads with light text.
+    // Light uses dark text; the two existing themes retain their light ribbon text.
     readonly property color _ribbonTextColor: qgcPal.text
 
     function dropMainStatusIndicatorTool() {
@@ -63,7 +65,8 @@ Item {
         anchors.right:  parent.right
         anchors.bottom: parent.bottom
         height:         2
-        color:          qgcPal.brandingPurple
+        color:          qgcPal.lightTheme && _activeVehicle && _activeVehicle.flightMode === _engagementModeName
+                        ? qgcPal.colorRed : qgcPal.brandingPurple
         opacity:        0.85
         z:              10
     }

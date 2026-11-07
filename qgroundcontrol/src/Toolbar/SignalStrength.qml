@@ -10,7 +10,7 @@ Item {
 
     property real size:     50
     property real percent:  0
-    property color indicatorColor: qgcPal.highContrast ? qgcPal.text : "#79CBE8"
+    property color indicatorColor: qgcPal.lightTheme ? qgcPal.brandingPurple : (qgcPal.highContrast ? qgcPal.text : "#79CBE8")
 
     QGCPalette { id: qgcPal }
 

@@ -5,6 +5,7 @@
 
 #include <QtTest/QSignalSpy>
 #include <QtCore/qscopeguard.h>
+#include <QtGui/QGuiApplication>
 
 namespace {
 class PaletteStateGuard
@@ -90,9 +91,28 @@ void QGCPaletteTest::_savedDisplayThemeAppliesToPalette()
     QVERIFY(!QGCPalette::highContrast());
     QCOMPARE(QGCPalette::globalTheme(), QGCPalette::Dark);
     QCOMPARE(palette.window(), QColor("#06131B"));
+    const QPalette originalNativePalette = QGuiApplication::palette();
+    theme->setRawValue(2);
+    QVERIFY(QGCPalette::lightTheme());
+    QVERIFY(!QGCPalette::highContrast());
+    QCOMPARE(QGCPalette::globalTheme(), QGCPalette::Light);
+    QCOMPARE(palette.window(), QColor("#ffffff"));
+    QCOMPARE(palette.text(), QColor("#172B3A"));
+    QCOMPARE(QGuiApplication::palette().color(QPalette::Window), palette.window());
+    QCOMPARE(QGuiApplication::palette().color(QPalette::Text), palette.textFieldText());
+    palette.setColorGroupEnabled(false);
+    QCOMPARE(QGuiApplication::palette().color(QPalette::Disabled, QPalette::ButtonText), palette.buttonText());
+    palette.setColorGroupEnabled(true);
     theme->setRawValue(0);
     QVERIFY(QGCPalette::highContrast());
+    QVERIFY(!QGCPalette::lightTheme());
     QCOMPARE(palette.window(), QColor("#050A06"));
+    QCOMPARE(QGuiApplication::palette(), originalNativePalette);
+    theme->setRawValue(1);
+    QVERIFY(!QGCPalette::lightTheme());
+    QVERIFY(!QGCPalette::highContrast());
+    QCOMPARE(palette.window(), QColor("#06131B"));
+    QCOMPARE(QGuiApplication::palette(), originalNativePalette);
 }
 
 UT_REGISTER_TEST(QGCPaletteTest, TestLabel::Unit)

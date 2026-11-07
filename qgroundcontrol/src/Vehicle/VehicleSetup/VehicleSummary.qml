@@ -121,7 +121,9 @@ Rectangle {
                                     width:                  ScreenTools.defaultFontPixelWidth * 1.75
                                     height:                 width
                                     radius:                 width / 2
-                                    color:                  modelData.setupComplete ? "#00d932" : "red"
+                                    color:                  QGroundControl.globalPalette.lightTheme
+                                                            ? (modelData.setupComplete ? QGroundControl.globalPalette.colorGreen : QGroundControl.globalPalette.colorRed)
+                                                            : (modelData.setupComplete ? "#00d932" : "red")
                                     visible:                modelData.requiresSetup && modelData.setupSource !== ""
                                 }
 

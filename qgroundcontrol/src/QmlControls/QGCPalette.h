@@ -62,10 +62,9 @@
     void SETNAME(const QColor& color) { _colorInfoMap[_theme][_colorGroupEnabled  ? ColorGroupEnabled : ColorGroupDisabled][QStringLiteral(#NAME)] = color; _signalPaletteChangeToAll(); }
 
 /*!
- QGCPalette is used in QML ui to expose color properties for the QGC palette. There are two
- separate palettes in QGC, light and dark. The light palette is for outdoor use and the dark
- palette is for indoor use. Each palette also has a set of different colors for enabled and
- disabled states.
+ QGCPalette exposes light and dark base palettes with enabled/disabled color groups.
+ STRATUM Normal uses Dark, High Contrast uses overrides on Dark, and Light uses Light.
+ AppSettings' persisted display-mode values are separate from this class's base Theme enum.
 
  Usage:
 
@@ -104,6 +103,7 @@ public:
     Q_PROPERTY(bool         colorGroupEnabled   READ colorGroupEnabled  WRITE setColorGroupEnabled  NOTIFY paletteChanged)
     Q_PROPERTY(QStringList  colors              READ colors             CONSTANT)
     Q_PROPERTY(bool highContrast READ highContrast NOTIFY paletteChanged)
+    Q_PROPERTY(bool lightTheme READ lightTheme NOTIFY paletteChanged)
 
     DEFINE_QGC_COLOR(window,                        setWindow)
     DEFINE_QGC_COLOR(windowTransparent,             setWindowTransparent)
@@ -164,6 +164,7 @@ public:
     static Theme    globalTheme             () { return _theme; }
     static void     setGlobalTheme          (Theme newTheme);
     static bool highContrast() { return _highContrast; }
+    static bool lightTheme() { return !_highContrast && _theme == Light; }
     static void setHighContrast(bool enabled);
 
 signals:

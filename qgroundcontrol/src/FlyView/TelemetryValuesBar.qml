@@ -21,7 +21,7 @@ Item {
         height:     control.height
         color:      qgcPal.window
         radius:     ScreenTools.defaultFontPixelWidth / 2
-        opacity:    qgcPal.highContrast ? 1.0 : 0.75
+        opacity:    qgcPal.highContrast || qgcPal.lightTheme ? 1.0 : 0.75
     }
 
     ColumnLayout {

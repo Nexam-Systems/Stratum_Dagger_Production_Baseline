@@ -13,6 +13,7 @@
 #include <QtCore/QStandardPaths>
 #include <QtCore/QDir>
 #include <QtCore/QSettings>
+#include <QtGui/QGuiApplication>
 
 // Release languages are 90%+ complete
 QList<QLocale::Language> AppSettings::_rgReleaseLanguages = {
@@ -260,8 +261,53 @@ QString AppSettings::_childSavePath(const char* directory)
 
 void AppSettings::_indoorPaletteChanged(void)
 {
-    QGCPalette::setGlobalTheme(QGCPalette::Dark);
-    QGCPalette::setHighContrast(indoorPalette()->rawValue().toUInt() != 1);
+    // Saved values 0 (High Contrast) and 1 (Normal) retain their original meaning.
+    const uint theme = indoorPalette()->rawValue().toUInt();
+    if (theme > 2) qWarning() << "Unknown display theme" << theme << "- using High Contrast";
+    QGCPalette::setGlobalTheme(theme == 2 ? QGCPalette::Light : QGCPalette::Dark);
+    QGCPalette::setHighContrast(theme != 1 && theme != 2);
+    _updateNativePalette(theme == 2);
+}
+
+void AppSettings::_updateNativePalette(bool lightTheme)
+{
+    // Native Qt controls (tooltips, progress bars, etc.) also need the Light palette.
+    // Restore their exact original palette when returning to either legacy theme.
+    if (!lightTheme) {
+        if (_paletteBeforeLight) {
+            QGuiApplication::setPalette(*_paletteBeforeLight);
+            _paletteBeforeLight.reset();
+        }
+        return;
+    }
+    if (!_paletteBeforeLight) _paletteBeforeLight = QGuiApplication::palette();
+    QPalette palette = *_paletteBeforeLight;
+    QGCPalette colors;
+    for (const auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
+        colors.setColorGroupEnabled(group != QPalette::Disabled);
+        palette.setColor(group, QPalette::Window, colors.window());
+        palette.setColor(group, QPalette::WindowText, colors.text());
+        palette.setColor(group, QPalette::Base, colors.textField());
+        palette.setColor(group, QPalette::AlternateBase, colors.windowShade());
+        palette.setColor(group, QPalette::Text, colors.textFieldText());
+        palette.setColor(group, QPalette::Button, colors.button());
+        palette.setColor(group, QPalette::ButtonText, colors.buttonText());
+        palette.setColor(group, QPalette::BrightText, colors.primaryButtonText());
+        palette.setColor(group, QPalette::ToolTipBase, colors.windowShade());
+        palette.setColor(group, QPalette::ToolTipText, colors.text());
+        palette.setColor(group, QPalette::Highlight, colors.buttonHighlight());
+        palette.setColor(group, QPalette::HighlightedText, colors.buttonHighlightText());
+        palette.setColor(group, QPalette::Link, colors.brandingPurple());
+        palette.setColor(group, QPalette::LinkVisited, colors.brandingBlue());
+        palette.setColor(group, QPalette::PlaceholderText, colors.colorGrey());
+        palette.setColor(group, QPalette::Light, colors.windowShadeLight());
+        palette.setColor(group, QPalette::Midlight, colors.windowShade());
+        palette.setColor(group, QPalette::Mid, colors.buttonBorder());
+        palette.setColor(group, QPalette::Dark, colors.groupBorder());
+        palette.setColor(group, QPalette::Shadow, colors.text());
+        palette.setColor(group, QPalette::Accent, colors.brandingPurple());
+    }
+    QGuiApplication::setPalette(palette);
 }
 
 QString AppSettings::missionSavePath(void)

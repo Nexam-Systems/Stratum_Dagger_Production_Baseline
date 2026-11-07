@@ -47,7 +47,7 @@ Rectangle {
             Accessible.role: Accessible.CheckBox
 
             background: Rectangle {
-                color: header.hovered ? theme.input : theme.header
+                color: theme.lightTheme && header.down ? QGroundControl.globalPalette.windowShadeDark : header.hovered ? theme.input : theme.header
                 radius: section.radius
                 border.width: header.activeFocus ? 2 : 0
                 border.color: theme.accent

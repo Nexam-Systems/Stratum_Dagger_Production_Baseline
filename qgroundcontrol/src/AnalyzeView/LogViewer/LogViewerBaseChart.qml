@@ -274,7 +274,7 @@ Item {
     Rectangle {
         id: _zoomRect
         visible: false
-        color: Qt.rgba(1, 1, 1, 0.2)
+        color: qgcPal.lightTheme ? Qt.rgba(qgcPal.brandingPurple.r, qgcPal.brandingPurple.g, qgcPal.brandingPurple.b, 0.12) : Qt.rgba(1, 1, 1, 0.2)
         border.color: qgcPal.buttonHighlight
         border.width: 1
         z: 10
