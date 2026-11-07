@@ -1311,6 +1311,14 @@ void VideoManager::setfullScreen(bool on)
     }
 }
 
+void VideoManager::setFeedVisible(bool on)
+{
+    if (on != _feedVisible) {
+        _feedVisible = on;
+        emit feedVisibleChanged();
+    }
+}
+
 bool VideoManager::isStreamSource() const
 {
     static const QStringList videoSourceList = {

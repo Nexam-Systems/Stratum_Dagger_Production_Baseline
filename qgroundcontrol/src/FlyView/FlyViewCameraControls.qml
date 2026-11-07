@@ -421,16 +421,12 @@ Item {
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Show / hide the live video stream")
                 ToolTip.delay: 400
-                checked: QGroundControl.videoManager.streaming
-                onClicked: {
-                    var turnOn = !QGroundControl.videoManager.streaming
-                    if (turnOn) {
-                        QGroundControl.videoManager.startVideo()
-                    } else {
-                        QGroundControl.videoManager.stopVideo()
-                    }
-                    checked = Qt.binding(function() { return QGroundControl.videoManager.streaming })
-                    root.statusMessage(turnOn ? qsTr("Video feed on") : qsTr("Video feed off"))
+                // Bound to the UI-only feedVisible intent: it does not touch the stream
+                // pipeline, so it stays put when switching TV/IR and never auto-reverts.
+                checked: QGroundControl.videoManager.feedVisible
+                onToggled: {
+                    QGroundControl.videoManager.feedVisible = checked
+                    root.statusMessage(checked ? qsTr("Video feed on") : qsTr("Video feed off"))
                 }
             }
         }

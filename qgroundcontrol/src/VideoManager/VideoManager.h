@@ -33,6 +33,7 @@ class VideoManager : public QObject
     Q_PROPERTY(bool     autoStreamConfigured    READ autoStreamConfigured                       NOTIFY autoStreamConfiguredChanged)
     Q_PROPERTY(bool     decoding                READ decoding                                   NOTIFY decodingChanged)
     Q_PROPERTY(bool     fullScreen              READ fullScreen             WRITE setfullScreen NOTIFY fullScreenChanged)
+    Q_PROPERTY(bool     feedVisible             READ feedVisible            WRITE setFeedVisible NOTIFY feedVisibleChanged)
     Q_PROPERTY(bool     hasThermal              READ hasThermal                                 NOTIFY decodingChanged)
     Q_PROPERTY(bool     hasVideo                READ hasVideo                                   NOTIFY hasVideoChanged)
     Q_PROPERTY(bool     isStreamSource          READ isStreamSource                             NOTIFY isStreamSourceChanged)
@@ -124,6 +125,10 @@ public:
     bool autoStreamConfigured() const;
     bool decoding() const { return _decoding; }
     bool fullScreen() const { return _fullScreen; }
+    // STRATUM: operator show/hide toggle for the live video feed. UI-only intent (does not
+    // stop the stream pipeline, which auto-reconnects), so it stays put regardless of TV/IR
+    // feed switching.
+    bool feedVisible() const { return _feedVisible; }
     bool hasThermal() const;
     bool hasVideo() const;
     bool isStreamSource() const;
@@ -144,6 +149,7 @@ public:
     QString imageFile() const { return _imageFile; }
     QString uvcVideoSourceID() const { return _uvcVideoSourceID; }
     void setfullScreen(bool on);
+    void setFeedVisible(bool on);
     static bool gstreamerEnabled();
     static bool qtmultimediaEnabled();
     static bool uvcEnabled();
@@ -153,6 +159,7 @@ signals:
     void autoStreamConfiguredChanged();
     void decodingChanged();
     void fullScreenChanged();
+    void feedVisibleChanged();
     void hasVideoChanged();
     void imageFileChanged(const QString &filename);
     void isAutoStreamChanged();
@@ -249,6 +256,7 @@ private:
     bool _initialized = false;
     bool _gstreamerDisabledForUnitTests = false;
     bool _fullScreen = false;
+    bool _feedVisible = true;
 
     QAtomicInteger<bool> _decoding = false;
     QAtomicInteger<bool> _recording = false;
