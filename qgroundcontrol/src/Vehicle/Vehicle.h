@@ -21,6 +21,7 @@
 #include "VehicleFactGroup.h"
 #include "VehicleSigningController.h"  // Q_PROPERTY needs the full QObject type for moc/QML metatype registration
 #include "VehicleTypes.h"
+#include "VehicleThermalMonitor.h"
 
 class Actuators;
 class HealthAndArmingCheckReport;
@@ -212,6 +213,7 @@ public:
     Q_PROPERTY(CheckList            checkListState              READ checkListState             WRITE setCheckListState             NOTIFY checkListStateChanged)
     Q_PROPERTY(bool                 readyToFlyAvailable         READ readyToFlyAvailable                                            NOTIFY readyToFlyAvailableChanged)  ///< true: readyToFly signalling is available on this vehicle
     Q_PROPERTY(bool                 readyToFly                  READ readyToFly                                                     NOTIFY readyToFlyChanged)
+    Q_PROPERTY(VehicleThermalMonitor* thermal READ thermal CONSTANT)
     Q_PROPERTY(QObject*             sysStatusSensorInfo         READ sysStatusSensorInfo                                            CONSTANT)
     Q_PROPERTY(bool                 allSensorsHealthy           READ allSensorsHealthy                                              NOTIFY allSensorsHealthyChanged)    //< true: all sensors in SYS_STATUS reported as healthy
     Q_PROPERTY(bool                 requiresGpsFix              READ requiresGpsFix                                                 NOTIFY requiresGpsFixChanged)
@@ -497,6 +499,8 @@ public:
     QStringList flightModes                 ();
     QString flightMode                      () const;
     void setFlightMode                      (const QString& flightMode);
+    VehicleThermalMonitor *thermal() const { return _thermalMonitor; }
+    bool thermalCommandAllowed(MAV_CMD command, float param1 = 0.0f);
 
     bool airship() const;
 
@@ -1021,6 +1025,7 @@ private:
     Autotune*                       _autotune                       = nullptr;
     GimbalController*               _gimbalController               = nullptr;
     VehicleSupports*                _vehicleSupports                = nullptr;
+    VehicleThermalMonitor*          _thermalMonitor                 = nullptr;
 
     bool    _armed = false;         ///< true: vehicle is armed
     uint8_t _base_mode = 0;     ///< base_mode from HEARTBEAT

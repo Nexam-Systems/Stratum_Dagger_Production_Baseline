@@ -49,6 +49,7 @@ Item {
     property bool inReadyAvailable: false
     property bool inReady: true
     property bool inSensorsHealthy: true
+    property bool inThermalBlocked: false
     property string inRtlMode: "Return"
     property string inSmartRtlMode: "Smart RTL"
 
@@ -68,6 +69,11 @@ Item {
     QtObject { id: altFact; property real rawValue: harness.inVehAltRel }
     QtObject { id: factsObj; property var altitudeRelative: altFact }
     QtObject { id: linkObj; property bool communicationLost: harness.inCommLost }
+    QtObject {
+        id: thermalObj
+        property bool groundBlocked: harness.inThermalBlocked && !harness.inFlying && !harness.inLanding
+        property bool preflightReady: !harness.inThermalBlocked
+    }
 
     MockCoord { id: vehCoord;  latitude: harness.inVehLat;  longitude: harness.inVehLon }
     MockCoord { id: homeCoord; latitude: harness.inHomeLat; longitude: harness.inHomeLon }
@@ -82,6 +88,7 @@ Item {
         property bool readyToFlyAvailable: harness.inReadyAvailable
         property bool readyToFly: harness.inReady
         property bool allSensorsHealthy: harness.inSensorsHealthy
+        property var thermal: thermalObj
         property string rtlFlightMode: harness.inRtlMode
         property string smartRTLFlightMode: harness.inSmartRtlMode
         property var vehicle: factsObj
@@ -172,6 +179,18 @@ class StratumMissionStateTest(unittest.TestCase):
         self.set(inArmed=False, inReadyAvailable=True, inReady=True, inSensorsHealthy=True)
         self.assertEqual(self.key(), "READY")
         self.assertEqual(self.text(), "CONNECTED: READY")
+
+    def test_thermal_blocks_ground_readiness(self):
+        self.set(inThermalBlocked=True)
+        self.assertEqual(self.key(), "NOT_READY")
+        self.set(inArmed=True)
+        self.assertEqual(self.key(), "NOT_READY")
+
+    def test_thermal_does_not_replace_airborne_state(self):
+        self.armed("Position", inThermalBlocked=True)
+        self.assertEqual(self.key(), "MANUAL")
+        self.set(inLanding=True, inFlightMode="Hold")
+        self.assertEqual(self.key(), "LANDING")
 
     # ---- Flight modes ----
     def test_flying_on_takeoff(self):

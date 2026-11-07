@@ -58,7 +58,9 @@ Item {
     readonly property string key: {
         if (!vehicle)   return "DISCONNECTED"
         if (!_live)     return "COMMS_LOST"
+        if (vehicle.thermal && vehicle.thermal.groundBlocked) return "NOT_READY"
         if (!vehicle.armed) {
+            if (vehicle.thermal && !vehicle.thermal.preflightReady)  return "NOT_READY"
             if (vehicle.readyToFlyAvailable && !vehicle.readyToFly) return "NOT_READY"
             if (!vehicle.allSensorsHealthy)                         return "NOT_READY"
             return "READY"

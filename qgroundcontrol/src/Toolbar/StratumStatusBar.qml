@@ -37,10 +37,7 @@ Item {
     readonly property var  _facts:  vehicle ? vehicle.vehicle : null
     readonly property var  _gps:    vehicle ? vehicle.gps : null
     readonly property var  _batt:   (vehicle && vehicle.batteries && vehicle.batteries.count > 0) ? vehicle.batteries.get(0) : null
-    // STRATUM KAN-24: per-motor ESC telemetry. temperature is centi-celsius (raw/100 = °C),
-    // 32767 = no reading; online status is the shared info bitmask on ESC 0.
-    readonly property var  _escs:   (vehicle && vehicle.escs) ? vehicle.escs : null
-    readonly property int  _escOnlineBitmask: (_escs && _escs.count > 0) ? _escs.get(0).info.rawValue : 0
+    readonly property var  _thermal: vehicle ? vehicle.thermal : null
     readonly property bool _live:   !!vehicle && (!vehicle.vehicleLinkManager || !vehicle.vehicleLinkManager.communicationLost)
     readonly property var  _target: (pendingTarget && pendingTarget.isValid) ? pendingTarget : designatedTarget
 
@@ -148,28 +145,15 @@ Item {
         return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss
     }
 
-    // STRATUM KAN-24: motor (ESC) temperature. A motor counts only when it is online AND
-    // reports a valid reading (raw != 32767). Raw fact value is centi-celsius.
-    function _motorOnline(i) {
-        return (_escOnlineBitmask & (1 << i)) !== 0
+    function _avgTempText() {
+        return _thermal && _thermal.freshCount > 0 && isFinite(_thermal.averageC)
+               ? _thermal.averageC.toFixed(1) + " \u00b0C" : "--"
     }
-    function _motorTempC(i) {
-        if (!_escs || i < 0 || i >= _escs.count || !_motorOnline(i))
-            return Number.NaN
-        var raw = Number(_escs.get(i).temperature.rawValue)
-        if (!isFinite(raw) || raw === 32767)
-            return Number.NaN
-        return raw / 100
-    }
-    function _avgMotorTempText() {
-        if (!_escs || _escs.count === 0)
-            return "--"
-        var sum = 0, n = 0
-        for (var i = 0; i < _escs.count; i++) {
-            var t = _motorTempC(i)
-            if (!isNaN(t)) { sum += t; n++ }
-        }
-        return n === 0 ? "--" : (Math.round(sum / n) + " \u00b0C")
+    function _thermalColor(severity) {
+        if (severity === 3) return qgcPal.colorRed
+        if (severity === 2) return qgcPal.colorOrange
+        if (severity === 1) return qgcPal.colorGreen
+        return _dimColor
     }
 
     function _num(fact) {
@@ -499,12 +483,13 @@ Item {
                 }
             }
 
-            // STRATUM KAN-24: average motor (ESC) temperature; click to see each motor.
+            // One cell for the four ESCs' average; color follows the worst motor.
             Divider {}
             Cell {
                 id: motTempCell
-                label: qsTr("MOT TEMP")
-                value: root._avgMotorTempText()
+                label: qsTr("AVG TEMP")
+                value: root._avgTempText()
+                valueColor: root._thermalColor(root._thermal ? root._thermal.severity : 0)
                 clickable: true
                 showChevron: true
                 minContentWidth: ScreenTools.defaultFontPixelWidth * 7
@@ -685,7 +670,6 @@ Item {
         }
     }
 
-    // STRATUM KAN-24: per-motor ESC temperature drawer (opened from the MOT TEMP cell).
     Component {
         id: escTempDrawerComponent
         ToolIndicatorPage {
@@ -693,26 +677,34 @@ Item {
             contentComponent: SettingsGroupLayout {
                 heading: qsTr("Motor Temperatures")
 
-                QGCLabel {
-                    visible: !root._escs || root._escs.count === 0
-                    text:    qsTr("No ESC telemetry")
-                }
-
                 Repeater {
-                    model: root._escs ? root._escs.count : 0
-                    LabelledLabel {
-                        label:     qsTr("Motor %1").arg(index + 1)
-                        labelText: {
-                            var t = root._motorTempC(index)
-                            return isNaN(t) ? qsTr("N/A") : (t.toFixed(1) + " \u00b0C")
+                    model: 4
+                    RowLayout {
+                        required property int index
+                        readonly property var reading: root._thermal && index < root._thermal.sensors.length
+                                                       ? root._thermal.sensors[index] : null
+                        Layout.fillWidth: true
+                        spacing: ScreenTools.defaultFontPixelWidth * 2
+                        QGCLabel {
+                            text: reading ? reading.name : qsTr("Motor %1").arg(index + 1)
+                            Layout.fillWidth: true
+                        }
+                        QGCLabel {
+                            text: reading && isFinite(reading.temperatureC)
+                                  ? reading.temperatureC.toFixed(2) + " \u00b0C" : qsTr("N/A")
+                            color: root._thermalColor(reading ? reading.severity : 0)
                         }
                     }
                 }
 
-                LabelledLabel {
-                    visible:   root._escs && root._escs.count > 0
-                    label:     qsTr("Average:")
-                    labelText: root._avgMotorTempText()
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: ScreenTools.defaultFontPixelWidth * 2
+                    QGCLabel { text: qsTr("Average:"); Layout.fillWidth: true }
+                    QGCLabel {
+                        text: root._avgTempText()
+                        color: root._thermalColor(root._thermal ? root._thermal.severity : 0)
+                    }
                 }
             }
         }
