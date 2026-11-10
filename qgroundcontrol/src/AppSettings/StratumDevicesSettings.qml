@@ -23,6 +23,47 @@ Rectangle {
 
     QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
+    // Reactive connect-status dialog: shows "Connecting to X …" until a vehicle actually
+    // appears on the asset's link, then switches to "Connected to X." and auto-closes.
+    QGCPopupDialogFactory {
+        id: connectStatusDialogFactory
+        dialogComponent: connectStatusDialogComponent
+    }
+
+    Component {
+        id: connectStatusDialogComponent
+
+        QGCPopupDialog {
+            id:      connectStatusDialog
+            title:   qsTr("Connect Asset")
+            buttons: Dialog.Close
+
+            // Set by connectStatusDialogFactory.open({...}).
+            property string linkName:    ""
+            property string displayName: ""
+            property string detail:      ""   // dev-only extra, e.g. " at 192.168.20.5:14545"
+
+            readonly property bool _connected: {
+                void(QGroundControl.multiVehicleManager.vehicles.count)
+                return linkName.length > 0 && root.vehicleOnLink(linkName) !== null
+            }
+
+            QGCLabel {
+                text: connectStatusDialog._connected
+                          ? qsTr("Connected to %1.").arg(connectStatusDialog.displayName)
+                          : qsTr("Connecting to %1%2 …").arg(connectStatusDialog.displayName).arg(connectStatusDialog.detail)
+            }
+
+            // Once the vehicle is confirmed connected, close the dialog shortly after so the
+            // operator sees the "Connected" confirmation without having to dismiss it.
+            Timer {
+                interval: 1200
+                running:  connectStatusDialog._connected
+                onTriggered: connectStatusDialog.close()
+            }
+        }
+    }
+
     function loadRegistry() {
         deviceModel.clear()
         try {
@@ -93,6 +134,24 @@ Rectangle {
             const c = lm.linkConfigurations.get(i)
             if (c && c.name === linkName) {
                 return c
+            }
+        }
+        return null
+    }
+
+    // Return the connected Vehicle currently using the named link, or null. A Vehicle only
+    // exists once a heartbeat has been received, so this confirms the vehicle actually
+    // connected (not merely that the UDP link/socket was created).
+    function vehicleOnLink(linkName) {
+        const mvm = QGroundControl.multiVehicleManager
+        for (let i = 0; i < mvm.vehicles.count; ++i) {
+            const v = mvm.vehicles.get(i)
+            if (!v || !v.vehicleLinkManager) {
+                continue
+            }
+            if (v.vehicleLinkManager.linkNames.indexOf(linkName) !== -1
+                    && !v.vehicleLinkManager.communicationLost) {
+                return v
             }
         }
         return null
@@ -214,15 +273,18 @@ Rectangle {
                     Layout.fillWidth: true
                     spacing:          ScreenTools.defaultFontPixelWidth
 
-                    // Live connection state derived from the asset's own UDP link: linkActive is
-                    // true once the link is up (recomputed when links are added/removed, and when
-                    // the matched config's linkActive changes). This reflects the real connection,
-                    // unlike signing-key usage which only flips once signed traffic is seen.
+                    // Live connection state: true only when a Vehicle is actually connected on
+                    // this asset's link (a Vehicle exists only after a heartbeat), not merely
+                    // when the UDP socket was created. _linkCfg is still used for Disconnect.
+                    readonly property string _linkName: root.assetLinkName(serialField.text, name)
                     readonly property var    _linkCfg: {
                         void(QGroundControl.linkManager.linkConfigurations.count)
                         return root.assetLinkConfig(serialField.text, name)
                     }
-                    readonly property bool   _connected: _linkCfg ? _linkCfg.linkActive : false
+                    readonly property bool   _connected: {
+                        void(QGroundControl.multiVehicleManager.vehicles.count)
+                        return root.vehicleOnLink(_linkName) !== null
+                    }
 
                     QGCTextField {
                         id:                    serialField
@@ -337,12 +399,15 @@ Rectangle {
                                               : qsTr("Serial key invalid."))
                                 return
                             }
+                            const displayName = name.length ? name : serialField.text
                             root.connectDevice(serialField.text, name)
-                            QGroundControl.showMessageDialog(root, qsTr("Connect Asset"),
-                                root._dev
-                                    ? qsTr("Connecting to %1 at %2:%3 …")
-                                        .arg(name.length ? name : serialField.text).arg(r.dataIp).arg(r.port)
-                                    : qsTr("Connecting to %1 …").arg(name.length ? name : serialField.text))
+                            // Reactive dialog: shows "Connecting …" until the vehicle actually
+                            // appears on the link, then "Connected to X." and auto-closes.
+                            connectStatusDialogFactory.open({
+                                linkName:    assetRow._linkName,
+                                displayName: displayName,
+                                detail:      root._dev ? qsTr(" at %1:%2").arg(r.dataIp).arg(r.port) : ""
+                            })
                         }
                     }
                     QGCButton {
