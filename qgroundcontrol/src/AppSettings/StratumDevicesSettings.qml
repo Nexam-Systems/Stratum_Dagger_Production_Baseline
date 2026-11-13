@@ -219,9 +219,17 @@ Rectangle {
     Component.onCompleted: {
         loadRegistry()
         // Make every registered device's handshake key available up front so any of them
-        // can be accepted the moment it connects.
+        // can be accepted the moment it connects. Skip keys that are already present: signing
+        // keys persist in MAVLinkSigningKeys across tab opens (loaded at startup), and
+        // re-registering runs an expensive PBKDF2 derivation (~250 ms each) per asset, which
+        // made the Assets tab take several seconds to open every time. Only newly-added assets
+        // pay the one-time derivation cost.
         for (let i = 0; i < deviceModel.count; ++i) {
             const row = deviceModel.get(i)
+            const keyName = (row.name && row.name.length > 0) ? row.name : row.serial
+            if (keyName.length > 0 && QGroundControl.mavlinkSigningKeys.keyHexByName(keyName) !== "") {
+                continue
+            }
             registerSigningKey(row.serial, row.name)
         }
     }
