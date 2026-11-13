@@ -46,6 +46,17 @@
 #include <QtCore/QTimer>
 #include <QtCore/QUrl>
 #include <QtNetwork/QUdpSocket>
+#include <QtNetwork/QTcpSocket>
+#include <QtNetwork/QAbstractSocket>
+#include <QtNetwork/QHostAddress>
+#ifdef Q_OS_WIN
+// Qt builds with WIN32_LEAN_AND_MEAN, so <windows.h> does not pull in the old winsock.h and
+// these winsock2-based headers include cleanly after the Qt headers above.
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#include <icmpapi.h>
+#endif
 #include <QtQml/QQmlEngine>
 #include <QtQuick/QQuickItem>
 #include <QtQuick/QQuickWindow>
@@ -1600,6 +1611,134 @@ QVariantMap VideoManager::decodeDeviceSerial(const QString &serialHex) const
         result[QStringLiteral("error")] = error;
     }
     return result;
+}
+
+// ---------------------------------------------------------------------------
+// STRATUM #84: Test Pairing — host-reachability ping for the vehicle + camera.
+// Pings the IP only (no port): ICMP echo on Windows, best-effort TCP fallback elsewhere.
+// ---------------------------------------------------------------------------
+namespace {
+constexpr int kPairingAttemptMs  = 900;    // per-attempt ping timeout
+constexpr int kPairingRetryMs    = 350;    // backoff between attempts
+constexpr int kPairingDeadlineMs = 20000;  // overall per-phase/total deadline
+}
+
+bool VideoManager::_pingHost(const QString &ip, int timeoutMs)
+{
+    const int timeout = timeoutMs > 0 ? timeoutMs : 900;
+    const QHostAddress host(ip);
+    if (host.protocol() != QAbstractSocket::IPv4Protocol) {
+        return false;
+    }
+#ifdef Q_OS_WIN
+    HANDLE hIcmp = IcmpCreateFile();
+    if (hIcmp == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    const IPAddr dest = htonl(host.toIPv4Address());  // IcmpSendEcho wants network byte order
+    char sendData[8] = {0};
+    const DWORD replySize = sizeof(ICMP_ECHO_REPLY) + sizeof(sendData) + 8;
+    QByteArray replyBuffer(static_cast<int>(replySize), 0);
+    const DWORD count = IcmpSendEcho(hIcmp, dest, sendData,
+                                     static_cast<WORD>(sizeof(sendData)),
+                                     nullptr, replyBuffer.data(), replySize,
+                                     static_cast<DWORD>(timeout));
+    bool reachable = false;
+    if (count > 0) {
+        const auto *reply = reinterpret_cast<const ICMP_ECHO_REPLY *>(replyBuffer.constData());
+        reachable = (reply->Status == IP_SUCCESS);
+    }
+    IcmpCloseHandle(hIcmp);
+    return reachable;
+#else
+    // No raw ICMP without privileges on these platforms (not the deployment target). Best-effort:
+    // a host that accepts OR actively refuses a TCP connection is reachable; only a timeout is not.
+    QTcpSocket socket;
+    socket.connectToHost(host, 80);
+    if (socket.waitForConnected(timeout)) {
+        socket.abort();
+        return true;
+    }
+    return socket.error() == QAbstractSocket::ConnectionRefusedError;
+#endif
+}
+
+void VideoManager::startPairingTest(const QString &vehicleIp, const QString &cameraIp)
+{
+    cancelPairingTest();
+
+    _pairingVehicleIp = vehicleIp;
+    _pairingCameraIp  = cameraIp;
+    _pairingPhase     = 1;
+    ++_pairingGeneration;
+    _pairingDeadline.start();
+
+    _pairingProbeCurrent();
+}
+
+void VideoManager::_pairingProbeCurrent()
+{
+    const bool vehiclePhase = (_pairingPhase == 1);
+    const QString ip    = vehiclePhase ? _pairingVehicleIp : _pairingCameraIp;
+    const QString stage = vehiclePhase ? tr("vehicle") : tr("camera");
+
+    emit pairingTestStage(stage, ip);
+
+    // Ping off the GUI thread; the generation guard drops results from a cancelled/restarted run.
+    const int generation = _pairingGeneration;
+    (void) QtConcurrent::run([ip]() { return VideoManager::_pingHost(ip, kPairingAttemptMs); })
+        .then(this, [this, generation](bool reachable) {
+            if (generation != _pairingGeneration || _pairingPhase == 0) {
+                return;
+            }
+            if (reachable) {
+                _pairingPhaseReachable();
+            } else {
+                _pairingRetryOrFail();
+            }
+        });
+}
+
+void VideoManager::_pairingPhaseReachable()
+{
+    if (_pairingPhase == 1) {
+        _pairingPhase = 2;
+        _pairingProbeCurrent();
+    } else {
+        _pairingFinish(true, QString());
+    }
+}
+
+void VideoManager::_pairingRetryOrFail()
+{
+    if (_pairingDeadline.isValid() && _pairingDeadline.elapsed() < kPairingDeadlineMs) {
+        const int generation = _pairingGeneration;
+        QTimer::singleShot(kPairingRetryMs, this, [this, generation]() {
+            if (generation == _pairingGeneration && _pairingPhase != 0) {
+                _pairingProbeCurrent();
+            }
+        });
+    } else {
+        const QString who = (_pairingPhase == 1) ? tr("vehicle") : tr("camera");
+        _pairingFinish(false, tr("Could not reach the %1.").arg(who));
+    }
+}
+
+void VideoManager::_pairingFinish(bool ok, const QString &reason)
+{
+    _pairingPhase = 0;
+    ++_pairingGeneration;  // invalidate any ping still in flight
+    if (ok) {
+        emit pairingTestSucceeded();
+    } else {
+        emit pairingTestFailed(reason);
+    }
+}
+
+void VideoManager::cancelPairingTest()
+{
+    _pairingPhase = 0;
+    ++_pairingGeneration;  // invalidate any ping still in flight
 }
 
 bool VideoManager::applyDeviceSerial(const QString &serialHex)
