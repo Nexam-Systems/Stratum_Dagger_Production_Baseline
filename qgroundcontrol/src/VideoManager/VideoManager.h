@@ -256,7 +256,11 @@ private:
     bool _initialized = false;
     bool _gstreamerDisabledForUnitTests = false;
     bool _fullScreen = false;
-    bool _feedVisible = true;
+    // STRATUM (#81): the video feed starts OFF. The stream is not started on launch or on
+    // vehicle connect (so it doesn't compete with parameter/telemetry load); the operator
+    // turns it on manually via the camera-panel toggle. _startReceiver() is gated on this,
+    // so no start path auto-resumes the stream until feedVisible is set true.
+    bool _feedVisible = false;
 
     QAtomicInteger<bool> _decoding = false;
     QAtomicInteger<bool> _recording = false;
