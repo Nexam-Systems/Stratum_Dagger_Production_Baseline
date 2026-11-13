@@ -64,6 +64,68 @@ Rectangle {
         }
     }
 
+    // STRATUM #84: Test Pairing dialog. Shows "Testing vehicle connectivity" while the backend
+    // probes the vehicle then the camera, switches to "Vehicle ready to be connected" on
+    // success (auto-closes after 1.5 s), or shows the failure reason. Dev build additionally
+    // shows the IP currently being probed. Closing cancels the in-progress probe.
+    QGCPopupDialogFactory {
+        id: pairingDialogFactory
+        dialogComponent: pairingDialogComponent
+    }
+
+    Component {
+        id: pairingDialogComponent
+
+        QGCPopupDialog {
+            id:      pairingDialog
+            title:   qsTr("Test Pairing")
+            buttons: Dialog.Close
+
+            property string statusText: qsTr("Testing vehicle connectivity …")
+            property bool   done:       false
+
+            onClosed: QGroundControl.videoManager.cancelPairingTest()
+
+            ColumnLayout {
+                spacing: ScreenTools.defaultFontPixelHeight / 2
+
+                QGCLabel {
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 44
+                    wrapMode:              Text.WordWrap
+                    text:                  pairingDialog.statusText
+                }
+
+                Connections {
+                    target: QGroundControl.videoManager
+
+                    function onPairingTestStage(stage, endpoint) {
+                        if (pairingDialog.done) {
+                            return
+                        }
+                        pairingDialog.statusText = root._dev
+                            ? qsTr("Testing vehicle connectivity … pinging %1 (%2)").arg(stage).arg(endpoint)
+                            : qsTr("Testing vehicle connectivity …")
+                    }
+                    function onPairingTestSucceeded() {
+                        pairingDialog.done = true
+                        pairingDialog.statusText = qsTr("Vehicle ready to be connected")
+                        pairingAutoClose.start()
+                    }
+                    function onPairingTestFailed(reason) {
+                        pairingDialog.done = true
+                        pairingDialog.statusText = root._dev ? reason : qsTr("Vehicle not reachable.")
+                    }
+                }
+
+                Timer {
+                    id:       pairingAutoClose
+                    interval: 1500
+                    onTriggered: pairingDialog.close()
+                }
+            }
+        }
+    }
+
     function loadRegistry() {
         deviceModel.clear()
         try {
@@ -168,6 +230,8 @@ Rectangle {
 
         const lm = QGroundControl.linkManager
         const linkName = assetLinkName(serial, name)
+        // Single-vehicle policy: drop any other connected vehicle before connecting this one.
+        disconnectOtherConnections(linkName)
         for (let i = 0; i < lm.linkConfigurations.count; ++i) {
             const existing = lm.linkConfigurations.get(i)
             if (existing && existing.name === linkName) {
@@ -199,14 +263,35 @@ Rectangle {
         return false
     }
 
+    // Enforce a single connected vehicle: disconnect every currently-active link except the
+    // one we are about to connect (keepLinkName). Called from connectDevice so that connecting
+    // a new asset automatically drops any other connected vehicle.
+    function disconnectOtherConnections(keepLinkName) {
+        const lm = QGroundControl.linkManager
+        for (let i = 0; i < lm.linkConfigurations.count; ++i) {
+            const c = lm.linkConfigurations.get(i)
+            if (c && c.name !== keepLinkName && c.linkActive) {
+                lm.disconnectLinkConfiguration(c)
+            }
+        }
+    }
+
     ListModel { id: deviceModel }
 
     Component.onCompleted: {
         loadRegistry()
         // Make every registered device's handshake key available up front so any of them
-        // can be accepted the moment it connects.
+        // can be accepted the moment it connects. Skip keys that are already present: signing
+        // keys persist in MAVLinkSigningKeys across tab opens (loaded at startup), and
+        // re-registering runs an expensive PBKDF2 derivation (~250 ms each) per asset, which
+        // made the Assets tab take several seconds to open every time. Only newly-added assets
+        // pay the one-time derivation cost.
         for (let i = 0; i < deviceModel.count; ++i) {
             const row = deviceModel.get(i)
+            const keyName = (row.name && row.name.length > 0) ? row.name : row.serial
+            if (keyName.length > 0 && QGroundControl.mavlinkSigningKeys.keyHexByName(keyName) !== "") {
+                continue
+            }
             registerSigningKey(row.serial, row.name)
         }
     }
@@ -385,6 +470,22 @@ Rectangle {
                                     root._dev ? qsTr("Could not provision %1.").arg(serialField.text)
                                               : qsTr("Could not register vehicle."))
                             }
+                        }
+                    }
+                    QGCButton {
+                        text:    qsTr("Test Pairing")
+                        enabled: serialField.text.length > 0
+                        onClicked: {
+                            const r = root._vm.decodeDeviceSerial(serialField.text)
+                            if (!r.valid) {
+                                QGroundControl.showMessageDialog(root, qsTr("Test Pairing"),
+                                    root._dev ? qsTr("Could not decode serial: %1").arg(r.error)
+                                              : qsTr("Serial key invalid."))
+                                return
+                            }
+                            pairingDialogFactory.open()
+                            // Ping the vehicle IP, then the camera IP (host reachability, no port).
+                            root._vm.startPairingTest(r.dataIp, r.cameraIp)
                         }
                     }
                     QGCButton {
