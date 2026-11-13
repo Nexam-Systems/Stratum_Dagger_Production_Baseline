@@ -5,6 +5,7 @@
 #include <QtCore/QObject>
 #include <QtCore/QSize>
 #include <QtCore/QUrl>
+#include <QtCore/QElapsedTimer>
 #include <QtQmlIntegration/QtQmlIntegration>
 
 #include <QtCore/QString>
@@ -118,6 +119,13 @@ public:
     // flushed; the device registry calls this so a removal survives an abrupt exit.
     Q_INVOKABLE void syncSettings();
 
+    // STRATUM #84: Test Pairing. Ping the decoded vehicle IP, then the camera IP, for host
+    // reachability before Connect (ICMP echo — the host IP only, no port). Non-blocking; emits
+    // pairingTestStage as it progresses and pairingTestSucceeded / pairingTestFailed when done.
+    Q_INVOKABLE void startPairingTest(const QString &vehicleIp, const QString &cameraIp);
+    // STRATUM #84: stop an in-progress Test Pairing probe.
+    Q_INVOKABLE void cancelPairingTest();
+
     void init(QQuickWindow *mainWindow);
     void startGStreamerInit();
     bool waitForGStreamerInit(int timeoutMs = 60000);
@@ -173,6 +181,12 @@ signals:
     void c12AiEnabledChanged();
     void c12AttitudeChanged();
     void videoSizeChanged();
+
+    // STRATUM #84: Test Pairing progress/result. stage is "vehicle" or "camera"; endpoint is
+    // the "ip:port" currently being probed (shown only in the dev build).
+    void pairingTestStage(const QString &stage, const QString &endpoint);
+    void pairingTestSucceeded();
+    void pairingTestFailed(const QString &reason);
 
 private slots:
     void _communicationLostChanged(bool communicationLost);
@@ -261,6 +275,21 @@ private:
     // turns it on manually via the camera-panel toggle. _startReceiver() is gated on this,
     // so no start path auto-resumes the stream until feedVisible is set true.
     bool _feedVisible = false;
+
+    // STRATUM #84: Test Pairing probe state. _pairingPhase: 0 idle, 1 pinging vehicle,
+    // 2 pinging camera. _pairingGeneration invalidates in-flight async pings on cancel/restart.
+    int           _pairingPhase = 0;
+    int           _pairingGeneration = 0;
+    QString       _pairingVehicleIp;
+    QString       _pairingCameraIp;
+    QElapsedTimer _pairingDeadline;
+    void _pairingProbeCurrent();
+    void _pairingPhaseReachable();
+    void _pairingRetryOrFail();
+    void _pairingFinish(bool ok, const QString &reason);
+    // Host reachability by IP only (no port). Windows: ICMP echo via IcmpSendEcho (no elevation
+    // required). Other platforms: best-effort TCP fallback. Runs off the GUI thread.
+    static bool _pingHost(const QString &ip, int timeoutMs);
 
     QAtomicInteger<bool> _decoding = false;
     QAtomicInteger<bool> _recording = false;
