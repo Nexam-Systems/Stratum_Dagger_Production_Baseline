@@ -227,6 +227,11 @@ Rectangle {
             return false
         }
         registerSigningKey(serial, name)
+        // KAN-36: provision THIS vehicle's camera (IP + TV/IR RTSP URLs) from its serial on
+        // connect, so the camera settings follow the connected vehicle instead of staying on
+        // whichever device was last applied. Without this, connecting a different vehicle
+        // leaves the camera pointed at the previous device's IP (no stream / wrong camera).
+        _vm.applyDeviceSerial(serial)
 
         const lm = QGroundControl.linkManager
         const linkName = assetLinkName(serial, name)
