@@ -74,6 +74,16 @@ Item {
         }
         standoffLatField.text = coordinate.latitude.toFixed(7)
         standoffLonField.text = coordinate.longitude.toFixed(7)
+        // STRATUM KAN-35: plot the fetched target as the blue pending marker straight away —
+        // the same marker a standoff map-pick produces. Drive pick mode + the pending
+        // coordinate explicitly (after setting the fields, so this value wins) so the pointer
+        // reliably appears at the fetched location. The standoff panel's existing lifecycle
+        // then takes over: cancelling clears the marker, reopening re-plots the retained
+        // lat/lon, and "Set Standoff" fixes the engaged (red) marker.
+        if (mapControl) {
+            mapControl.startStandoffPick()
+            mapControl.setStandoffPendingCoordinate(coordinate)
+        }
     }
 
     on_ActiveVehicleChanged: {
