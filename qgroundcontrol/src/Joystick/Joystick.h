@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <array>
+#include <atomic>
 
 #include "RemoteControlCalibrationController.h"
 #include "JoystickSettings.h"
@@ -333,8 +334,11 @@ public:
     Q_INVOKABLE void stopConfiguration(); ///< Tells the joystick that the configuration UI is being closed so it can do any special processing required
 
     void stop();
+    Q_INVOKABLE int setProtectedGamepadMode(bool enabled, bool sessionEnabled = false);
+    Q_INVOKABLE virtual bool supportsProtectedGamepad() const { return false; }
 
 signals:
+    void protectedGamepadState(int buttons, bool safetyHeld, bool manualHeld, bool ready, int generation, qint64 timestampMs);
     void buttonActionsChanged();
     void assignableActionsChanged();
     void playerIndexChanged();
@@ -389,6 +393,7 @@ signals:
 
 protected:
     QString _name;
+    virtual int _getProtectedTrigger(bool left) const { Q_UNUSED(left); return 0; }
     int _axisCount = 0;
     int _buttonCount = 0;
     int _hatCount = 0;
@@ -425,6 +430,12 @@ private:
     void _stopPollingThread();
     QString _pollingFlagsToString(PollingFlags flags) const;
     PollingFlags _pollingFlags = PollingNone;
+    std::atomic_bool _protectedGamepadMode{false};
+    std::atomic_bool _protectedSessionEnabled{false};
+    std::atomic_int _protectedGamepadGeneration{0};
+    int _protectedPollingGeneration = -1;
+    bool _protectedReleaseRequired = true;
+    bool _protectedManualHeld = false;
 
     Vehicle* _pollingVehicle = nullptr;
 

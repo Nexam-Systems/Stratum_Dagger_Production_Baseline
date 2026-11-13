@@ -15,6 +15,7 @@
 #include "MultiVehicleManager.h"
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QDateTime>
 #include <QtCore/QSet>
 #include <algorithm>
 #include <cmath>
@@ -747,6 +748,13 @@ void Joystick::_updateButtonEventStates(QVector<ButtonEvent_t> &buttonEventState
     }
 }
 
+int Joystick::setProtectedGamepadMode(bool enabled, bool sessionEnabled)
+{
+    _protectedSessionEnabled.store(enabled && sessionEnabled);
+    _protectedGamepadMode.store(enabled);
+    return ++_protectedGamepadGeneration;
+}
+
 void Joystick::_handleButtons()
 {
     if (_pollingFlags == PollingNone) {
@@ -755,6 +763,30 @@ void Joystick::_handleButtons()
     }
 
     _updateButtonEventStates(_buttonEventStates);
+
+    if (_protectedGamepadMode.load()) {
+        const int generation = _protectedGamepadGeneration.load();
+        if (_protectedPollingGeneration != generation) {
+            _protectedPollingGeneration = generation;
+            _protectedReleaseRequired = true;
+        }
+        int buttons = 0;
+        for (int index = 0; index < qMin(_buttonCount, 31); ++index) {
+            if (_getButton(index)) buttons |= (1 << index);
+        }
+        const bool safetyHeld = _getProtectedTrigger(true) > AxisMax * 3 / 4;
+        const bool manualHeld = _getProtectedTrigger(false) > AxisMax * 3 / 4;
+        const bool triggersReleased = _getProtectedTrigger(true) < AxisMax / 4 && _getProtectedTrigger(false) < AxisMax / 4;
+        if (buttons == 0 && triggersReleased) _protectedReleaseRequired = false;
+        const bool ready = _protectedSessionEnabled.load() && !_protectedReleaseRequired && _pollingFlags.testFlag(PollingForVehicle)
+                           && !_pollingFlags.testFlag(PollingForConfiguration)
+                           && _joystickManager->activeJoystickEnabledForActiveVehicle()
+                           && _joystickSettings.calibrated()->rawValue().toBool();
+        _protectedManualHeld = ready && manualHeld;
+        if (!_protectedManualHeld && _pollingVehicle) _pollingVehicle->sendJoystickAuxRcOverrideThreadSafe({}, {}, false);
+        emit protectedGamepadState(buttons, safetyHeld, _protectedManualHeld, ready, generation, QDateTime::currentMSecsSinceEpoch());
+        if (!_pollingFlags.testFlag(PollingForConfiguration)) return;
+    }
 
     if (_pollingFlags.testFlag(PollingForConfiguration)) {
         for (int buttonIndex = 0; buttonIndex < _totalButtonCount; buttonIndex++) {
@@ -965,6 +997,10 @@ void Joystick::_handleAxis()
         }
 
         bool useDeadband = _joystickSettings.useDeadband()->rawValue().toBool();
+        if (_protectedGamepadMode.load() && (!_protectedSessionEnabled.load() || !_protectedManualHeld)) {
+            vehicle->sendJoystickAuxRcOverrideThreadSafe({}, {}, false);
+            return;
+        }
         bool throttleModeCenterZero = _joystickSettings.throttleModeCenterZero()->rawValue().toBool();
         bool negativeThrust = _joystickSettings.negativeThrust()->rawValue().toBool();
         bool circleCorrection = _joystickSettings.circleCorrection()->rawValue().toBool();
@@ -1176,10 +1212,12 @@ void Joystick::_handleAxis()
 
         emit axisValues(roll, pitch, yaw, throttle);
 
+        if (_protectedGamepadMode.load()) buttonPressedBits = 0;
         const uint16_t lowButtons = static_cast<uint16_t>(buttonPressedBits & 0xFFFF);
         const uint16_t highButtons = static_cast<uint16_t>((buttonPressedBits >> 16) & 0xFFFF);
 
 
+        if (_protectedGamepadMode.load() && (!_protectedSessionEnabled.load() || !_protectedManualHeld || !_joystickManager->activeJoystickEnabledForActiveVehicle())) return;
         vehicle->sendJoystickDataThreadSafe(roll, pitch, yaw, throttle, lowButtons, highButtons, pitchExtension, rollExtension, auxManualControl1, auxManualControl2, auxManualControl3, auxManualControl4, auxManualControl5, auxManualControl6);
         vehicle->sendJoystickAuxRcOverrideThreadSafe(auxRcOverridePwm, auxRcOverrideEnabled, !additionalAxesFunctionIsManualControl);
     }
@@ -1586,6 +1624,7 @@ QStringList Joystick::buttonActions() const
 
 void Joystick::_executeButtonAction(const QString &action, const ButtonEvent_t buttonEvent)
 {
+    if (_protectedGamepadMode.load()) return;
     Vehicle *const vehicle = _pollingVehicle;
     if (!vehicle) {
         qCWarning(JoystickLog) << "Internal Error: No vehicle for joystick!";

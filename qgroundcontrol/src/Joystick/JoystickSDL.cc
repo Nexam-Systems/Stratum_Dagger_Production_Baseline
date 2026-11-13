@@ -401,6 +401,18 @@ bool JoystickSDL::_update()
 // Input State Accessors
 //-----------------------------------------------------------------------------
 
+int JoystickSDL::_getProtectedTrigger(bool left) const
+{
+    return _sdlGamepad ? SDL_GetGamepadAxis(_sdlGamepad, left ? SDL_GAMEPAD_AXIS_LEFT_TRIGGER : SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) : 0;
+}
+
+bool JoystickSDL::supportsProtectedGamepad() const
+{
+    return isGamepad() && _gamepadAxes.contains(SDL_GAMEPAD_AXIS_LEFT_TRIGGER)
+           && _gamepadAxes.contains(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)
+           && _buttonCount > ButtonRightShoulder;
+}
+
 bool JoystickSDL::_getButton(int idx) const
 {
     // First try the standardized gamepad set if idx is inside that set
