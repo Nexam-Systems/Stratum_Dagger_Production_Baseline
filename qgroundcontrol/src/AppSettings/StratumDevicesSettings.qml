@@ -484,8 +484,8 @@ Rectangle {
                                 return
                             }
                             pairingDialogFactory.open()
-                            // Probe the vehicle data-link endpoint, then the camera (RTSP 554).
-                            root._vm.startPairingTest(r.dataIp, r.port, r.cameraIp, 554)
+                            // Ping the vehicle IP, then the camera IP (host reachability, no port).
+                            root._vm.startPairingTest(r.dataIp, r.cameraIp)
                         }
                     }
                     QGCButton {

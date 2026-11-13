@@ -48,6 +48,15 @@
 #include <QtNetwork/QUdpSocket>
 #include <QtNetwork/QTcpSocket>
 #include <QtNetwork/QAbstractSocket>
+#include <QtNetwork/QHostAddress>
+#ifdef Q_OS_WIN
+// Qt builds with WIN32_LEAN_AND_MEAN, so <windows.h> does not pull in the old winsock.h and
+// these winsock2-based headers include cleanly after the Qt headers above.
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#include <icmpapi.h>
+#endif
 #include <QtQml/QQmlEngine>
 #include <QtQuick/QQuickItem>
 #include <QtQuick/QQuickWindow>
@@ -1605,33 +1614,64 @@ QVariantMap VideoManager::decodeDeviceSerial(const QString &serialHex) const
 }
 
 // ---------------------------------------------------------------------------
-// STRATUM #84: Test Pairing — reachability probe for the vehicle + camera.
+// STRATUM #84: Test Pairing — host-reachability ping for the vehicle + camera.
+// Pings the IP only (no port): ICMP echo on Windows, best-effort TCP fallback elsewhere.
 // ---------------------------------------------------------------------------
 namespace {
-constexpr int kPairingAttemptMs  = 900;    // per-attempt connect timeout
+constexpr int kPairingAttemptMs  = 900;    // per-attempt ping timeout
 constexpr int kPairingRetryMs    = 350;    // backoff between attempts
 constexpr int kPairingDeadlineMs = 20000;  // overall per-phase/total deadline
 }
 
-void VideoManager::startPairingTest(const QString &vehicleIp, int vehiclePort,
-                                    const QString &cameraIp, int cameraPort)
+bool VideoManager::_pingHost(const QString &ip, int timeoutMs)
+{
+    const int timeout = timeoutMs > 0 ? timeoutMs : 900;
+    const QHostAddress host(ip);
+    if (host.protocol() != QAbstractSocket::IPv4Protocol) {
+        return false;
+    }
+#ifdef Q_OS_WIN
+    HANDLE hIcmp = IcmpCreateFile();
+    if (hIcmp == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    const IPAddr dest = htonl(host.toIPv4Address());  // IcmpSendEcho wants network byte order
+    char sendData[8] = {0};
+    const DWORD replySize = sizeof(ICMP_ECHO_REPLY) + sizeof(sendData) + 8;
+    QByteArray replyBuffer(static_cast<int>(replySize), 0);
+    const DWORD count = IcmpSendEcho(hIcmp, dest, sendData,
+                                     static_cast<WORD>(sizeof(sendData)),
+                                     nullptr, replyBuffer.data(), replySize,
+                                     static_cast<DWORD>(timeout));
+    bool reachable = false;
+    if (count > 0) {
+        const auto *reply = reinterpret_cast<const ICMP_ECHO_REPLY *>(replyBuffer.constData());
+        reachable = (reply->Status == IP_SUCCESS);
+    }
+    IcmpCloseHandle(hIcmp);
+    return reachable;
+#else
+    // No raw ICMP without privileges on these platforms (not the deployment target). Best-effort:
+    // a host that accepts OR actively refuses a TCP connection is reachable; only a timeout is not.
+    QTcpSocket socket;
+    socket.connectToHost(host, 80);
+    if (socket.waitForConnected(timeout)) {
+        socket.abort();
+        return true;
+    }
+    return socket.error() == QAbstractSocket::ConnectionRefusedError;
+#endif
+}
+
+void VideoManager::startPairingTest(const QString &vehicleIp, const QString &cameraIp)
 {
     cancelPairingTest();
 
-    _pairingVehicleIp   = vehicleIp;
-    _pairingVehiclePort = vehiclePort;
-    _pairingCameraIp    = cameraIp;
-    _pairingCameraPort  = cameraPort > 0 ? cameraPort : 554;
-    _pairingPhase       = 1;
+    _pairingVehicleIp = vehicleIp;
+    _pairingCameraIp  = cameraIp;
+    _pairingPhase     = 1;
+    ++_pairingGeneration;
     _pairingDeadline.start();
-
-    _pairingAttemptTimer = new QTimer(this);
-    _pairingAttemptTimer->setSingleShot(true);
-    (void) connect(_pairingAttemptTimer, &QTimer::timeout, this, [this]() {
-        if (_pairingPhase != 0) {
-            _pairingRetryOrFail();
-        }
-    });
 
     _pairingProbeCurrent();
 }
@@ -1639,46 +1679,28 @@ void VideoManager::startPairingTest(const QString &vehicleIp, int vehiclePort,
 void VideoManager::_pairingProbeCurrent()
 {
     const bool vehiclePhase = (_pairingPhase == 1);
-    const QString ip   = vehiclePhase ? _pairingVehicleIp   : _pairingCameraIp;
-    const int     port = vehiclePhase ? _pairingVehiclePort : _pairingCameraPort;
+    const QString ip    = vehiclePhase ? _pairingVehicleIp : _pairingCameraIp;
     const QString stage = vehiclePhase ? tr("vehicle") : tr("camera");
 
-    emit pairingTestStage(stage, QStringLiteral("%1:%2").arg(ip).arg(port));
+    emit pairingTestStage(stage, ip);
 
-    // Fresh socket per attempt; stale signals from a prior attempt are ignored via the
-    // sender() identity check below.
-    _pairingDropSocket();
-    _pairingSocket = new QTcpSocket(this);
-    QTcpSocket *const sock = _pairingSocket;
-
-    (void) connect(sock, &QAbstractSocket::connected, this, [this, sock]() {
-        if (_pairingPhase != 0 && sock == _pairingSocket) {
-            _pairingPhaseReachable();
-        }
-    });
-    (void) connect(sock, &QAbstractSocket::errorOccurred, this,
-                   [this, sock](QAbstractSocket::SocketError err) {
-        if (_pairingPhase == 0 || sock != _pairingSocket) {
-            return;
-        }
-        // A refusal (RST) or an immediate remote close still proves the host is up/reachable.
-        if (err == QAbstractSocket::ConnectionRefusedError
-            || err == QAbstractSocket::RemoteHostClosedError) {
-            _pairingPhaseReachable();
-        } else {
-            _pairingRetryOrFail();
-        }
-    });
-
-    sock->connectToHost(ip, static_cast<quint16>(port));
-    _pairingAttemptTimer->start(kPairingAttemptMs);
+    // Ping off the GUI thread; the generation guard drops results from a cancelled/restarted run.
+    const int generation = _pairingGeneration;
+    (void) QtConcurrent::run([ip]() { return VideoManager::_pingHost(ip, kPairingAttemptMs); })
+        .then(this, [this, generation](bool reachable) {
+            if (generation != _pairingGeneration || _pairingPhase == 0) {
+                return;
+            }
+            if (reachable) {
+                _pairingPhaseReachable();
+            } else {
+                _pairingRetryOrFail();
+            }
+        });
 }
 
 void VideoManager::_pairingPhaseReachable()
 {
-    if (_pairingAttemptTimer) {
-        _pairingAttemptTimer->stop();
-    }
     if (_pairingPhase == 1) {
         _pairingPhase = 2;
         _pairingProbeCurrent();
@@ -1689,15 +1711,10 @@ void VideoManager::_pairingPhaseReachable()
 
 void VideoManager::_pairingRetryOrFail()
 {
-    if (_pairingAttemptTimer) {
-        _pairingAttemptTimer->stop();
-    }
-    // Drop the current socket (disconnecting its signals) so the abort below cannot deliver a
-    // stray error that would be misread as reachable before the next attempt is set up.
-    _pairingDropSocket();
     if (_pairingDeadline.isValid() && _pairingDeadline.elapsed() < kPairingDeadlineMs) {
-        QTimer::singleShot(kPairingRetryMs, this, [this]() {
-            if (_pairingPhase != 0) {
+        const int generation = _pairingGeneration;
+        QTimer::singleShot(kPairingRetryMs, this, [this, generation]() {
+            if (generation == _pairingGeneration && _pairingPhase != 0) {
                 _pairingProbeCurrent();
             }
         });
@@ -1707,27 +1724,10 @@ void VideoManager::_pairingRetryOrFail()
     }
 }
 
-void VideoManager::_pairingDropSocket()
-{
-    if (_pairingSocket) {
-        // Ignore any further signals from the socket we are abandoning (abort() can emit a
-        // remote-close error synchronously, which must not be treated as reachability).
-        _pairingSocket->disconnect(this);
-        _pairingSocket->abort();
-        _pairingSocket->deleteLater();
-        _pairingSocket = nullptr;
-    }
-}
-
 void VideoManager::_pairingFinish(bool ok, const QString &reason)
 {
     _pairingPhase = 0;
-    if (_pairingAttemptTimer) {
-        _pairingAttemptTimer->stop();
-        _pairingAttemptTimer->deleteLater();
-        _pairingAttemptTimer = nullptr;
-    }
-    _pairingDropSocket();
+    ++_pairingGeneration;  // invalidate any ping still in flight
     if (ok) {
         emit pairingTestSucceeded();
     } else {
@@ -1738,12 +1738,7 @@ void VideoManager::_pairingFinish(bool ok, const QString &reason)
 void VideoManager::cancelPairingTest()
 {
     _pairingPhase = 0;
-    if (_pairingAttemptTimer) {
-        _pairingAttemptTimer->stop();
-        _pairingAttemptTimer->deleteLater();
-        _pairingAttemptTimer = nullptr;
-    }
-    _pairingDropSocket();
+    ++_pairingGeneration;  // invalidate any ping still in flight
 }
 
 bool VideoManager::applyDeviceSerial(const QString &serialHex)

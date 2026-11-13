@@ -20,8 +20,6 @@ class Vehicle;
 class VideoReceiver;
 class VideoSettings;
 class QUdpSocket;
-class QTcpSocket;
-class QTimer;
 
 class VideoManager : public QObject
 {
@@ -121,15 +119,11 @@ public:
     // flushed; the device registry calls this so a removal survives an abrupt exit.
     Q_INVOKABLE void syncSettings();
 
-    // STRATUM #84: Test Pairing. Probe the decoded vehicle data-link endpoint, then the
-    // camera endpoint, for reachability before Connect. Non-blocking; emits pairingTestStage
-    // as it progresses and pairingTestSucceeded / pairingTestFailed when done. Reachability
-    // is a TCP-connect probe: a successful connect OR an active refusal (RST) both prove the
-    // host is up; only a timeout counts as unreachable. ICMP ping is avoided (needs elevated
-    // privileges on Windows). cameraPort defaults to the C12 RTSP port.
-    Q_INVOKABLE void startPairingTest(const QString &vehicleIp, int vehiclePort,
-                                      const QString &cameraIp, int cameraPort = 554);
-    // STRATUM #84: stop an in-progress Test Pairing probe and release its socket/timers.
+    // STRATUM #84: Test Pairing. Ping the decoded vehicle IP, then the camera IP, for host
+    // reachability before Connect (ICMP echo — the host IP only, no port). Non-blocking; emits
+    // pairingTestStage as it progresses and pairingTestSucceeded / pairingTestFailed when done.
+    Q_INVOKABLE void startPairingTest(const QString &vehicleIp, const QString &cameraIp);
+    // STRATUM #84: stop an in-progress Test Pairing probe.
     Q_INVOKABLE void cancelPairingTest();
 
     void init(QQuickWindow *mainWindow);
@@ -282,22 +276,20 @@ private:
     // so no start path auto-resumes the stream until feedVisible is set true.
     bool _feedVisible = false;
 
-    // STRATUM #84: Test Pairing probe state. _pairingPhase: 0 idle, 1 probing vehicle,
-    // 2 probing camera. A fresh QTcpSocket is used per attempt; stale signals are ignored
-    // via the sender() identity check.
+    // STRATUM #84: Test Pairing probe state. _pairingPhase: 0 idle, 1 pinging vehicle,
+    // 2 pinging camera. _pairingGeneration invalidates in-flight async pings on cancel/restart.
     int           _pairingPhase = 0;
+    int           _pairingGeneration = 0;
     QString       _pairingVehicleIp;
-    int           _pairingVehiclePort = 0;
     QString       _pairingCameraIp;
-    int           _pairingCameraPort = 0;
-    QTcpSocket   *_pairingSocket = nullptr;
-    QTimer       *_pairingAttemptTimer = nullptr;
     QElapsedTimer _pairingDeadline;
     void _pairingProbeCurrent();
     void _pairingPhaseReachable();
     void _pairingRetryOrFail();
     void _pairingFinish(bool ok, const QString &reason);
-    void _pairingDropSocket();
+    // Host reachability by IP only (no port). Windows: ICMP echo via IcmpSendEcho (no elevation
+    // required). Other platforms: best-effort TCP fallback. Runs off the GUI thread.
+    static bool _pingHost(const QString &ip, int timeoutMs);
 
     QAtomicInteger<bool> _decoding = false;
     QAtomicInteger<bool> _recording = false;
