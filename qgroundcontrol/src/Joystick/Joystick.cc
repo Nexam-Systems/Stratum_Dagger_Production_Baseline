@@ -1769,8 +1769,11 @@ void Joystick::_buildAvailableButtonsActionList(Vehicle *vehicle)
         [this]() { emit gimbalYawLock(true); }));
     _availableButtonActions->append(new AvailableButtonAction(_buttonActionGimbalYawFollow,
         [this]() { emit gimbalYawLock(false); }));
-    _availableButtonActions->append(new AvailableButtonAction(_buttonActionEmergencyStop,
-        [this]() { emit emergencyStop(); }));
+    // STRATUM: Emergency Stop (motor kill) is a developer-build-only joystick action.
+    if (QGCCorePlugin::instance()->stratumDevBuild()) {
+        _availableButtonActions->append(new AvailableButtonAction(_buttonActionEmergencyStop,
+            [this]() { emit emergencyStop(); }));
+    }
     _availableButtonActions->append(new AvailableButtonAction(_buttonActionGripperGrab,
         [this]() { emit gripperAction(GRIPPER_ACTION_GRAB); }));
     _availableButtonActions->append(new AvailableButtonAction(_buttonActionGripperRelease,
