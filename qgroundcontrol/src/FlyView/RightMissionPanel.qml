@@ -286,6 +286,24 @@ Rectangle {
                     }
                 }
 
+                // STRATUM #83: change the vehicle's altitude in flight. Reuses the existing
+                // guided Change-Altitude action, which opens a height input (slider prefilled
+                // with the current altitude, clamped to the guided min/max limits), computes
+                // the delta from altitudeRelative and calls guidedModeChangeAltitude(). Enabled
+                // only while flying/armed/guided-capable (showChangeAlt).
+                CommandButton {
+                    enabled: root.guidedController && root.guidedController.showChangeAlt
+                    iconSource: "/res/chevron-up.svg"
+                    objectName: "missionChangeHeight"
+                    visualRole: "navigation"
+                    text: qsTr("Change Height")
+                    onClicked: {
+                        root.cancelHolds();
+                        actionPopup.close();
+                        root.guidedController.confirmAction(root.guidedController.actionChangeAlt);
+                    }
+                }
+
                 // STRATUM: any remaining profile-specific actions from the model (e.g. the
                 // Dropper payload panel). The commands rendered explicitly above are excluded
                 // so they are not duplicated.

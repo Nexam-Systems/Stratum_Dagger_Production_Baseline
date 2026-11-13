@@ -168,6 +168,8 @@ Rectangle {
 
         const lm = QGroundControl.linkManager
         const linkName = assetLinkName(serial, name)
+        // Single-vehicle policy: drop any other connected vehicle before connecting this one.
+        disconnectOtherConnections(linkName)
         for (let i = 0; i < lm.linkConfigurations.count; ++i) {
             const existing = lm.linkConfigurations.get(i)
             if (existing && existing.name === linkName) {
@@ -197,6 +199,19 @@ Rectangle {
             return true
         }
         return false
+    }
+
+    // Enforce a single connected vehicle: disconnect every currently-active link except the
+    // one we are about to connect (keepLinkName). Called from connectDevice so that connecting
+    // a new asset automatically drops any other connected vehicle.
+    function disconnectOtherConnections(keepLinkName) {
+        const lm = QGroundControl.linkManager
+        for (let i = 0; i < lm.linkConfigurations.count; ++i) {
+            const c = lm.linkConfigurations.get(i)
+            if (c && c.name !== keepLinkName && c.linkActive) {
+                lm.disconnectLinkConfiguration(c)
+            }
+        }
     }
 
     ListModel { id: deviceModel }
