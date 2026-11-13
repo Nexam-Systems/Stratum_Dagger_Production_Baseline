@@ -18,6 +18,16 @@
 
 QGC_LOGGING_CATEGORY(JoystickSDLLog, "Joystick.JoystickSDL")
 
+// STRATUM: RC transmitters (e.g. RadioMaster TX16S / EdgeTX in USB-Joystick mode) expose many
+// axes and multi-position switches as raw joystick channels. SDL's GameController abstraction
+// remaps such a device onto the fixed Xbox-style layout, which reorders button indices and
+// collapses 3-position switches (e.g. the SE kill switch) onto a single gamepad button. That
+// makes the index shown in the joystick config (and thus the action assignment) disagree with
+// the raw channel the switch actually drives, so an assigned Emergency Stop never fires.
+// Forcing raw-joystick mode exposes every channel/switch with stable, 1:1 indices — the
+// traditional ground-control-station behavior. Flip to true only to restore SDL gamepad mapping.
+static constexpr bool kUseGamepadMapping = false;
+
 /// Discovery cache - main thread only, cleared in shutdown()
 static QMap<QString, Joystick*> s_discoveryCache;
 
@@ -252,7 +262,7 @@ QMap<QString, Joystick*> JoystickSDL::discover()
         QList<int> gamepadAxes;
         QSet<int> joyAxesMappedToGamepad;
 
-        if (SDL_IsGamepad(jid)) {
+        if (kUseGamepadMapping && SDL_IsGamepad(jid)) {
             auto tmpGamepad = SDL_OpenGamepad(jid);
             if (!tmpGamepad) {
                 qCWarning(JoystickSDLLog) << "Failed to open gamepad" << jid << SDL_GetError();
@@ -739,7 +749,9 @@ QString JoystickSDL::powerState() const
 
 bool JoystickSDL::isGamepad() const
 {
-    return SDL_IsGamepad(_instanceId);
+    // STRATUM: raw-joystick mode is forced (see kUseGamepadMapping) so RC transmitter channels
+    // and multi-position switches map 1:1 with stable indices.
+    return kUseGamepadMapping && SDL_IsGamepad(_instanceId);
 }
 
 QString JoystickSDL::gamepadType() const
