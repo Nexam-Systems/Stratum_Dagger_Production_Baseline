@@ -102,6 +102,17 @@ ColumnLayout {
             model: buttonAssignmentRow._assignedButtonModel
             QGCLabel { text: repeat ? "Repeat" : "" }
         }
+        // STRATUM: let the operator clear any assigned button mapping.
+        Repeater {
+            model: buttonAssignmentRow._assignedButtonModel
+            QGCButton {
+                text: qsTr("Remove")
+                onClicked: {
+                    joystick.setButtonAction(buttonIndex, joystick.buttonActionNone)
+                    buttonAssignmentRow._rebuildAssignedButtonModel()
+                }
+            }
+        }
     }
 
     // STRATUM: safety-critical two-button combos. Assigning the same joystick action
