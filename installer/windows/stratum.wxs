@@ -102,5 +102,10 @@
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     <UIRef Id="WixUI_InstallDir" />
 
+    <!-- STRATUM: real end-user license shown on the wizard's License Agreement page.
+         $(sys.SOURCEFILEDIR) is this .wxs file's directory, so the RTF resolves to
+         installer/windows/license.rtf regardless of where candle is invoked from. -->
+    <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)license.rtf" />
+
   </Product>
 </Wix>
