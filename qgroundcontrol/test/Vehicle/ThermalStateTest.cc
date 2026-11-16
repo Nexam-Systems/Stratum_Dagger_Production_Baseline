@@ -81,6 +81,21 @@ int main()
         CHECK(dyn.criticalC == 60);
     }
 
+    // In-flight warning threshold (flightWarnC) is independent of the ground critical limit.
+    {
+        State fw;
+        for (int i = 0; i < State::SensorCount; ++i) CHECK(fw.update(i, 40, true, 0));
+        CHECK(fw.update(0, 85, true, 0)); // one hot motor
+        fw.setCriticalC(100);             // ground critical very high -> no ground-critical sensors
+        fw.setFlightWarnC(80);            // in-flight warning at 80
+        CHECK(fw.evaluate(0, 3000).criticalMask == 0);     // 85 < 100: not ground-critical
+        CHECK(fw.flightWarnMask(0, 3000) == 0x1u);         // 85 > 80: in-flight warning on motor 0
+        fw.setFlightWarnC(90);                             // raise warn limit above 85
+        CHECK(fw.flightWarnMask(0, 3000) == 0u);           // 85 < 90: no in-flight warning
+        fw.setFlightWarnC(-1);                             // invalid ignored
+        CHECK(fw.flightWarnC == 90);
+    }
+
     std::puts("Thermal policy: four ESCs, thresholds, averaging, freshness and flight-phase checks passed.");
     return 0;
 }

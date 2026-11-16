@@ -40,6 +40,7 @@ void VehicleThermalMonitor::_reset()
 {
     _state = {};
     _alertLatch = 0;
+    _flightAlertLatch = 0;
     _heardHeartbeat = false;
     _streamsRequested = false;
     refresh();
@@ -103,17 +104,24 @@ QString VehicleThermalMonitor::_stateText(ThermalState::Availability available, 
 void VehicleThermalMonitor::refresh()
 {
     const int64_t now = _clock.elapsed();
-    // Critical limit is admin-configurable (hidden admin panel); applied before evaluating.
+    // Both limits are admin-configurable (hidden admin panel): criticalC gates ground arm/
+    // disarm; flightWarnC is a separate in-flight warning-only threshold. Applied before eval.
     if (AdminSettings *admin = SettingsManager::instance()->adminSettings()) {
         _state.setCriticalC(admin->escCriticalTempC()->rawValue().toDouble());
+        _state.setFlightWarnC(admin->escFlightWarnTempC()->rawValue().toDouble());
     }
     _result = _state.evaluate(now, FreshnessTimeoutMs);
     _confirmedGround = _state.confirmedGround(now, FreshnessTimeoutMs)
                        && !_vehicle->flying() && !_vehicle->landing()
                        && !_vehicle->vehicleLinkManager()->communicationLost();
     _groundBlocked = _confirmedGround && _state.blocksGroundCommands(now, FreshnessTimeoutMs);
+
+    // In-flight warning mask uses the separate flight-warn threshold; warning-only, never blocks.
+    const unsigned flightWarnMask = _state.flightWarnMask(now, FreshnessTimeoutMs);
+
     _sensors.clear();
-    QStringList hot;
+    QStringList hot;         // ground-critical sensors (criticalC) — used for the ground reason
+    QStringList flightHot;   // in-flight-warn sensors (flightWarnC) — used for the airborne message
     for (int i = 0; i < ThermalState::SensorCount; ++i) {
         const auto &reading = _state.readings[i];
         const auto available = _state.availability(i, now, FreshnessTimeoutMs);
@@ -125,7 +133,10 @@ void VehicleThermalMonitor::refresh()
             {QStringLiteral("severity"), static_cast<int>(severity)}
         });
         if (_result.criticalMask & (1U << i)) hot << tr("%1: %2 °C").arg(_sensorName(i)).arg(reading.temperatureC, 0, 'f', 2);
+        if (flightWarnMask & (1U << i)) flightHot << tr("%1: %2 °C").arg(_sensorName(i)).arg(reading.temperatureC, 0, 'f', 2);
+        // Hysteresis: clear each latch once the motor has cooled a few degrees below its limit.
         if (fresh && reading.temperatureC <= _state.criticalC - 3.0) _alertLatch &= ~(1U << i);
+        if (fresh && reading.temperatureC <= _state.flightWarnC - 3.0) _flightAlertLatch &= ~(1U << i);
         if (_lastStates[i] != state) {
             qCInfo(VehicleThermalLog) << "Vehicle" << _vehicle->id() << _sensorName(i) << state
                                      << reading.temperatureC << "phase" << static_cast<int>(_state.phase);
@@ -134,10 +145,15 @@ void VehicleThermalMonitor::refresh()
     }
     _reason = !hot.isEmpty() ? tr("Temperature too high (limit %1 °C): %2.").arg(_state.criticalC, 0, 'f', 0).arg(hot.join(QStringLiteral(", ")))
                             : QString();
-    const unsigned newHot = _result.criticalMask & ~_alertLatch;
-    if (newHot && !_confirmedGround && (_vehicle->armed() || _vehicle->flying() || _vehicle->landing())) {
-        _alertLatch |= _result.criticalMask;
-        QGC::showAppMessage(tr("Vehicle %1: %2 Flight controls have not been changed.").arg(_vehicle->id()).arg(_reason));
+
+    // Airborne warning: fire on newly-hot motors vs the in-flight threshold while airborne.
+    // Warning-only — it never disarms or changes vehicle state.
+    const unsigned newFlightHot = flightWarnMask & ~_flightAlertLatch;
+    if (newFlightHot && !_confirmedGround && (_vehicle->armed() || _vehicle->flying() || _vehicle->landing())) {
+        _flightAlertLatch |= flightWarnMask;
+        const QString flightReason = tr("Temperature too high (limit %1 °C): %2.")
+            .arg(_state.flightWarnC, 0, 'f', 0).arg(flightHot.join(QStringLiteral(", ")));
+        QGC::showAppMessage(tr("Vehicle %1: %2 Flight controls have not been changed.").arg(_vehicle->id()).arg(flightReason));
     }
     emit updated();
 }

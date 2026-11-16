@@ -225,6 +225,24 @@ QGCPopupDialog {
                 QGCLabel {
                     text: _admin ? qsTr("%1 °C").arg(Number(_admin.escCriticalTempC.rawValue)) : "80 °C"
                 }
+
+                QGCLabel { text: qsTr("Motor in-flight warn temp") }
+                Slider {
+                    id: escFlightWarnTempSlider
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 22
+                    from: 40
+                    to: 150
+                    stepSize: 1
+                    value: _admin ? Number(_admin.escFlightWarnTempC.rawValue) : 80
+                    onMoved: {
+                        if (_admin) {
+                            _admin.escFlightWarnTempC.rawValue = Math.round(value)
+                        }
+                    }
+                }
+                QGCLabel {
+                    text: _admin ? qsTr("%1 °C").arg(Number(_admin.escFlightWarnTempC.rawValue)) : "80 °C"
+                }
             }
 
             QGCLabel {

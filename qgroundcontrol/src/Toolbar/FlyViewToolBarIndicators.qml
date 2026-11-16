@@ -56,11 +56,12 @@ Item {
             QGCLabel {
                 id:                 wordmarkLabel
                 anchors.centerIn:   parent
-                text:               "STRATUM\nv" + QGroundControl.stratumVersion
+                text:               "STRATUM\n" + qsTr("Command & Control") + "\nv" + QGroundControl.stratumVersion
                 color:              ribbonTextColor
                 font.bold:          true
                 font.pointSize:     ScreenTools.smallFontPointSize
                 font.letterSpacing: 2
+                horizontalAlignment: Text.AlignLeft
             }
 
             MouseArea {

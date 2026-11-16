@@ -57,7 +57,8 @@ private:
     QVariantList _sensors;
     QString _reason;
     std::array<QString, ThermalState::SensorCount> _lastStates{};
-    unsigned _alertLatch = 0;
+    unsigned _alertLatch = 0;        // ground/critical-mask warning latch (hysteresis)
+    unsigned _flightAlertLatch = 0;  // in-flight warning latch (separate flight-warn threshold)
     static constexpr int FreshnessTimeoutMs = 3000;
     bool _heardHeartbeat = false;
     bool _streamsRequested = false;
