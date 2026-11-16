@@ -29,6 +29,7 @@ public:
     DEFINE_SETTINGFACT(trackerBoxSizePx)
     DEFINE_SETTINGFACT(c12GimbalMaxSpeed)
     DEFINE_SETTINGFACT(escCriticalTempC)
+    DEFINE_SETTINGFACT(escFlightWarnTempC)
     DEFINE_SETTINGFACT(passwordHashOverride)
 
     bool unlocked() const { return _unlocked; }

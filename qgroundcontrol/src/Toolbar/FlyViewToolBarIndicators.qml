@@ -61,7 +61,7 @@ Item {
                 font.bold:          true
                 font.pointSize:     ScreenTools.smallFontPointSize
                 font.letterSpacing: 2
-                horizontalAlignment: Text.AlignHCenter
+                horizontalAlignment: Text.AlignLeft
             }
 
             MouseArea {

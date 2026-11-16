@@ -119,6 +119,18 @@
             "label": "Motor critical temperature"
         },
         {
+            "name": "escFlightWarnTempC",
+            "shortDesc": "Motor (ESC) in-flight warning temperature",
+            "longDesc": "When any motor's ESC temperature exceeds this limit while the vehicle is airborne, STRATUM shows a warning message. This is warning-only: it never disarms the vehicle or changes its state in flight. Independent of the ground critical limit. Degrees Celsius.",
+            "type": "double",
+            "default": 80,
+            "min": 40,
+            "max": 150,
+            "units": "°C",
+            "decimalPlaces": 0,
+            "label": "Motor in-flight warning temperature"
+        },
+        {
             "name": "passwordHashOverride",
             "shortDesc": "Runtime admin password hash override",
             "longDesc": "SHA-256 hex of the admin password set at runtime from the hidden admin dialog. Empty means use the compile-time hash.",

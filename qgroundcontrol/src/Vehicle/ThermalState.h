@@ -73,6 +73,29 @@ public:
         if (std::isfinite(limitC) && limitC > 0.0) criticalC = limitC;
     }
 
+    // Override the in-flight warning limit (admin panel, separate from the ground critical
+    // limit). Invalid values are ignored.
+    void setFlightWarnC(double limitC)
+    {
+        if (std::isfinite(limitC) && limitC > 0.0) flightWarnC = limitC;
+    }
+
+    // Bitmask of fresh sensors whose temperature exceeds the in-flight warning limit. Used for
+    // the airborne warning only (never blocks/changes vehicle state), independent of criticalC.
+    unsigned flightWarnMask(int64_t now, int64_t timeout) const
+    {
+        unsigned mask = 0;
+        for (int i = 0; i < SensorCount; ++i) {
+            if (availability(i, now, timeout) != Availability::Fresh) {
+                continue;
+            }
+            if (std::isfinite(readings[i].temperatureC) && readings[i].temperatureC > flightWarnC) {
+                mask |= 1U << i;
+            }
+        }
+        return mask;
+    }
+
     Result evaluate(int64_t now, int64_t timeout) const
     {
         Result result;
@@ -114,5 +137,6 @@ public:
     std::array<Reading, SensorCount> readings{};
     Phase phase = Phase::Unknown;
     int64_t phaseReceivedAtMs = -1;
-    double criticalC = CriticalC;  // critical limit in °C; overridable via setCriticalC()
+    double criticalC = CriticalC;    // ground arm/disarm critical limit in °C; via setCriticalC()
+    double flightWarnC = CriticalC;  // in-flight warning limit in °C; via setFlightWarnC()
 };
