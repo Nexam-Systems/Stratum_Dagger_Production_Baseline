@@ -992,4 +992,113 @@ void setAppSinkAdaptersActive(QObject *adapterParent, bool active)
     }
 }
 
+bool mergeVideoSegments(const QStringList &segmentFiles, const QString &outputFile, QString *errorOut)
+{
+    const auto fail = [errorOut](const QString &msg) -> bool {
+        if (errorOut) { *errorOut = msg; }
+        qCWarning(GStreamerLog) << "mergeVideoSegments:" << msg;
+        return false;
+    };
+
+    if (segmentFiles.isEmpty()) {
+        return fail(QStringLiteral("no segments to merge"));
+    }
+
+    // Discover an available H.264 (preferred) or H.265 encoder + matching parser the same way
+    // the live recorder does — the bundled plugin set varies between machines.
+    QString encoderName;
+    QString parserName;
+    {
+        GList *factories = gst_element_factory_list_get_elements(GST_ELEMENT_FACTORY_TYPE_VIDEO_ENCODER, GST_RANK_NONE);
+        const struct { const char *media; const char *parser; } wanted[] = {
+            { "video/x-h264", "h264parse" },
+            { "video/x-h265", "h265parse" },
+        };
+        for (size_t w = 0; (w < G_N_ELEMENTS(wanted)) && encoderName.isEmpty(); ++w) {
+            GstCaps *caps = gst_caps_new_empty_simple(wanted[w].media);
+            for (GList *l = factories; l != nullptr; l = l->next) {
+                GstElementFactory *factory = GST_ELEMENT_FACTORY(l->data);
+                if (gst_element_factory_can_src_any_caps(factory, caps)) {
+                    encoderName = QString::fromUtf8(GST_OBJECT_NAME(factory));
+                    parserName = QString::fromLatin1(wanted[w].parser);
+                    break;
+                }
+            }
+            gst_caps_unref(caps);
+        }
+        gst_plugin_feature_list_free(factories);
+    }
+    if (encoderName.isEmpty()) {
+        return fail(QStringLiteral("no H.264/H.265 encoder available"));
+    }
+
+    // STRATUM #37: TV and IR have different resolutions; the operator asked to just stitch them,
+    // so every segment is scaled to one target size (letter-boxed to preserve aspect) and
+    // re-encoded into a single file.
+    constexpr int kTargetW = 1920;
+    constexpr int kTargetH = 1080;
+
+    // filesink accepts forward slashes on Windows; avoid backslash escaping in the parse string.
+    const QString outPath = QString(outputFile).replace(QLatin1Char('\\'), QLatin1Char('/'));
+
+    QString desc = QStringLiteral(
+        "concat name=c ! queue ! videoconvert ! %1 ! %2 ! matroskamux ! filesink location=\"%3\"")
+        .arg(encoderName, parserName, outPath);
+
+    for (const QString &segment : segmentFiles) {
+        gchar *uriC = gst_filename_to_uri(segment.toUtf8().constData(), nullptr);
+        const QString uri = uriC ? QString::fromUtf8(uriC) : QString();
+        g_free(uriC);
+        if (uri.isEmpty()) {
+            return fail(QStringLiteral("could not build URI for segment: %1").arg(segment));
+        }
+        // uridecodebin exposes a dynamic video pad; gst_parse_launch defers the link to concat.
+        // Segments are video-only (GCS recording has no audio), so there is no audio pad to strand.
+        desc += QStringLiteral(
+            " uridecodebin uri=\"%1\" ! videoconvert ! videoscale add-borders=true ! "
+            "video/x-raw,width=%2,height=%3 ! queue ! c.")
+            .arg(uri).arg(kTargetW).arg(kTargetH);
+    }
+
+    GError *parseErr = nullptr;
+    GstElement *pipeline = gst_parse_launch(desc.toUtf8().constData(), &parseErr);
+    if (!pipeline) {
+        const QString m = parseErr ? QString::fromUtf8(parseErr->message) : QStringLiteral("gst_parse_launch failed");
+        g_clear_error(&parseErr);
+        return fail(m);
+    }
+    g_clear_error(&parseErr);  // non-fatal parse warnings, if any
+
+    bool ok = false;
+    QString errMsg;
+    if (gst_element_set_state(pipeline, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
+        errMsg = QStringLiteral("failed to start merge pipeline");
+    } else {
+        GstBus *bus = gst_element_get_bus(pipeline);
+        // Cap the wait so a stalled pipeline can't hang the worker thread forever.
+        constexpr GstClockTime kTimeout = 10 * 60 * GST_SECOND;
+        GstMessage *msg = gst_bus_timed_pop_filtered(
+            bus, kTimeout, static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
+        if (!msg) {
+            errMsg = QStringLiteral("merge timed out");
+        } else if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_EOS) {
+            ok = true;
+        } else {
+            GError *e = nullptr;
+            gchar *dbg = nullptr;
+            gst_message_parse_error(msg, &e, &dbg);
+            errMsg = e ? QString::fromUtf8(e->message) : QStringLiteral("merge pipeline error");
+            g_clear_error(&e);
+            g_free(dbg);
+        }
+        if (msg) { gst_message_unref(msg); }
+        gst_object_unref(bus);
+    }
+
+    gst_element_set_state(pipeline, GST_STATE_NULL);
+    gst_object_unref(pipeline);
+
+    return ok ? true : fail(errMsg.isEmpty() ? QStringLiteral("merge failed") : errMsg);
+}
+
 } // namespace GStreamer
