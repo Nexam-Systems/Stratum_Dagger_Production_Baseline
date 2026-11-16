@@ -353,7 +353,7 @@ Item {
                     anchors.centerIn: parent
                     spacing: 0
                     QGCLabel { text: "STRATUM"; color: root.ribbonTextColor; font.bold: true; font.pointSize: ScreenTools.mediumFontPointSize; font.letterSpacing: 2 }
-                    QGCLabel { text: qsTr("Command & Control"); color: root._dimColor; font.pointSize: ScreenTools.smallFontPointSize * 0.85; Layout.alignment: Qt.AlignHCenter }
+                    QGCLabel { text: qsTr("Command & Control"); color: root._dimColor; font.bold: true; font.pointSize: ScreenTools.smallFontPointSize * 0.85; Layout.alignment: Qt.AlignHCenter }
                     QGCLabel { text: "v" + QGroundControl.stratumVersion; color: root._dimColor; font.pointSize: ScreenTools.smallFontPointSize * 0.85; Layout.alignment: Qt.AlignHCenter }
                 }
 
