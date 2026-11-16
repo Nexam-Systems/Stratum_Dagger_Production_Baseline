@@ -1,10 +1,11 @@
 #pragma once
 
+#include <QtCore/qcontainerfwd.h>
+
 class QQuickItem;
 class QVideoSink;
 class VideoReceiver;
 class QString;
-class QStringList;
 
 namespace GStreamer
 {
