@@ -1156,16 +1156,25 @@ void VideoManager::startRecording(const QString &videoFile)
 // off the live pipeline, so the preview keeps playing.
 void VideoManager::startFlightRecording()
 {
+    _startFlightRecording(false /* autoResume */);
+}
+
+void VideoManager::_startFlightRecording(bool autoResume)
+{
     const QString desktop = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
     if (desktop.isEmpty()) {
-        QGC::showAppMessage(tr("Unable to record video. Desktop folder could not be located."));
+        if (!autoResume) {
+            QGC::showAppMessage(tr("Unable to record video. Desktop folder could not be located."));
+        }
         return;
     }
 
     const QString dirPath = desktop + QStringLiteral("/recording");
     QDir dir(dirPath);
     if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
-        QGC::showAppMessage(tr("Unable to create recording folder: %1").arg(dirPath));
+        if (!autoResume) {
+            QGC::showAppMessage(tr("Unable to create recording folder: %1").arg(dirPath));
+        }
         return;
     }
 
@@ -1186,13 +1195,33 @@ void VideoManager::startFlightRecording()
         started = true;
     }
 
-    if (!started) {
+    if (started) {
+        // STRATUM #37: remember the operator wants GCS recording active so it auto-resumes
+        // (as a new segment) after a TV/IR feed switch or reconnect restarts the pipeline.
+        // Only an explicit Stop clears this intent.
+        _flightRecordingDesired = true;
+    } else if (!autoResume) {
         QGC::showAppMessage(tr("Unable to record video. No active video stream."));
     }
 }
 
+void VideoManager::_resumeFlightRecordingIfDesired()
+{
+    // STRATUM #37: after a TV/IR switch (or reconnect) the pipeline restarts and the active
+    // GCS recording drops. If the operator never pressed Stop, start a fresh recording segment
+    // so recording continues until they explicitly stop.
+    if (!_flightRecordingDesired || _recording) {
+        return;
+    }
+    qCDebug(VideoManagerLog) << "STRATUM #37: auto-resuming GCS recording after pipeline restart";
+    _startFlightRecording(true /* autoResume */);
+}
+
 void VideoManager::stopRecording()
 {
+    // STRATUM #37: an explicit Stop clears the auto-resume intent so a subsequent feed switch
+    // does not re-arm recording.
+    _flightRecordingDesired = false;
     for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
         if (receiver->name() != QStringLiteral("videoContent")) {
             continue;
@@ -2048,6 +2077,12 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
             receiver->setStarted(true);
             if (receiver->sink()) {
                 receiver->startDecoding(receiver->sink());
+            }
+            // STRATUM #37: if the operator had GCS recording running, resume it (new segment)
+            // once the restarted pipeline is up — e.g. after a TV/IR feed switch. The short
+            // delay lets the pipeline settle before the record tee is re-armed.
+            if (receiver->name() == QStringLiteral("videoContent")) {
+                QTimer::singleShot(500, this, [this]() { _resumeFlightRecordingIfDesired(); });
             }
             break;
         case VideoReceiver::STATUS_INVALID_URL:

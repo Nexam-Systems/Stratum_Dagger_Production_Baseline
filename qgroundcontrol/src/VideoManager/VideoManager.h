@@ -222,6 +222,13 @@ private:
     void _stopReceiver(VideoReceiver *receiver);
     static void _cleanupOldVideos();
 
+    // STRATUM #37: GCS flight-recording auto-resume. _startFlightRecording(autoResume=false)
+    // is the operator action; after a TV/IR feed switch (or reconnect) restarts the pipeline,
+    // _resumeFlightRecordingIfDesired() starts a fresh recording segment so recording keeps
+    // going until the operator explicitly presses Stop.
+    void _startFlightRecording(bool autoResume);
+    void _resumeFlightRecordingIfDesired();
+
     void _ensureC12Socket();
     void _enableC12AttitudeStream(bool enabled);
     void _processC12Frame(const QByteArray &frame);
@@ -293,6 +300,10 @@ private:
 
     QAtomicInteger<bool> _decoding = false;
     QAtomicInteger<bool> _recording = false;
+    // STRATUM #37: true while the operator wants GCS recording active. Set by
+    // startFlightRecording, cleared only by stopRecording. Drives auto-resume across the
+    // pipeline restart that a TV/IR feed switch causes.
+    bool _flightRecordingDesired = false;
     QAtomicInteger<bool> _streaming = false;
     QSize _videoSize;
     QString _imageFile;
