@@ -1156,22 +1156,47 @@ void VideoManager::startRecording(const QString &videoFile)
 // off the live pipeline, so the preview keeps playing.
 void VideoManager::startFlightRecording()
 {
+    if (_flightRecordingDesired || _mergePendingAfterStop) {
+        return; // a recording session is active or the previous one is still finalizing
+    }
+
     const QString desktop = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
     if (desktop.isEmpty()) {
         QGC::showAppMessage(tr("Unable to record video. Desktop folder could not be located."));
         return;
     }
 
-    const QString dirPath = desktop + QStringLiteral("/recording");
-    QDir dir(dirPath);
+    const QString recDir = desktop + QStringLiteral("/recording");
+    // Filesystem-safe timestamp (no ':'). Final file: recording/Flight_<stamp>.mkv; the per-feed
+    // temp segments live under a hidden session folder until they are stitched on Stop.
+    _recordingSessionStamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
+    _recordingTmpDir       = recDir + QStringLiteral("/.session_") + _recordingSessionStamp;
+    _recordingFinalFile    = recDir + QStringLiteral("/Flight_") + _recordingSessionStamp + QStringLiteral(".mkv");
+
+    QDir dir(_recordingTmpDir);
     if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
-        QGC::showAppMessage(tr("Unable to create recording folder: %1").arg(dirPath));
+        QGC::showAppMessage(tr("Unable to create recording folder: %1").arg(_recordingTmpDir));
         return;
     }
 
-    // Filesystem-safe timestamp (no ':'): Flight_YYYY-MM-DD_HH-MM-SS.mkv.
-    const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
-    const QString fileName = dirPath + QStringLiteral("/Flight_") + stamp + QStringLiteral(".mkv");
+    _recordingSegments.clear();
+    _recordingSegmentIndex = 0;
+    _mergePendingAfterStop = false;
+    _flightRecordingDesired = true;
+
+    _startFlightRecording(false /* autoResume */);
+    // Reflect the session as "recording" immediately (before the first segment's recorder event).
+    _emitRecordingStateIfChanged();
+}
+
+void VideoManager::_startFlightRecording(bool autoResume)
+{
+    if (!_flightRecordingDesired || _recordingTmpDir.isEmpty()) {
+        return;
+    }
+
+    const QString segFile = _recordingTmpDir
+        + QStringLiteral("/seg_%1.mkv").arg(_recordingSegmentIndex + 1, 3, 10, QLatin1Char('0'));
 
     bool started = false;
     for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
@@ -1182,23 +1207,130 @@ void VideoManager::startFlightRecording()
             qCDebug(VideoManagerLog) << "Video receiver is not ready.";
             continue;
         }
-        receiver->startRecording(fileName, VideoReceiver::FILE_FORMAT_MKV);
+        receiver->startRecording(segFile, VideoReceiver::FILE_FORMAT_MKV);
         started = true;
     }
 
-    if (!started) {
+    if (started) {
+        _recordingSegments.append(segFile);
+        ++_recordingSegmentIndex;
+    } else if (!autoResume) {
+        // Operator pressed Record but there is no active stream — abort the session cleanly.
         QGC::showAppMessage(tr("Unable to record video. No active video stream."));
+        _flightRecordingDesired = false;
+        if (!_recordingTmpDir.isEmpty()) {
+            QDir(_recordingTmpDir).removeRecursively();
+        }
+        _recordingTmpDir.clear();
+        _recordingFinalFile.clear();
+        _recordingSegments.clear();
     }
+}
+
+void VideoManager::_resumeFlightRecordingIfDesired()
+{
+    // STRATUM #37: after a TV/IR switch (or reconnect) the pipeline restarts and the active
+    // segment ends. If the operator never pressed Stop, start the next segment so recording
+    // continues until they explicitly stop; the segments are stitched into one file on Stop.
+    if (!_flightRecordingDesired || _recording) {
+        return;
+    }
+    qCDebug(VideoManagerLog) << "STRATUM #37: continuing GCS recording (new segment) after pipeline restart";
+    _startFlightRecording(true /* autoResume */);
 }
 
 void VideoManager::stopRecording()
 {
+    if (!_flightRecordingDesired && !_mergePendingAfterStop && _recordingSegments.isEmpty()) {
+        // No STRATUM GCS session in progress — honor a plain stop of any receiver recording.
+        for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
+            if (receiver->name() != QStringLiteral("videoContent")) {
+                continue;
+            }
+            receiver->stopRecording();
+        }
+        return;
+    }
+
+    // STRATUM #37: explicit Stop (or feed-off) ends the session. Clear the intent so a later
+    // feed switch cannot re-arm, flush the current segment, then stitch once it has finalized.
+    const bool wasRecording = _recording;
+    _flightRecordingDesired = false;
+    _mergePendingAfterStop = true;
     for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
         if (receiver->name() != QStringLiteral("videoContent")) {
             continue;
         }
         receiver->stopRecording();
     }
+    if (!wasRecording) {
+        // Nothing active to flush (e.g. the feed was already down) — stitch now.
+        _mergePendingAfterStop = false;
+        _finalizeRecordingSession();
+        _emitRecordingStateIfChanged();
+    }
+    // Otherwise the stitch runs when recordingChanged(false) reports the segment finalized.
+}
+
+void VideoManager::_emitRecordingStateIfChanged()
+{
+    const bool vis = recording();
+    if (vis != _lastEmittedRecording) {
+        _lastEmittedRecording = vis;
+        emit recordingChanged(vis);
+    }
+}
+
+void VideoManager::_finalizeRecordingSession()
+{
+    const QStringList segments = _recordingSegments;
+    const QString finalFile = _recordingFinalFile;
+    const QString tmpDir = _recordingTmpDir;
+
+    _recordingSegments.clear();
+    _recordingSegmentIndex = 0;
+    _recordingTmpDir.clear();
+    _recordingFinalFile.clear();
+
+    if (segments.isEmpty()) {
+        if (!tmpDir.isEmpty()) {
+            QDir(tmpDir).removeRecursively();
+        }
+        return;
+    }
+
+    if (segments.size() == 1) {
+        // No feed switch during the session: move the single segment to the final file —
+        // lossless and instant, no re-encode.
+        QFile::remove(finalFile);
+        if (QFile::rename(segments.first(), finalFile)) {
+            QDir(tmpDir).removeRecursively();
+            QGC::showAppMessage(tr("Recording saved: %1").arg(QDir::toNativeSeparators(finalFile)));
+        } else {
+            QGC::showAppMessage(tr("Recording saved in: %1").arg(QDir::toNativeSeparators(tmpDir)));
+        }
+        return;
+    }
+
+#ifdef QGC_GST_STREAMING
+    // Multiple segments (TV/IR switches): stitch into one continuous file off the GUI thread.
+    (void) QtConcurrent::run([this, segments, finalFile, tmpDir]() {
+        QString err;
+        const bool ok = GStreamer::mergeVideoSegments(segments, finalFile, &err);
+        QMetaObject::invokeMethod(this, [this, ok, err, finalFile, tmpDir]() {
+            if (ok) {
+                QDir(tmpDir).removeRecursively();
+                QGC::showAppMessage(tr("Recording saved: %1").arg(QDir::toNativeSeparators(finalFile)));
+            } else {
+                // Keep the segments so no footage is lost.
+                QGC::showAppMessage(tr("Could not stitch recording (%1). Segments kept in: %2")
+                                        .arg(err, QDir::toNativeSeparators(tmpDir)));
+            }
+        }, Qt::QueuedConnection);
+    });
+#else
+    QGC::showAppMessage(tr("Recording segments saved in: %1").arg(QDir::toNativeSeparators(tmpDir)));
+#endif
 }
 
 void VideoManager::grabImage(const QString &imageFile)
@@ -1333,6 +1465,12 @@ void VideoManager::setFeedVisible(bool on)
         if (on) {
             startVideo();
         } else {
+            // STRATUM #37: turning the feed off is one of the two explicit stop conditions for
+            // GCS recording (the other is the Stop button). End the session and stitch before
+            // tearing down the stream, so a later feed-on does not re-arm recording.
+            if (_flightRecordingDesired || _mergePendingAfterStop || !_recordingSegments.isEmpty()) {
+                stopRecording();
+            }
             stopVideo();
         }
     }
@@ -2049,6 +2187,12 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
             if (receiver->sink()) {
                 receiver->startDecoding(receiver->sink());
             }
+            // STRATUM #37: if the operator had GCS recording running, resume it (new segment)
+            // once the restarted pipeline is up — e.g. after a TV/IR feed switch. The short
+            // delay lets the pipeline settle before the record tee is re-armed.
+            if (receiver->name() == QStringLiteral("videoContent")) {
+                QTimer::singleShot(500, this, [this]() { _resumeFlightRecordingIfDesired(); });
+            }
             break;
         case VideoReceiver::STATUS_INVALID_URL:
         case VideoReceiver::STATUS_INVALID_STATE:
@@ -2094,8 +2238,15 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
             _recording = active;
             if (!active) {
                 _subtitleWriter->stopCapturingTelemetry();
+                // STRATUM #37: a Stop/feed-off was waiting for the current segment to finalize —
+                // now stitch the session's segments into one continuous file.
+                if (!_flightRecordingDesired && _mergePendingAfterStop) {
+                    _mergePendingAfterStop = false;
+                    _finalizeRecordingSession();
+                }
             }
-            emit recordingChanged(_recording);
+            // Only surface a change when the session-level state flips (not per-segment blips).
+            _emitRecordingStateIfChanged();
         }
     });
 

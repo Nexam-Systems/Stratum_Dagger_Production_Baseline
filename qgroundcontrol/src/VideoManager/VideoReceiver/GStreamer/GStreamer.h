@@ -1,8 +1,11 @@
 #pragma once
 
+#include <QtCore/qcontainerfwd.h>
+
 class QQuickItem;
 class QVideoSink;
 class VideoReceiver;
+class QString;
 
 namespace GStreamer
 {
@@ -35,5 +38,13 @@ bool setupAppSinkAdapter(void *sinkBin, QVideoSink *videoSink, QObject *adapterP
 /// full decode→render path against a non-visible sink. Safe to call repeatedly; no-op
 /// when no adapters exist.
 void setAppSinkAdaptersActive(QObject *adapterParent, bool active);
+
+/// STRATUM #37: stitch recorded GCS segments (temp per-feed files produced across TV/IR
+/// switches) into a single continuous @p outputFile. Each segment is decoded, scaled to one
+/// target resolution (TV and IR differ) and re-encoded through one muxer, so the result is a
+/// single valid file. Blocking — run on a worker thread. Returns false (with @p errorOut set)
+/// on failure, leaving the segments untouched so no footage is lost.
+bool mergeVideoSegments(const QStringList &segmentFiles, const QString &outputFile,
+                        QString *errorOut = nullptr);
 
 }
