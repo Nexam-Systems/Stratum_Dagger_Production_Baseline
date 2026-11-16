@@ -9,6 +9,7 @@
 #include <QtQmlIntegration/QtQmlIntegration>
 
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 #include <QtCore/QVariantMap>
 
 #include <functional>
@@ -141,7 +142,11 @@ public:
     bool hasVideo() const;
     bool isStreamSource() const;
     bool isUvc() const;
-    bool recording() const { return _recording; }
+    // STRATUM #37: session-aware recording state. Across TV/IR switches the pipeline restarts
+    // and the per-segment recorder (_recording) blips off/on; the operator-facing state stays
+    // true for the whole session (_flightRecordingDesired) so the Record/Stop button and status
+    // don't flicker mid-recording.
+    bool recording() const { return _flightRecordingDesired || _recording; }
     bool c12TrackingActive() const { return _c12TrackActive; }
     bool c12AiEnabled() const { return _c12AiEnabled; }
     double c12YawDegrees() const { return _c12YawDeg; }
@@ -222,12 +227,18 @@ private:
     void _stopReceiver(VideoReceiver *receiver);
     static void _cleanupOldVideos();
 
-    // STRATUM #37: GCS flight-recording auto-resume. _startFlightRecording(autoResume=false)
-    // is the operator action; after a TV/IR feed switch (or reconnect) restarts the pipeline,
-    // _resumeFlightRecordingIfDesired() starts a fresh recording segment so recording keeps
-    // going until the operator explicitly presses Stop.
+    // STRATUM #37: single-file GCS recording across TV/IR switches. Each feed is recorded to a
+    // temp segment under a session temp dir; switching TV/IR restarts the pipeline so a new
+    // segment auto-starts (recording never stops from the operator's view). On an explicit Stop
+    // or feed-off, the segments are stitched into one continuous file and the temp dir removed.
+    //   _startFlightRecording(autoResume=false) is the operator action; true is the auto-resume
+    //   after a pipeline restart. _finalizeRecordingSession() runs the merge off-thread.
     void _startFlightRecording(bool autoResume);
     void _resumeFlightRecordingIfDesired();
+    void _finalizeRecordingSession();
+    // Emit recordingChanged only when the session-level state (recording()) actually changes,
+    // so per-segment blips during a TV/IR switch don't fire spurious start/stop UI toasts.
+    void _emitRecordingStateIfChanged();
 
     void _ensureC12Socket();
     void _enableC12AttitudeStream(bool enabled);
@@ -300,10 +311,21 @@ private:
 
     QAtomicInteger<bool> _decoding = false;
     QAtomicInteger<bool> _recording = false;
-    // STRATUM #37: true while the operator wants GCS recording active. Set by
-    // startFlightRecording, cleared only by stopRecording. Drives auto-resume across the
-    // pipeline restart that a TV/IR feed switch causes.
+    // STRATUM #37: single continuous GCS recording across TV/IR feed switches.
+    //   _flightRecordingDesired: true while the operator wants recording; set by
+    //     startFlightRecording, cleared only by stopRecording (or feed-off).
+    //   _recordingSegments: temp per-feed segment files for the current session.
+    //   _recordingTmpDir / _recordingFinalFile / _recordingSessionStamp: session paths.
+    //   _mergePendingAfterStop: a Stop/feed-off is waiting for the last segment to finalize
+    //     before the segments are stitched into one file.
     bool _flightRecordingDesired = false;
+    bool _mergePendingAfterStop = false;
+    bool _lastEmittedRecording = false;  // session-level state last signalled to QML (emit gate)
+    int _recordingSegmentIndex = 0;
+    QString _recordingSessionStamp;
+    QString _recordingTmpDir;
+    QString _recordingFinalFile;
+    QStringList _recordingSegments;
     QAtomicInteger<bool> _streaming = false;
     QSize _videoSize;
     QString _imageFile;
