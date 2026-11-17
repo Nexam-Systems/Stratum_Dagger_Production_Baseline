@@ -944,7 +944,7 @@ void VideoManager::init(QQuickWindow *mainWindow)
 
     // STRATUM: make registered devices' handshake keys available at startup so they
     // connect without the operator having to open the Devices settings page.
-    _registerDeviceSigningKeys();
+    _removeDeviceSigningKeys();
 
     (void) connect(this, &VideoManager::autoStreamConfiguredChanged, this, &VideoManager::_videoSourceChanged);
 
@@ -1908,14 +1908,13 @@ void VideoManager::syncSettings()
     settings.sync();
 }
 
-void VideoManager::_registerDeviceSigningKeys()
+// STRATUM KAN-40: registered assets must NOT hold a signing key until the operator presses
+// Connect (otherwise a powered-on vehicle connects by itself, invisibly to the Assets tab).
+// At startup, drop any asset signing keys — including ones persisted by older builds. The key
+// is re-added by the Assets-tab Connect action and removed again on Disconnect/Remove.
+void VideoManager::_removeDeviceSigningKeys()
 {
     if (!_videoSettings) {
-        return;
-    }
-    const QByteArray key = QByteArray::fromHex(
-        _videoSettings->daggerDeviceKey()->rawValue().toString().trimmed().toLatin1());
-    if (key.size() != 16) {
         return;
     }
 
@@ -1925,15 +1924,32 @@ void VideoManager::_registerDeviceSigningKeys()
         const QJsonObject entry = value.toObject();
         const QString serial = entry.value(QStringLiteral("serial")).toString();
         const QString name = entry.value(QStringLiteral("name")).toString();
-
-        DeviceInfoV2::DeviceInfo info;
-        QString error;
-        if (!_decodeDipV2Serial(serial, key, info, error)) {
-            continue;
-        }
         const QString keyName = name.isEmpty() ? serial : name;
-        MAVLinkSigningKeys::instance()->removeKey(keyName);
-        MAVLinkSigningKeys::instance()->addKey(keyName, QStringLiteral("NX") + info.handshake);
+        if (!keyName.isEmpty()) {
+            MAVLinkSigningKeys::instance()->removeKey(keyName);
+        }
+    }
+}
+
+// STRATUM KAN-40: undo what Connect applied for an asset's camera — clear the Dagger C12 TV/IR
+// RTSP URLs and put the C12 control host back to its default. If the live stream URL still
+// points at one of the cleared feeds, clear it too so the stream stops.
+void VideoManager::clearDeviceCamera()
+{
+    if (!_videoSettings) {
+        return;
+    }
+
+    const QString tvUrl = _videoSettings->daggerC12TvRtspUrl()->rawValue().toString();
+    const QString irUrl = _videoSettings->daggerC12IrRtspUrl()->rawValue().toString();
+    const QString liveUrl = _videoSettings->rtspUrl()->rawValue().toString();
+
+    _videoSettings->daggerC12TvRtspUrl()->setRawValue(_videoSettings->daggerC12TvRtspUrl()->rawDefaultValue());
+    _videoSettings->daggerC12IrRtspUrl()->setRawValue(_videoSettings->daggerC12IrRtspUrl()->rawDefaultValue());
+    _videoSettings->daggerC12Host()->setRawValue(_videoSettings->daggerC12Host()->rawDefaultValue());
+
+    if (!liveUrl.isEmpty() && (liveUrl == tvUrl || liveUrl == irUrl)) {
+        _videoSettings->rtspUrl()->setRawValue(_videoSettings->rtspUrl()->rawDefaultValue());
     }
 }
 
@@ -1998,18 +2014,9 @@ void VideoManager::_setActiveVehicle(Vehicle *vehicle)
     if (_activeVehicle) {
         (void) connect(_activeVehicle->vehicleLinkManager(), &VehicleLinkManager::communicationLostChanged, this, &VideoManager::_communicationLostChanged);
 
-        // STRATUM: auto-provision the Dagger camera from the vehicle's DIP V2 device
-        // frame once the initial connection (AUTOPILOT_VERSION/uid) is complete.
-        const QPointer<Vehicle> vehicleGuard(_activeVehicle);
-        if (_activeVehicle->isInitialConnectComplete()) {
-            _provisionDaggerCameraFromVehicle(_activeVehicle);
-        } else {
-            (void) connect(_activeVehicle, &Vehicle::initialConnectComplete, this, [this, vehicleGuard]() {
-                if (vehicleGuard) {
-                    _provisionDaggerCameraFromVehicle(vehicleGuard);
-                }
-            }, Qt::SingleShotConnection);
-        }
+        // STRATUM KAN-40: the Dagger camera is no longer auto-provisioned from the vehicle's
+        // DIP V2 frame. Camera IP/RTSP settings are applied only by the Assets-tab Connect
+        // action (applyDeviceSerial) and cleared again on Disconnect.
 
         if (_activeVehicle->cameraManager()) {
             (void) connect(_activeVehicle->cameraManager(), &QGCCameraManager::streamChanged, this, &VideoManager::_videoSourceChanged);
