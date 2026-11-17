@@ -95,22 +95,6 @@ Item {
         videoHeight:             videoStreaming.getHeight()
     }
 
-    //-- STRATUM: tracker ROI-scoping overlay. Draws the outer ROI box the companion
-    //   tracker searches within and exposes a single diagonal-fraction control that
-    //   calls Vehicle::setTrackerRoi (NEXAM_TRACKER_CONFIG / 42005).
-    TrackerRoiOverlay {
-        id:                      trackerRoiOverlay
-        anchors.fill:            parent
-        visible:                 _root.pipState.state === _root.pipState.fullState
-        // STRATUM: sit above flyViewVideoMouseArea (below) so the +/- ROI buttons receive
-        // clicks; the overlay's transparent areas still pass mouse events through to the
-        // designation MouseArea (a plain Item does not grab events).
-        z:                       20
-        vehicle:                 QGroundControl.multiVehicleManager.activeVehicle
-        videoWidth:              videoStreaming.getWidth()
-        videoHeight:             videoStreaming.getHeight()
-    }
-
     MouseArea {
         id:                         flyViewVideoMouseArea
         anchors.fill:               parent

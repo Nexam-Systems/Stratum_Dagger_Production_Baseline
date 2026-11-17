@@ -149,37 +149,14 @@ Item {
         height: Math.abs(rootItem._dragNowY - rootItem._dragStartY)
     }
 
-    // --- tracked target overlay (red box streamed back from the companion) ---
-    Rectangle {
+    // --- tracked target overlay (reticle streamed back from the companion) ---
+    ReticleMark {
         id: trackedBox
-        color: "transparent"
-        border.color: "red"
-        border.width: 3
-        radius: 3
         visible: rootItem._trackingActive
 
         x: rootItem._trackingActive ? rootItem._marginH + videoWidth  * rootItem._track.topLeftX.value : 0
         y: rootItem._trackingActive ? rootItem._marginV + videoHeight * rootItem._track.topLeftY.value : 0
         width:  rootItem._trackingActive ? videoWidth  * (rootItem._track.botRightX.value - rootItem._track.topLeftX.value) : 0
         height: rootItem._trackingActive ? videoHeight * (rootItem._track.botRightY.value - rootItem._track.topLeftY.value) : 0
-
-        // Small corner label with the track id + confidence.
-        Rectangle {
-            visible: parent.visible
-            color: Qt.rgba(0, 0, 0, 0.5)
-            anchors.left: parent.left
-            anchors.bottom: parent.top
-            width: label.implicitWidth + 8
-            height: label.implicitHeight + 4
-            Text {
-                id: label
-                anchors.centerIn: parent
-                color: "red"
-                font.pixelSize: 12
-                text: rootItem._trackingActive
-                      ? ("T" + rootItem._track.targetId.value + "  " + Math.round(rootItem._track.confidence.value * 100) + "%")
-                      : ""
-            }
-        }
     }
 }

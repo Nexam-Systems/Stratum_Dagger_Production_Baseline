@@ -86,7 +86,6 @@ qt_add_qml_module(FlyViewModule
         OnScreenGimbalController.qml
         TargetTrackingOverlay.qml
         TargetGpsEstimate.qml
-        TrackerRoiOverlay.qml
         PreFlightBatteryCheck.qml
         PreFlightCheckList.qml
         PreFlightCheckListShowAction.qml
@@ -96,6 +95,7 @@ qt_add_qml_module(FlyViewModule
         PreFlightSoundCheck.qml
         ProximityRadarValues.qml
         ProximityRadarVideoView.qml
+        ReticleMark.qml
         RoverChecklist.qml
         StandoffController.qml
         StandoffOrbitDialog.qml
