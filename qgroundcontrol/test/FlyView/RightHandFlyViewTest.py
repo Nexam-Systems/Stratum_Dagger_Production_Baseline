@@ -308,10 +308,10 @@ component PtzButton: Button {
         self.assertIn("TerrainProgress", source)
         self.assertNotIn("PhotoVideoControl", source)
 
-    def test_roi_and_dock_feedback_presentation(self):
+    def test_roi_overlay_is_not_on_the_video_and_dock_feedback_presentation(self):
         video = (self.root / "src/FlyView/FlyViewVideo.qml").read_text(encoding="utf-8")
-        roi = video.split("TrackerRoiOverlay {", 1)[1].split("MouseArea {", 1)[0]
-        self.assertIn("visible:                 _root.pipState.state === _root.pipState.fullState", roi)
+        self.assertNotIn("TrackerRoiOverlay", video)
+        self.assertFalse((self.root / "src/FlyView/TrackerRoiOverlay.qml").exists())
         panel = (self.root / "src/FlyView/RightMissionPanel.qml").read_text(encoding="utf-8")
         self.assertNotIn("text: root.feedback", panel)
         self.panel_scene()
@@ -336,8 +336,11 @@ component PtzButton: Button {
         video_source = (self.root / "src/FlyView/FlyViewVideo.qml").read_text(encoding="utf-8")
         osd_source = (self.root / "src/FlyView/FlyViewVideoOSD.qml").read_text(encoding="utf-8")
         self.assertIn("visible:    videoStreaming.visible && _root.pipState.state === _root.pipState.fullState", video_source)
-        self.assertIn("visible: _hasVehicle && QGroundControl.videoManager.hasVideo && !compact", osd_source)
-        self.assertIn("function factText(fact, fallback)", osd_source)
+        # KAN-41: the overlay is only the centre crosshair (hidden in PiP), no telemetry readouts.
+        self.assertIn("visible:          !_root.compact", osd_source)
+        self.assertIn("ReticleMark {", osd_source)
+        self.assertNotIn("factText", osd_source)
+        self.assertNotIn("HUDField", osd_source)
 
     def panel_scene(self, width=1024, height=768):
         for name in ["RightMissionPanel.qml", "FlightTelemetryHeader.qml"]:

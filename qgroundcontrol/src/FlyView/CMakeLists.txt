@@ -86,7 +86,6 @@ qt_add_qml_module(FlyViewModule
         OnScreenGimbalController.qml
         TargetTrackingOverlay.qml
         TargetGpsEstimate.qml
-        TrackerRoiOverlay.qml
         PreFlightBatteryCheck.qml
         PreFlightCheckList.qml
         PreFlightCheckListShowAction.qml
