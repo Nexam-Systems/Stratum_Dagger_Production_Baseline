@@ -116,6 +116,9 @@ public:
     // from it. Returns true on success.
     Q_INVOKABLE bool applyDeviceSerial(const QString &serialHex);
 
+    // STRATUM KAN-40: clear the camera settings (C12 host, TV/IR RTSP URLs) applied for an asset.
+    Q_INVOKABLE void clearDeviceCamera();
+
     // STRATUM: force a QSettings flush to disk. Normal setting writes are lazily
     // flushed; the device registry calls this so a removal survives an abrupt exit.
     Q_INVOKABLE void syncSettings();
@@ -247,14 +250,14 @@ private:
     void _ensureC12AiSocket();
     bool _sendC12AiPacket(quint8 control, const QByteArray &payload);
 
-    // STRATUM: decode the connected vehicle's 8-byte DIP V2 device frame
-    // (AUTOPILOT_VERSION uid) and auto-provision the C12 camera IP + TV/IR RTSP
-    // URLs. No-op when no device key is configured or the frame fails to decode.
+    // STRATUM: (unused since KAN-40, camera is provisioned only on Connect) decode the connected
+    // vehicle's 8-byte DIP V2 device frame (AUTOPILOT_VERSION uid) and provision the C12 camera
+    // IP + TV/IR RTSP URLs. No-op when no device key is configured or the frame fails to decode.
     void _provisionDaggerCameraFromVehicle(Vehicle *vehicle);
 
-    // STRATUM: at startup, register every registered device's NX+handshake signing
-    // key so kept devices can connect without opening the Devices settings page.
-    void _registerDeviceSigningKeys();
+    // STRATUM KAN-40: remove the signing key of every registered asset (startup cleanup);
+    // keys are added only by the Assets-tab Connect action.
+    void _removeDeviceSigningKeys();
 
     QList<VideoReceiver*> _videoReceivers;
     SubtitleWriter *_subtitleWriter = nullptr;

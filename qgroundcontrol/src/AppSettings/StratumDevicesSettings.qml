@@ -8,8 +8,9 @@ import QGroundControl.FactControls
 
 // STRATUM Assets registry. Operators register each asset by its serial number (the
 // 8-byte DIP V2 frame, hex) and a name. STRATUM decodes the serial (with the admin-set
-// Device Info Key) to derive the camera IP + data-link; "Apply" provisions the camera
-// and "Connect" links to the asset.
+// Device Info Key) to derive the camera IP + data-link. "Apply" only validates the serial
+// and keeps the asset in the list; the signing key and camera settings are applied when the
+// operator presses "Connect" and wiped again on "Disconnect".
 Rectangle {
     id:             root
     objectName:     "settingsPage_StratumDevices"
@@ -64,10 +65,11 @@ Rectangle {
         }
     }
 
-    // STRATUM #84: Test Pairing dialog. Shows "Testing vehicle connectivity" while the backend
-    // probes the vehicle then the camera, switches to "Vehicle ready to be connected" on
-    // success (auto-closes after 1.5 s), or shows the failure reason. Dev build additionally
-    // shows the IP currently being probed. Closing cancels the in-progress probe.
+    // STRATUM #84: Test Pairing dialog. Shows "Pinging vehicle …" then "Pinging camera …" while the
+    // backend probes them, switches to "Vehicle ready to be connected" on success (auto-closes
+    // after 1.5 s), or shows the failure reason. Client builds never show an IP; the dev build
+    // also shows the IP being probed. Test Pairing changes nothing (no key, no camera settings).
+    // Closing cancels the in-progress probe.
     QGCPopupDialogFactory {
         id: pairingDialogFactory
         dialogComponent: pairingDialogComponent
@@ -81,7 +83,7 @@ Rectangle {
             title:   qsTr("Test Pairing")
             buttons: Dialog.Close
 
-            property string statusText: qsTr("Testing vehicle connectivity …")
+            property string statusText: qsTr("Pinging vehicle …")
             property bool   done:       false
 
             onClosed: QGroundControl.videoManager.cancelPairingTest()
@@ -102,9 +104,10 @@ Rectangle {
                         if (pairingDialog.done) {
                             return
                         }
+                        // "stage" is "vehicle" then "camera"; the IP is shown in dev builds only.
                         pairingDialog.statusText = root._dev
-                            ? qsTr("Testing vehicle connectivity … pinging %1 (%2)").arg(stage).arg(endpoint)
-                            : qsTr("Testing vehicle connectivity …")
+                            ? qsTr("Pinging %1 (%2) …").arg(stage).arg(endpoint)
+                            : qsTr("Pinging %1 …").arg(stage)
                     }
                     function onPairingTestSucceeded() {
                         pairingDialog.done = true
@@ -113,7 +116,7 @@ Rectangle {
                     }
                     function onPairingTestFailed(reason) {
                         pairingDialog.done = true
-                        pairingDialog.statusText = root._dev ? reason : qsTr("Vehicle not reachable.")
+                        pairingDialog.statusText = reason
                     }
                 }
 
@@ -150,6 +153,24 @@ Rectangle {
         _vm.syncSettings()
     }
 
+    // Wipe everything Connect set up for an asset: disconnect and delete its link (so nothing
+    // can auto-reconnect), drop its signing key, and — if it was the live connection — clear
+    // the camera settings it applied. The registry row is kept; only Remove deletes it.
+    function wipeAsset(serial, name) {
+        const cfg = assetLinkConfig(serial, name)
+        const wasLive = (cfg && cfg.linkActive) || vehicleOnLink(assetLinkName(serial, name)) !== null
+        if (cfg) {
+            const lm = QGroundControl.linkManager
+            lm.disconnectLinkConfiguration(cfg)
+            lm.removeConfiguration(cfg)
+        }
+        unregisterSigningKey(serial, name)
+        if (wasLive) {
+            _vm.clearDeviceCamera()
+        }
+        return cfg !== null
+    }
+
     // Remove an asset row reliably. Runs in the page (root) context so the save still
     // executes after deviceModel.remove destroys the row's delegate.
     function removeDeviceAt(i) {
@@ -157,7 +178,7 @@ Rectangle {
             return
         }
         const row = deviceModel.get(i)
-        unregisterSigningKey(row.serial, row.name)
+        wipeAsset(row.serial, row.name)
         deviceModel.remove(i)
         saveRegistry()
     }
@@ -219,24 +240,25 @@ Rectangle {
         return null
     }
 
-    // Create (or reuse) a UDP link to the device's decoded data-link endpoint and connect it,
-    // after making sure the handshake signing key is registered.
+    // The actual registration happens here, not on Apply: add the handshake signing key,
+    // provision this vehicle's camera (IP + TV/IR RTSP URLs), then create (or reuse) a UDP
+    // link to the device's decoded data-link endpoint and connect it.
     function connectDevice(serial, name) {
         const r = _vm.decodeDeviceSerial(serial)
         if (!r.valid) {
             return false
         }
-        registerSigningKey(serial, name)
-        // KAN-36: provision THIS vehicle's camera (IP + TV/IR RTSP URLs) from its serial on
-        // connect, so the camera settings follow the connected vehicle instead of staying on
-        // whichever device was last applied. Without this, connecting a different vehicle
-        // leaves the camera pointed at the previous device's IP (no stream / wrong camera).
-        _vm.applyDeviceSerial(serial)
 
         const lm = QGroundControl.linkManager
         const linkName = assetLinkName(serial, name)
-        // Single-vehicle policy: drop any other connected vehicle before connecting this one.
+        // Single-vehicle policy: fully drop any other connected asset (link, key, camera)
+        // BEFORE applying this asset's key and camera, so its cleanup can't wipe ours.
         disconnectOtherConnections(linkName)
+
+        registerSigningKey(serial, name)
+        // KAN-36: the camera settings follow the connected vehicle (no stale previous IP).
+        _vm.applyDeviceSerial(serial)
+
         for (let i = 0; i < lm.linkConfigurations.count; ++i) {
             const existing = lm.linkConfigurations.get(i)
             if (existing && existing.name === linkName) {
@@ -258,20 +280,26 @@ Rectangle {
         return true
     }
 
-    // Disconnect the asset's link if it is currently connected.
+    // Disconnect an asset and wipe its signing key, link and camera settings (see wipeAsset).
     function disconnectDevice(serial, name) {
-        const cfg = assetLinkConfig(serial, name)
-        if (cfg) {
-            QGroundControl.linkManager.disconnectLinkConfiguration(cfg)
-            return true
-        }
-        return false
+        return wipeAsset(serial, name)
     }
 
-    // Enforce a single connected vehicle: disconnect every currently-active link except the
-    // one we are about to connect (keepLinkName). Called from connectDevice so that connecting
-    // a new asset automatically drops any other connected vehicle.
+    // Enforce a single connected vehicle: fully disconnect (and wipe) every other active asset,
+    // then disconnect any remaining non-asset active link, keeping keepLinkName. Called from
+    // connectDevice so that connecting a new asset automatically drops any other connection.
     function disconnectOtherConnections(keepLinkName) {
+        for (let i = 0; i < deviceModel.count; ++i) {
+            const row = deviceModel.get(i)
+            if (assetLinkName(row.serial, row.name) === keepLinkName) {
+                continue
+            }
+            const cfg = assetLinkConfig(row.serial, row.name)
+            if (cfg && cfg.linkActive) {
+                wipeAsset(row.serial, row.name)
+            }
+        }
+
         const lm = QGroundControl.linkManager
         for (let i = 0; i < lm.linkConfigurations.count; ++i) {
             const c = lm.linkConfigurations.get(i)
@@ -283,23 +311,9 @@ Rectangle {
 
     ListModel { id: deviceModel }
 
-    Component.onCompleted: {
-        loadRegistry()
-        // Make every registered device's handshake key available up front so any of them
-        // can be accepted the moment it connects. Skip keys that are already present: signing
-        // keys persist in MAVLinkSigningKeys across tab opens (loaded at startup), and
-        // re-registering runs an expensive PBKDF2 derivation (~250 ms each) per asset, which
-        // made the Assets tab take several seconds to open every time. Only newly-added assets
-        // pay the one-time derivation cost.
-        for (let i = 0; i < deviceModel.count; ++i) {
-            const row = deviceModel.get(i)
-            const keyName = (row.name && row.name.length > 0) ? row.name : row.serial
-            if (keyName.length > 0 && QGroundControl.mavlinkSigningKeys.keyHexByName(keyName) !== "") {
-                continue
-            }
-            registerSigningKey(row.serial, row.name)
-        }
-    }
+    // Assets hold no signing key until Connect, so nothing is registered here (this also keeps
+    // the tab fast to open — no PBKDF2 key derivation per asset).
+    Component.onCompleted: loadRegistry()
 
     QGCFlickable {
         anchors.margins:  _margins
@@ -331,11 +345,11 @@ Rectangle {
                 Layout.fillWidth: true
                 wrapMode:         Text.WordWrap
                 visible:          root._dev
-                text: qsTr("Register each asset by its serial number and a name. STRATUM decodes the serial to " +
-                           "recover the 6-digit handshake (stored as NX + digits) and registers it as the asset's " +
-                           "signing key so its connection is accepted. Press \"Apply\" to provision the camera " +
-                           "(IP + TV/IR video streams); press \"Connect\" to link to the asset. The decode key is " +
-                           "set by an administrator.")
+                text: qsTr("Register each asset by its serial number and a name. \"Apply\" only validates the serial. " +
+                           "\"Connect\" decodes it, registers the handshake (NX + 6 digits) as the asset's signing key, " +
+                           "provisions the camera (IP + TV/IR video streams) and links to the vehicle. " +
+                           "\"Disconnect\" removes the signing key, camera settings and link again. " +
+                           "The decode key is set by an administrator.")
             }
 
             Rectangle { Layout.fillWidth: true; height: 1; color: qgcPal.groupBorder }
@@ -375,6 +389,9 @@ Rectangle {
                         void(QGroundControl.multiVehicleManager.vehicles.count)
                         return root.vehicleOnLink(_linkName) !== null
                     }
+                    // Link up (even before the first heartbeat): Disconnect must stay reachable
+                    // so a half-open connection can still be wiped.
+                    readonly property bool   _linkUp: _connected || (_linkCfg !== null && _linkCfg.linkActive)
 
                     QGCTextField {
                         id:                    serialField
@@ -419,9 +436,13 @@ Rectangle {
 
                         onEditingFinished: {
                             var clean = _clean(text)
-                            deviceModel.setProperty(index, "serial", clean)
-                            root.saveRegistry()
-                            root.registerSigningKey(clean, name)
+                            if (clean !== serial) {
+                                // A changed serial means a different vehicle: drop the old
+                                // asset's link/key/camera. The new serial is registered on Connect.
+                                root.wipeAsset(serial, name)
+                                deviceModel.setProperty(index, "serial", clean)
+                                root.saveRegistry()
+                            }
                         }
                     }
                     QGCTextField {
@@ -429,10 +450,13 @@ Rectangle {
                         text:                  name
                         placeholderText:       qsTr("e.g. Dagger 01")
                         onEditingFinished: {
-                            root.unregisterSigningKey(serialField.text, name)
-                            deviceModel.setProperty(index, "name", text)
-                            root.saveRegistry()
-                            root.registerSigningKey(serialField.text, text)
+                            if (text !== name) {
+                                // The key and link are named after the asset, so a rename
+                                // disconnects and wipes the old one; Connect re-registers it.
+                                root.wipeAsset(serialField.text, name)
+                                deviceModel.setProperty(index, "name", text)
+                                root.saveRegistry()
+                            }
                         }
                     }
                     RowLayout {
@@ -454,6 +478,7 @@ Rectangle {
                     QGCButton {
                         text:    qsTr("Apply")
                         enabled: serialField.text.length > 0
+                        // Validate only: no signing key and no camera/RTSP changes until Connect.
                         onClicked: {
                             const r = root._vm.decodeDeviceSerial(serialField.text)
                             if (!r.valid) {
@@ -462,19 +487,12 @@ Rectangle {
                                               : qsTr("Serial key invalid."))
                                 return
                             }
-                            root.registerSigningKey(serialField.text, name)
-                            if (root._vm.applyDeviceSerial(serialField.text)) {
-                                QGroundControl.showMessageDialog(root, qsTr("Apply Asset"),
-                                    root._dev
-                                        ? qsTr("Provisioned %1.\nCamera: %2\nData-link: %3:%4\nHandshake key NX%5 registered.")
-                                            .arg(name.length ? name : serialField.text)
-                                            .arg(r.cameraIp).arg(r.dataIp).arg(r.port).arg(r.handshake)
-                                        : qsTr("Vehicle registered."))
-                            } else {
-                                QGroundControl.showMessageDialog(root, qsTr("Apply Asset"),
-                                    root._dev ? qsTr("Could not provision %1.").arg(serialField.text)
-                                              : qsTr("Could not register vehicle."))
-                            }
+                            QGroundControl.showMessageDialog(root, qsTr("Apply Asset"),
+                                root._dev
+                                    ? qsTr("Registered %1.\nCamera: %2\nVehicle: %3:%4\nHandshake key NX%5 (applied on Connect).")
+                                        .arg(name.length ? name : serialField.text)
+                                        .arg(r.cameraIp).arg(r.dataIp).arg(r.port).arg(r.handshake)
+                                    : qsTr("Vehicle registered."))
                         }
                     }
                     QGCButton {
@@ -495,7 +513,7 @@ Rectangle {
                     }
                     QGCButton {
                         text:    qsTr("Connect")
-                        visible: !assetRow._connected
+                        visible: !assetRow._linkUp
                         enabled: serialField.text.length > 0
                         onClicked: {
                             const r = root._vm.decodeDeviceSerial(serialField.text)
@@ -518,7 +536,7 @@ Rectangle {
                     }
                     QGCButton {
                         text:    qsTr("Disconnect")
-                        visible: assetRow._connected
+                        visible: assetRow._linkUp
                         onClicked: root.disconnectDevice(serialField.text, name)
                     }
                     QGCButton {
