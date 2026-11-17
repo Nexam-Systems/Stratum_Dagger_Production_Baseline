@@ -79,6 +79,61 @@
             "keywords": "goto,go to,standoff,stratum,limit,distance"
         },
         {
+            "name": "standoffMinDistance",
+            "shortDesc": "Minimum standoff distance (R) accepted by the standoff geometry model.",
+            "type": "double",
+            "units": "m",
+            "default": 50,
+            "min": 1,
+            "max": 100000,
+            "label": "Min Standoff Radius",
+            "keywords": "standoff,stratum,limit,distance,radius"
+        },
+        {
+            "name": "standoffMaxDistance",
+            "shortDesc": "Maximum standoff distance (R) accepted by the standoff geometry model.",
+            "type": "double",
+            "units": "m",
+            "default": 1500,
+            "min": 1,
+            "max": 100000,
+            "label": "Max Standoff Radius",
+            "keywords": "standoff,stratum,limit,distance,radius"
+        },
+        {
+            "name": "standoffMinHeight",
+            "shortDesc": "Minimum standoff height (H) above the target accepted by the standoff geometry model.",
+            "type": "double",
+            "units": "m",
+            "default": 20,
+            "min": 0,
+            "max": 10000,
+            "label": "Min Standoff Height",
+            "keywords": "standoff,stratum,limit,height"
+        },
+        {
+            "name": "standoffMaxHeight",
+            "shortDesc": "Maximum standoff height (H) above the target accepted by the standoff geometry model.",
+            "type": "double",
+            "units": "m",
+            "default": 500,
+            "min": 0,
+            "max": 10000,
+            "label": "Max Standoff Height",
+            "keywords": "standoff,stratum,limit,height"
+        },
+        {
+            "name": "standoffLinkRangeLimit",
+            "shortDesc": "Distance from the GCS beyond which a standoff slot raises a link-range warning (does not block the command).",
+            "type": "double",
+            "units": "m",
+            "default": 15000,
+            "min": 1,
+            "max": 200000,
+            "label": "Standoff Link Range Limit",
+            "keywords": "standoff,stratum,link,range,warning"
+        },
+        {
             "name": "maxAOPDistance",
             "shortDesc": "Maximum allowed distance of any Area of Operations vertex from the vehicle home position.",
             "type": "double",
