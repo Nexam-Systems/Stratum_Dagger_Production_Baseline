@@ -43,8 +43,7 @@ qgroundcontrol/
 │   │   ├── FlyViewToolStripActionList.qml       # Right-hand action strip (visibility gates)
 │   │   ├── FlyViewMap.qml                       # AOP polygon edit / range check
 │   │   ├── FlyViewWidgetLayer.qml               # Standoff panel + AOP edit bar
-│   │   ├── FlyViewCameraControlsDaggerRoot.qml  # C12 PRO camera-control host
-│   │   └── TrackerRoiOverlay.qml                # Companion tracker ROI overlay
+│   │   └── FlyViewCameraControlsDaggerRoot.qml  # C12 PRO camera-control host
 │   ├── TargetFetch/TargetFetchManager.*         # XC25 pod ping + passive target read
 │   ├── VideoManager/VideoManager.cc             # SIYI A2 mini SDK v3 UDP sender
 │   ├── Vehicle/Vehicle.{h,cc}                   # setTrackerEnabled / setTrackerRoi / guidedModeStandoff
@@ -235,7 +234,7 @@ Header-side entry points:
   re-emits the full 42005 frame. This means enable + ROI always travel together and
   the companion can be dropped/re-connected without partial state.
 - **42003** — QML overlay drag / click handlers in `FlyViewVideo.qml` /
-  `TrackerRoiOverlay.qml`.
+  `TargetTrackingOverlay.qml`.
 
 ### 5.2 Custom commands (COMMAND_INT / COMMAND_LONG)
 

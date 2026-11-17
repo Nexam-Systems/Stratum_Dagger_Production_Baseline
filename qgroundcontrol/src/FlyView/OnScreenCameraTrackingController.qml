@@ -114,7 +114,7 @@ Item {
         height: Math.abs(_dragCurrentY - _dragStartY)
     }
 
-    // --- Tracking status overlay (red rectangle/circle from camera feedback) ---
+    // --- Tracking status overlay (reticle from camera feedback) ---
     // Coordinates are normalized to the video frame (0.0–1.0). Convert to screen
     // pixels by scaling by the displayed video size and offsetting by letterbox margins.
     readonly property bool _trackingActive: _trackingEnabled && camera.trackingImageIsActive
@@ -122,12 +122,8 @@ Item {
     readonly property real _marginH: (rootItem.width - videoWidth) / 2
     readonly property real _marginV: (rootItem.height - videoHeight) / 2
 
-    Rectangle {
+    ReticleMark {
         id: trackingStatusOverlay
-        color: "transparent"
-        border.color: "red"
-        border.width: 5
-        radius: rootItem._isPoint ? width / 2 : 5
         visible: rootItem._trackingActive
 
         x: rootItem._trackingActive
