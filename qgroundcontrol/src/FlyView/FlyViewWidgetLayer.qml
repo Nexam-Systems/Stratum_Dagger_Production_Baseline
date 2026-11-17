@@ -422,6 +422,15 @@ Item {
         // STRATUM: set when the last commit was rejected for being outside the AOP.
         property bool _aopReject: false
 
+        // STRATUM #98: validates distance / height against the configured standoff limits
+        // (Admin settings > Standoff limits). Fed straight from the panel fields.
+        StandoffGeometry {
+            id:         standoffGeometry
+            distance:   parseFloat(standoffDistanceField.text)
+            height:     parseFloat(standoffHeightField.text)
+        }
+        readonly property bool _limitsValid: standoffGeometry.distanceError === "" && standoffGeometry.heightError === ""
+
         function open() {
             visible = true
             if (mapControl) {
@@ -566,6 +575,24 @@ Item {
                 validator:             DoubleValidator { bottom: 0; top: 360; decimals: 1 }
             }
 
+            // STRATUM #98: configured distance / height limits.
+            QGCLabel {
+                Layout.columnSpan:   2
+                Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 34
+                visible:             standoffGeometry.distanceError !== ""
+                color:               qgcPal.lightTheme ? qgcPal.colorRed : "#EF5350"
+                wrapMode:            Text.WordWrap
+                text:                standoffGeometry.distanceError
+            }
+            QGCLabel {
+                Layout.columnSpan:   2
+                Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 34
+                visible:             standoffGeometry.heightError !== ""
+                color:               qgcPal.lightTheme ? qgcPal.colorRed : "#EF5350"
+                wrapMode:            Text.WordWrap
+                text:                standoffGeometry.heightError
+            }
+
             // STRATUM: the command needs a vehicle; surface that instead of failing
             // silently inside beginStandoff.
             QGCLabel {
@@ -599,8 +626,11 @@ Item {
                 QGCButton {
                     text:       qsTr("Set Standoff")
                     primary:    true
-                    enabled:    standoffPanel._coordValid && !standoffPanel._aopReject && _activeVehicle !== null
+                    enabled:    standoffPanel._coordValid && !standoffPanel._aopReject && standoffPanel._limitsValid && _activeVehicle !== null
                     onClicked: {
+                        if (!standoffPanel._limitsValid) {
+                            return
+                        }
                         var distance  = parseFloat(standoffDistanceField.text)
                         var height    = parseFloat(standoffHeightField.text)
                         var speed     = parseFloat(standoffSpeedField.text)
