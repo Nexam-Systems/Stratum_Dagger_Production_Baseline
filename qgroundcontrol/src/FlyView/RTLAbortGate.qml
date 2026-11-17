@@ -29,7 +29,13 @@ Item {
 
     // ---- Published gate outputs ----
     readonly property bool rtlAllowed:      _rtlCommitted
-    readonly property bool abortAllowed:    _abortCommitted
+    // Abort is available only while an engagement mode (Engagement / Vision / PN) is active
+    // and the abort budget (maxAborts) is not used up. Aborting leaves the engagement mode, so
+    // it stays off until the operator engages again. Deliberately NOT debounced: it follows the
+    // flight mode immediately (the time-policy part, _abortCommitted, still uses hysteresis).
+    readonly property string _mode:          vehicle ? vehicle.flightMode : ""
+    readonly property bool engaged:         _mode === "Engagement" || _mode === "Vision Engagement" || _mode === "PN Engagement"
+    readonly property bool abortAllowed:    engaged && abortsRemaining > 0 && _abortCommitted
     readonly property int  abortsDone:      _abortsDone
     readonly property int  abortsRemaining: Math.max(0, maxAborts - _abortsDone)
 
