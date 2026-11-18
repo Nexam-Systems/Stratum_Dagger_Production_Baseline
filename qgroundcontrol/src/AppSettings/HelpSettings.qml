@@ -74,10 +74,12 @@ Rectangle {
                            "1. On the top ribbon, press \"Set Standoff\". The Set Standoff panel opens.\n\n" +
                            "2. Choose the target location. Either type the latitude and longitude, or press the crosshair icon and tap on the map where the target is. The target must lie inside the AOP.\n\n" +
                            "3. Fill in the values:\n" +
+                           "   • Altitude (AMSL) — the target's altitude above sea level.\n" +
                            "   • Distance — how far the aircraft stays from the target.\n" +
-                           "   • Height AGL — how high above the ground the aircraft flies.\n" +
+                           "   • Height above target — how high above the target the aircraft flies.\n" +
                            "   • Speed — cruise speed to the standoff point.\n" +
-                           "   • Direction — which side of the target the aircraft holds on (North, East, South, West).\n\n" +
+                           "   • Direction — the bearing from the target to the standoff point, from 0 up to (not including) 360 degrees (0 = North, 90 = East).\n\n" +
+                           "   The panel shows the standoff point (latitude, longitude, altitude, slant range and distance from this ground station) as you type. Distance and height must stay within the allowed limits. A warning appears if the standoff point is beyond the link range limit from this ground station; it does not stop you from continuing.\n\n" +
                            "4. Press \"Set Standoff\". The aircraft will fly to the standoff point and orbit it. You can reopen the panel and re-apply new values while it holds; it will move to the new point.\n\n" +
                            "If the app says the standoff point is too far, either move the target closer to the aircraft or increase Application Settings → General → STRATUM Operational Limits → \"Max Standoff Distance\".")
             }
