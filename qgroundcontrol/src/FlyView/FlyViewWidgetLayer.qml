@@ -450,6 +450,7 @@ Item {
             visible = true
             if (mapControl) {
                 mapControl.startStandoffPick()
+                mapControl.setStandoffDraft(standoffGeometry)   // map draws the draft ring and slot from it
                 _updatePending()   // fields may still hold a valid target from last use
             }
         }
@@ -495,6 +496,11 @@ Item {
             function onStandoffTargetPicked(coordinate) {
                 standoffLatField.text = coordinate.latitude.toFixed(7)
                 standoffLonField.text = coordinate.longitude.toFixed(7)
+            }
+            // Draft slot dragged on the map: only the direction changes. 0.1 degree resolution,
+            // wrapped so 359.96 becomes 0.0 rather than the invalid 360.0.
+            function onStandoffSlotDragged(bearing) {
+                standoffDirectionField.text = ((Math.round(bearing * 10) / 10) % 360).toFixed(1)
             }
         }
 

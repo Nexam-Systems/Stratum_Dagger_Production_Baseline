@@ -2,6 +2,7 @@
 
 #include <QtCore/QObject>
 #include <QtCore/QString>
+#include <QtCore/QVariantList>
 #include <QtCore/qnumeric.h>
 #include <QtPositioning/QGeoCoordinate>
 #include <QtQmlIntegration/QtQmlIntegration>
@@ -44,6 +45,7 @@ class StandoffGeometry : public QObject
 
     // ---- derived values (NaN / invalid coordinate when they cannot be computed) ----
     Q_PROPERTY(QGeoCoordinate slotCoordinate   READ slotCoordinate   NOTIFY changed)   ///< lat/lon + slot altitude AMSL
+    Q_PROPERTY(QVariantList   ringPath         READ ringPath         NOTIFY changed)   ///< standoff ring: geodesic circle of radius R, one point per degree (kRingPoints + 1 coordinates, closed); empty without a target / R
     Q_PROPERTY(double         slotAltitude     READ slotAltitude     NOTIFY changed)   ///< target AMSL + H [m]
     Q_PROPERTY(double         slantRange       READ slantRange       NOTIFY changed)   ///< slot -> target [m]
     Q_PROPERTY(double         gcsDistanceToSlot READ gcsDistanceToSlot NOTIFY changed) ///< horizontal GCS -> slot [m]
@@ -59,6 +61,7 @@ class StandoffGeometry : public QObject
 public:
     static constexpr double kDefaultDistance = 100.0;   ///< default R [m]
     static constexpr double kDefaultHeight   = 100.0;   ///< default H [m]
+    static constexpr int    kRingPoints      = 360;     ///< ring resolution: 1 degree
 
     explicit StandoffGeometry(QObject *parent = nullptr);
 
@@ -86,6 +89,7 @@ public:
     QString directionError() const;
 
     QGeoCoordinate slotCoordinate() const;
+    QVariantList   ringPath() const;
     double         slotAltitude() const;
     double         slantRange() const;
     double         gcsDistanceToSlot() const;

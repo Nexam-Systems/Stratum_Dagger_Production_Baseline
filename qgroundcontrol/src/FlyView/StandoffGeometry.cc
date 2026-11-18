@@ -156,6 +156,22 @@ QGeoCoordinate StandoffGeometry::slotCoordinate() const
     return slot;
 }
 
+// The ring only needs the target and R (not θ): it is drawn as soon as those are valid.
+QVariantList StandoffGeometry::ringPath() const
+{
+    QVariantList path;
+    if (!targetError().isEmpty() || !std::isfinite(_distance) || _distance <= 0.0) {
+        return path;
+    }
+
+    const QGeoCoordinate target(_targetLatitude, _targetLongitude);
+    path.reserve(kRingPoints + 1);
+    for (int i = 0; i <= kRingPoints; ++i) {
+        path.append(QVariant::fromValue(QGCGeo::geodesicDestination(target, static_cast<double>(i), _distance)));
+    }
+    return path;
+}
+
 double StandoffGeometry::slantRange() const
 {
     if (!std::isfinite(_distance) || _distance < 0.0 || !std::isfinite(_height)) {
