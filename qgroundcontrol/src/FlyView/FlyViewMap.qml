@@ -72,13 +72,26 @@ FlightMap {
 
     // STRATUM: interim target while the Set Standoff panel is open. Fed by the panel
     // (map pick or valid manual lat/lon entry - the panel is the single writer) and
-    // rendered as the BLUE pending marker. Cleared when pick mode ends; on commit the
-    // controller's _targetCoordinate takes over and the marker turns red (engaged).
+    // drawn as the draft target icon. Cleared when pick mode ends; on commit the
+    // controller's _targetCoordinate takes over and the icon turns solid (active).
     property var    _standoffPendingCoordinate: QtPositioning.coordinate()
+
+    // STRATUM #98: the Set Standoff panel's StandoffGeometry while the panel is open (null
+    // otherwise); the map draws the draft ring and slot from it.
+    property var    _standoffDraft:             null
 
     signal standoffTargetPicked(var coordinate)
 
-    // STRATUM: emitted by the map-click "Set Standoff here" menu item. Handled in
+    // STRATUM #98: the draft slot was dragged on the map; bearing is the new theta [deg true]
+    // from the target. The panel writes it to its Direction field (R and H are unchanged).
+    signal standoffSlotDragged(real bearing)
+
+    // STRATUM #98: the draft ring edge was dragged on the map; distance is the new R [m] from
+    // the target to the pointer. The panel clamps it to the configured limits and writes it to
+    // its Distance field (theta and H are unchanged).
+    signal standoffRingDragged(real distance)
+
+    // STRATUM: emitted by the map-click "Set standoff here" menu item. Handled in
     // FlyView.qml by opening the Set Standoff panel pre-filled with the coordinate.
     signal setStandoffHereRequested(var coordinate)
 
@@ -86,9 +99,13 @@ FlightMap {
     function stopStandoffPick() {
         _standoffPickMode = false
         _standoffPendingCoordinate = QtPositioning.coordinate()
+        _standoffDraft = null
     }
     function setStandoffPendingCoordinate(coordinate) {
         _standoffPendingCoordinate = coordinate
+    }
+    function setStandoffDraft(geometry) {
+        _standoffDraft = geometry
     }
 
     // STRATUM: true when the fence model already holds an inclusion polygon with
@@ -1119,84 +1136,304 @@ FlightMap {
     }
 
     // STRATUM: standoff command controller. Sends the orbit params + activate commands
-    // to the bridge (web UI contract) and owns the on-map surveillance circle state.
+    // to the bridge (web UI contract) and owns the on-map standoff display state.
     StandoffController {
         id:                 standoffController
         guidedController:   globals.guidedControllerFlyView
     }
 
-    // STRATUM: standoff surveillance area. Crimson circle centred on the target,
-    // radius = standoff distance, depicting the area under surveillance. Shown
-    // whenever a standoff hold / orbit is active.
-    MapCircle {
-        id:             standoffSurveillanceCircle
-        center:         standoffController._targetCoordinate
-        radius:         Math.max(standoffController._standoffDistance, 1)
-        color:          Qt.rgba(0.82, 0.10, 0.21, 0.15)  // crimson fill, low opacity
-        border.color:   "#D11A35"                        // crimson outline
-        border.width:   2
-        visible:        standoffController._standoffActive
+    // STRATUM #98: standoff geometry display - target, standoff ring and slot.
+    //   DRAFT  - while the Set Standoff panel is open it hands us its StandoffGeometry
+    //            (setStandoffDraft) and the map redraws it live as the operator edits.
+    //   ACTIVE - once Set Standoff is pressed the committed values are drawn solid. The slot
+    //            is drawn "en route" for now; the ACK-driven slot states come with the
+    //            command work.
+    // The ring and slot come from StandoffGeometry (WGS-84 geodesic), so the slot sits exactly
+    // on the drawn ring. Both are tied to the target, so they move with it.
+    StandoffGeometry {
+        id:                 standoffActiveGeometry
+        targetLatitude:     standoffController._targetCoordinate.isValid ? standoffController._targetCoordinate.latitude : NaN
+        targetLongitude:    standoffController._targetCoordinate.isValid ? standoffController._targetCoordinate.longitude : NaN
+        distance:           standoffController._standoffDistance
+        height:             standoffController._standoffHeight
+        direction:          standoffController._standoffDirection
+    }
+
+    readonly property bool _standoffDraftRing:   _standoffDraft !== null && _standoffPendingCoordinate.isValid && _standoffDraftRingPath.length > 0
+    readonly property bool _standoffDraftSlot:   _standoffDraftRing && _standoffDraft.slotCoordinate.isValid
+    readonly property bool _standoffActiveRing:  standoffController._standoffActive && _standoffActiveRingPath.length > 0
+    readonly property bool _standoffActiveSlot:  _standoffActiveRing && standoffActiveGeometry.slotCoordinate.isValid
+    // Read once per change and shared by the ring pieces (361 coordinates each).
+    readonly property var  _standoffDraftRingPath:  _standoffDraft ? _standoffDraft.ringPath : []
+    readonly property var  _standoffActiveRingPath: standoffActiveGeometry.ringPath
+
+    // One dash of the dashed ring: 3 degrees drawn, 2 degrees gap, 72 dashes per ring.
+    component StandoffRingDash : MapPolyline {
+        property var ring:      []       // StandoffGeometry.ringPath: one coordinate per degree
+        property int dashIndex: 0
+        line.width: 3
+        line.color: "#D3D1C7"
+        path:       ring.length > 0 ? ring.slice(dashIndex * 5, dashIndex * 5 + 4) : []
+        z:          QGroundControl.zOrderMapItems + 2
+    }
+
+    // Dark outline under the dashes so the ring reads on any map. It is built from the same
+    // 72-piece MapItemView as the dashes (full 5-degree pieces, so it is continuous) and must be
+    // declared BEFORE the dash view: a separate MapPolyline is always drawn on top of a
+    // MapItemView regardless of its z, which hid the dashes.
+    component StandoffRingShadow : MapPolyline {
+        property var ring:      []
+        property int dashIndex: 0
+        line.width: 5
+        line.color: Qt.rgba(0, 0, 0, 0.55)
+        path:       ring.length > 0 ? ring.slice(dashIndex * 5, dashIndex * 5 + 6) : []
+        z:          QGroundControl.zOrderMapItems + 1
+    }
+
+    // Translucent red fill of the standoff area. Red (the target's colour) stays distinct from
+    // the blue AOP highlight, and the low opacity keeps the map readable through it. Rough layers:
+    // AOP fill (-1) < ring fill (0) < dark outline (+1) < dashes (+2) < target icon / label (+3)
+    // < slot / handle (+4).
+    component StandoffRingFill : MapPolygon {
+        property var ring: []
+        path:           ring
+        color:          Qt.rgba(0.89, 0.29, 0.29, 0.22)
+        border.width:   0
         z:              QGroundControl.zOrderMapItems
     }
 
-    // STRATUM: target markers. A simple "T" in a circle whose CENTRE anchors exactly
-    // on the coordinate; the monochrome SVG is tinted per state through QGCColoredImage.
-    // BLUE = target being set (panel open, valid coordinate, OK not yet pressed).
-    // RED  = standoff engaged; the target position is currently being served.
-    // The icon scales with map zoom inside fixed bounds (~1.25x per level, clamped
-    // [0.7, 1.9], zoomLevel 16 -> 1.0x) so it neither vanishes nor swamps the view.
-    component StandoffTargetMarker : MapQuickItem {
-        id:             targetMarkerRoot
-        anchorPoint.x:  sourceItem.width  / 2
-        anchorPoint.y:  sourceItem.height / 2   // square icon: geometric centre on target
-        z:              QGroundControl.zOrderMapItems + 1
+    // Target crosshair icon with its ID label. A single target for now, so the ID is fixed.
+    component StandoffTargetIcon : MapQuickItem {
+        id:             targetIconRoot
+        property string iconSource
+        readonly property real _size: ScreenTools.defaultFontPixelHeight * 2.0
 
-        property color markerColor: "#D11A35"
-        property string markerLabel: qsTr("Target")
-
-        property real _zoomScale: Math.max(0.7, Math.min(1.9, Math.pow(1.25, _root.zoomLevel - 16)))
-        property real _iconSize:  ScreenTools.defaultFontPixelHeight * 2.0 * _zoomScale
+        anchorPoint.x:  _size / 2
+        anchorPoint.y:  _size / 2     // icon centre sits exactly on the target
+        z:              QGroundControl.zOrderMapItems + 3
 
         sourceItem: Item {
-            width:  targetMarkerIcon.width
-            height: targetMarkerIcon.height
+            width:  targetIconRoot._size
+            height: targetIconRoot._size
 
-            QGCColoredImage {
-                id:                 targetMarkerIcon
-                source:             "/qmlimages/StandoffMarker.svg"
-                color:              targetMarkerRoot.markerColor
-                width:              targetMarkerRoot._iconSize
-                height:             targetMarkerRoot._iconSize
-                sourceSize.width:   targetMarkerRoot._iconSize * 2   // crisp on hi-DPI displays
-                fillMode:           Image.PreserveAspectFit
+            Image {
+                id:                 targetIconImage
+                anchors.fill:       parent
+                source:             targetIconRoot.iconSource
+                sourceSize.width:   targetIconRoot._size * 2   // crisp on hi-DPI displays
+                sourceSize.height:  targetIconRoot._size * 2
                 mipmap:             true
             }
 
             QGCMapLabel {
-                anchors.top:                targetMarkerIcon.bottom
-                anchors.topMargin:          ScreenTools.defaultFontPixelHeight * 0.15
-                anchors.horizontalCenter:   targetMarkerIcon.horizontalCenter
-                map:                        _root
-                text:                       targetMarkerRoot.markerLabel
-                font.pointSize:             ScreenTools.smallFontPointSize
+                anchors.left:           targetIconImage.right
+                anchors.leftMargin:     ScreenTools.defaultFontPixelHeight * 0.2
+                anchors.verticalCenter: targetIconImage.verticalCenter
+                map:                    _root
+                text:                   qsTr("TGT-01")
+                font.pointSize:         ScreenTools.smallFontPointSize
             }
         }
     }
 
-    // Interim marker: follows the panel's pending coordinate while setting.
-    StandoffTargetMarker {
-        coordinate:     _root._standoffPendingCoordinate
-        visible:        _root._standoffPickMode && _root._standoffPendingCoordinate.isValid
-        markerColor:    "#1E88E5"
-        markerLabel:    qsTr("Target")
+    // Slot pentagon on the ring, tip pointing at the target, with its bearing label. When
+    // dragTarget (the target coordinate) is valid the slot can be dragged: a drag only reports
+    // a new bearing from the target (dragged()), R and H are untouched.
+    component StandoffSlotIcon : MapQuickItem {
+        id:             slotIconRoot
+        property string iconSource
+        property real   slotBearing: 0                                // theta [deg true]
+        property var    dragTarget:  QtPositioning.coordinate()
+        readonly property real _size: ScreenTools.defaultFontPixelHeight * 2.0
+        signal dragged(real bearing)
+
+        anchorPoint.x:  _size / 2
+        anchorPoint.y:  _size / 2     // icon centre sits exactly on the ring point
+        z:              QGroundControl.zOrderMapItems + 4
+
+        sourceItem: Item {
+            width:  slotIconRoot._size
+            height: slotIconRoot._size
+
+            Image {
+                id:                 slotIconImage
+                anchors.fill:       parent
+                source:             slotIconRoot.iconSource
+                sourceSize.width:   slotIconRoot._size * 2
+                sourceSize.height:  slotIconRoot._size * 2
+                mipmap:             true
+                // The icon tip points down; turning it by theta points it at the target.
+                rotation:           slotIconRoot.slotBearing - _root.bearing
+            }
+
+            QGCMapLabel {
+                anchors.left:           slotIconImage.right
+                anchors.leftMargin:     ScreenTools.defaultFontPixelHeight * 0.2
+                anchors.verticalCenter: slotIconImage.verticalCenter
+                map:                    _root
+                text:                   ("00" + (Math.round(slotIconRoot.slotBearing) % 360)).slice(-3) + "°"
+                font.pointSize:         ScreenTools.smallFontPointSize
+            }
+
+            MouseArea {
+                anchors.fill:       slotIconImage
+                enabled:            slotIconRoot.dragTarget.isValid
+                preventStealing:    true
+                cursorShape:        enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onPositionChanged: (mouse) => {
+                    if (!pressed) {
+                        return
+                    }
+                    var point = mapToItem(_root, mouse.x, mouse.y)
+                    var coordinate = _root.toCoordinate(Qt.point(point.x, point.y), false /* clipToViewPort */)
+                    slotIconRoot.dragged(slotIconRoot.dragTarget.azimuthTo(coordinate))
+                }
+            }
+        }
     }
 
-    // Engaged marker: the committed target the standoff is serving.
-    StandoffTargetMarker {
+    // "R <m> · +<m> AGL" label at the bottom (south point) of the ring.
+    component StandoffRingLabel : MapQuickItem {
+        property var  ring:       []
+        property real ringRadius: 0
+        property real ringHeight: NaN
+
+        coordinate:     ring.length > 180 ? ring[180] : QtPositioning.coordinate()
+        anchorPoint.x:  sourceItem.width / 2
+        anchorPoint.y:  -ScreenTools.defaultFontPixelHeight * 0.7   // clear of the ring-edge drag handle
+        z:              QGroundControl.zOrderMapItems + 3
+
+        sourceItem: QGCMapLabel {
+            map:            _root
+            text:           qsTr("R %1 m · +%2 m AGL").arg(Math.round(ringRadius)).arg(isFinite(ringHeight) ? Math.round(ringHeight) : "--")
+            font.pointSize: ScreenTools.smallFontPointSize
+        }
+    }
+
+    // Grab handle on the draft ring edge. Dragging it changes R only (the distance from the
+    // target to the pointer); the bearing and height are untouched. It sits opposite the slot.
+    component StandoffRingHandle : MapQuickItem {
+        id:             handleRoot
+        property var    dragTarget:  QtPositioning.coordinate()
+        readonly property real _size: ScreenTools.defaultFontPixelHeight * 1.1
+        signal dragged(real distance)
+
+        anchorPoint.x:  _size / 2
+        anchorPoint.y:  _size / 2     // handle centre sits exactly on the ring
+        z:              QGroundControl.zOrderMapItems + 4
+
+        sourceItem: Item {
+            width:  handleRoot._size
+            height: handleRoot._size
+
+            Rectangle {
+                anchors.fill:   parent
+                radius:         width / 2
+                color:          "#D3D1C7"
+                border.color:   Qt.rgba(0, 0, 0, 0.55)
+                border.width:   2
+            }
+
+            MouseArea {
+                anchors.fill:       parent
+                enabled:            handleRoot.dragTarget.isValid
+                preventStealing:    true
+                cursorShape:        enabled ? Qt.SizeAllCursor : Qt.ArrowCursor
+                onPositionChanged: (mouse) => {
+                    if (!pressed) {
+                        return
+                    }
+                    var point = mapToItem(_root, mouse.x, mouse.y)
+                    var coordinate = _root.toCoordinate(Qt.point(point.x, point.y), false /* clipToViewPort */)
+                    handleRoot.dragged(handleRoot.dragTarget.distanceTo(coordinate))
+                }
+            }
+        }
+    }
+
+    // ---- DRAFT (Set Standoff panel open) ----
+    StandoffRingFill {
+        ring:       _root._standoffDraftRingPath
+        visible:    _root._standoffDraftRing
+    }
+    MapItemView {       // dark under-stroke (declared before the dashes, see StandoffRingShadow)
+        model:      _root._standoffDraftRing ? 72 : 0
+        delegate:   StandoffRingShadow {
+            ring:       _root._standoffDraftRingPath
+            dashIndex:  index
+        }
+    }
+    MapItemView {
+        model:      _root._standoffDraftRing ? 72 : 0
+        delegate:   StandoffRingDash {
+            ring:       _root._standoffDraftRingPath
+            dashIndex:  index
+        }
+    }
+    StandoffRingLabel {
+        visible:        _root._standoffDraftRing
+        ring:           _root._standoffDraftRingPath
+        ringRadius:     _root._standoffDraft ? _root._standoffDraft.distance : 0
+        ringHeight:     _root._standoffDraft ? _root._standoffDraft.height : NaN
+    }
+    StandoffTargetIcon {
+        coordinate:     _root._standoffPendingCoordinate
+        visible:        _root._standoffPickMode && _root._standoffPendingCoordinate.isValid
+        iconSource:     "/qmlimages/StandoffTargetDraft.svg"
+    }
+    StandoffSlotIcon {
+        coordinate:     _root._standoffDraft ? _root._standoffDraft.slotCoordinate : QtPositioning.coordinate()
+        visible:        _root._standoffDraftSlot
+        iconSource:     "/qmlimages/StandoffSlotDraft.svg"
+        slotBearing:    _root._standoffDraft ? _root._standoffDraft.direction : 0
+        dragTarget:     _root._standoffPendingCoordinate
+        onDragged:      (bearing) => _root.standoffSlotDragged(bearing)
+    }
+    StandoffRingHandle {
+        // Ring point opposite the slot (one ring point per degree of bearing).
+        coordinate:     _root._standoffDraftRingPath.length > 0
+                            ? _root._standoffDraftRingPath[(Math.round(_root._standoffDraft && isFinite(_root._standoffDraft.direction) ? _root._standoffDraft.direction : 0) + 180) % 360]
+                            : QtPositioning.coordinate()
+        visible:        _root._standoffDraftRing
+        dragTarget:     _root._standoffPendingCoordinate
+        onDragged:      (distance) => _root.standoffRingDragged(distance)
+    }
+
+    // ---- ACTIVE (Set Standoff pressed) ----
+    StandoffRingFill {
+        ring:       _root._standoffActiveRingPath
+        visible:    _root._standoffActiveRing
+    }
+    MapItemView {
+        model:      _root._standoffActiveRing ? 72 : 0
+        delegate:   StandoffRingShadow {
+            ring:       _root._standoffActiveRingPath
+            dashIndex:  index
+        }
+    }
+    MapItemView {
+        model:      _root._standoffActiveRing ? 72 : 0
+        delegate:   StandoffRingDash {
+            ring:       _root._standoffActiveRingPath
+            dashIndex:  index
+        }
+    }
+    StandoffRingLabel {
+        visible:        _root._standoffActiveRing
+        ring:           _root._standoffActiveRingPath
+        ringRadius:     standoffController._standoffDistance
+        ringHeight:     standoffController._standoffHeight
+    }
+    StandoffTargetIcon {
         coordinate:     standoffController._targetCoordinate
         visible:        standoffController._standoffActive && standoffController._targetCoordinate.isValid
-        markerColor:    "#D11A35"
-        markerLabel:    qsTr("Target")
+        iconSource:     "/qmlimages/StandoffTargetActive.svg"
+    }
+    StandoffSlotIcon {
+        coordinate:     standoffActiveGeometry.slotCoordinate
+        visible:        _root._standoffActiveSlot
+        iconSource:     "/qmlimages/StandoffSlotEnroute.svg"
+        slotBearing:    standoffController._standoffDirection
     }
 
     // STRATUM: XC25 fetched-target marker. Plotted on demand by the "Fetch Target"

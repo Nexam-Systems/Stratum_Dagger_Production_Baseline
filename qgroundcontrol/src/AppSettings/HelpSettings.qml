@@ -75,7 +75,7 @@ Rectangle {
                            "2. Choose the target location. Either type the latitude and longitude, or press the crosshair icon and tap on the map where the target is. The target must lie inside the AOP.\n\n" +
                            "3. Fill in the values:\n" +
                            "   • Altitude (AMSL) — the target's altitude above sea level.\n" +
-                           "   • Distance — how far the aircraft stays from the target.\n" +
+                           "   • Distance — how far the aircraft stays from the target. You can also drag the round handle on the dashed ring on the map.\n" +
                            "   • Height above target — how high above the target the aircraft flies.\n" +
                            "   • Speed — cruise speed to the standoff point.\n" +
                            "   • Direction — the bearing from the target to the standoff point, from 0 up to (not including) 360 degrees (0 = North, 90 = East).\n\n" +

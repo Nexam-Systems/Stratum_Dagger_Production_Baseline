@@ -291,4 +291,47 @@ void StandoffGeometryTest::_slotUnavailableWithoutTarget_test()
     QVERIFY(!geometry.slotCoordinate().isValid());
 }
 
+void StandoffGeometryTest::_ringPath_test()
+{
+    useDefaultLimits();
+
+    StandoffGeometry geometry;
+    // No target yet: no ring.
+    QVERIFY(geometry.ringPath().isEmpty());
+
+    setTarget(geometry, 47.3764, 8.5481);
+    geometry.setDistance(1000.0);
+    geometry.setDirection(0.0);
+
+    const QVariantList ring = geometry.ringPath();
+    QCOMPARE(ring.size(), StandoffGeometry::kRingPoints + 1);
+
+    // Every point is R from the target, and the ring is closed.
+    const QGeoCoordinate target(47.3764, 8.5481);
+    for (const QVariant &point : ring) {
+        const QGeoCoordinate coordinate = point.value<QGeoCoordinate>();
+        QVERIFY(coordinate.isValid());
+        QVERIFY(std::fabs(QGCGeo::geodesicDistance(target, coordinate) - 1000.0) < 0.01);
+    }
+    const QGeoCoordinate first = ring.first().value<QGeoCoordinate>();
+    const QGeoCoordinate last = ring.last().value<QGeoCoordinate>();
+    QVERIFY(std::fabs(first.latitude() - last.latitude()) < 1e-9);
+    QVERIFY(std::fabs(first.longitude() - last.longitude()) < 1e-9);
+
+    // The slot lies on the ring: bearing 0 is the first ring point, bearing 90 is point 90.
+    const QGeoCoordinate slotNorth = geometry.slotCoordinate();
+    QVERIFY(std::fabs(slotNorth.latitude() - first.latitude()) < 1e-9);
+    geometry.setDirection(90.0);
+    const QGeoCoordinate slotEast = geometry.slotCoordinate();
+    const QGeoCoordinate ringEast = geometry.ringPath().at(90).value<QGeoCoordinate>();
+    QVERIFY(std::fabs(slotEast.latitude() - ringEast.latitude()) < 1e-9);
+    QVERIFY(std::fabs(slotEast.longitude() - ringEast.longitude()) < 1e-9);
+
+    // The ring does not need a valid bearing or altitude, but it does need R.
+    geometry.setDirection(qQNaN());
+    QCOMPARE(geometry.ringPath().size(), StandoffGeometry::kRingPoints + 1);
+    geometry.setDistance(0.0);
+    QVERIFY(geometry.ringPath().isEmpty());
+}
+
 UT_REGISTER_TEST(StandoffGeometryTest, TestLabel::Unit, TestLabel::Utilities)

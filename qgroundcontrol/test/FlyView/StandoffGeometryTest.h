@@ -15,4 +15,5 @@ private slots:
     void _gcsRangeAndLinkWarning_test();
     void _changedSignal_test();
     void _slotUnavailableWithoutTarget_test();
+    void _ringPath_test();
 };

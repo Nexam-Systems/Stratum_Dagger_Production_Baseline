@@ -35,14 +35,14 @@ Item {
     readonly property int  _stratumProfile: QGroundControl.settingsManager.appSettings.stratumProfile.rawValue
     readonly property bool _isDagger:       _stratumProfile === 2
 
-    // Committed standoff state. _standoffDistance drives the on-map surveillance circle.
+    // Committed standoff state. _standoffDistance drives the on-map standoff ring.
     property var    _targetCoordinate:  QtPositioning.coordinate()
     property real   _standoffDistance:  0    // orbit distance / radius [m]
     property real   _standoffHeight:    0    // height AGL [m]
     property real   _standoffSpeed:     0    // [km/h]  (Dropper only)
     property real   _standoffDirection: 0    // compass bearing [deg], 0 = N, clockwise
     // True from the moment a standoff is committed until it is cancelled. Drives the
-    // on-map surveillance circle (centre = target, radius = standoff distance).
+    // on-map standoff display (target, ring centred on it, slot at the standoff bearing).
     property bool   _standoffActive:    false
     on_ActiveVehicleChanged: {
         _targetCoordinate = QtPositioning.coordinate()
@@ -61,7 +61,7 @@ Item {
     // in the Set Standoff panel (manual lat/lon entry or crosshair map pick).
     // Returns true on commit, false if the request was rejected (bad vehicle, invalid
     // coordinate, or Vehicle::guidedModeStandoff distance check). On a false return
-    // NOTHING is mutated: no flight-mode switch, no surveillance circle.
+    // NOTHING is mutated: no flight-mode switch, no active standoff display.
     function beginStandoff(distanceMeters, heightMeters, speed, direction, targetCoordinate) {
         if (!_activeVehicle) {
             return false
@@ -110,7 +110,7 @@ Item {
     // Abort the standoff/orbit. On Dropper this fires 31011 activate=0 to the bridge; on
     // Dagger the flight-mode change alone is enough — PX4 exits Standoff when a new mode
     // is commanded, and there is no bridge command to abort. Both paths clear the
-    // surveillance circle.
+    // active standoff display.
     function cancelStandoff() {
         if (!_isDagger && _activeVehicle) {
             _activeVehicle.sendCommand(_bridgeComponentId, _cmdStandoffActivate, true,
