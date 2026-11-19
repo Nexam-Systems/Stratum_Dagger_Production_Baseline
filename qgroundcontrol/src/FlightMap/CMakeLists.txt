@@ -96,6 +96,7 @@ qt_add_resources(${CMAKE_PROJECT_NAME} flightmap_qmlimages
         "${CMAKE_SOURCE_DIR}/src/FlightMap/Images/StandoffMarker.svg"
         "${CMAKE_SOURCE_DIR}/src/FlightMap/Images/StandoffSlotDraft.svg"
         "${CMAKE_SOURCE_DIR}/src/FlightMap/Images/StandoffSlotEnroute.svg"
+        "${CMAKE_SOURCE_DIR}/src/FlightMap/Images/StandoffSlotHolding.svg"
         "${CMAKE_SOURCE_DIR}/src/FlightMap/Images/StandoffSlotRejected.svg"
         "${CMAKE_SOURCE_DIR}/src/FlightMap/Images/StandoffTargetActive.svg"
         "${CMAKE_SOURCE_DIR}/src/FlightMap/Images/StandoffTargetDraft.svg"

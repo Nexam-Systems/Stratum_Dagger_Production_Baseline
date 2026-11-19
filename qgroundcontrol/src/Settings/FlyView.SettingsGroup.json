@@ -134,6 +134,39 @@
             "keywords": "standoff,stratum,link,range,warning"
         },
         {
+            "name": "standoffHoldHorizontalTolerance",
+            "shortDesc": "Horizontal distance from the standoff slot within which a vehicle in Hold counts as holding on the slot.",
+            "type": "double",
+            "units": "m",
+            "default": 10,
+            "min": 1,
+            "max": 500,
+            "label": "Standoff Hold Horizontal Tolerance",
+            "keywords": "standoff,stratum,hold,capture,tolerance"
+        },
+        {
+            "name": "standoffHoldVerticalTolerance",
+            "shortDesc": "Height difference from the standoff slot within which a vehicle in Hold counts as holding on the slot.",
+            "type": "double",
+            "units": "m",
+            "default": 5,
+            "min": 1,
+            "max": 200,
+            "label": "Standoff Hold Vertical Tolerance",
+            "keywords": "standoff,stratum,hold,capture,tolerance"
+        },
+        {
+            "name": "standoffHoldDwellTime",
+            "shortDesc": "How long the vehicle must stay within the hold tolerance before the slot shows holding.",
+            "type": "double",
+            "units": "s",
+            "default": 3,
+            "min": 0,
+            "max": 60,
+            "label": "Standoff Hold Dwell Time",
+            "keywords": "standoff,stratum,hold,capture,dwell"
+        },
+        {
             "name": "maxAOPDistance",
             "shortDesc": "Maximum allowed distance of any Area of Operations vertex from the vehicle home position.",
             "type": "double",
