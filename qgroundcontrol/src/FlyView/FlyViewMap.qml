@@ -775,6 +775,8 @@ FlightMap {
             coordinate:     object.coordinate
             map:            _root
             size:           pipMode ? ScreenTools.defaultFontPixelHeight : ScreenTools.defaultFontPixelHeight * 3
+            // STRATUM #108: show the current flight mode on the vehicle while a standoff is active.
+            modeBadgeText:  (standoffController._standoffActive && object === _activeVehicle) ? object.flightMode : ""
             z:              QGroundControl.zOrderVehicles
         }
     }
@@ -1140,14 +1142,14 @@ FlightMap {
     StandoffController {
         id:                 standoffController
         guidedController:   globals.guidedControllerFlyView
+        slotCoordinate:     standoffActiveGeometry.slotCoordinate
     }
 
     // STRATUM #98: standoff geometry display - target, standoff ring and slot.
     //   DRAFT  - while the Set Standoff panel is open it hands us its StandoffGeometry
     //            (setStandoffDraft) and the map redraws it live as the operator edits.
-    //   ACTIVE - once Set Standoff is pressed the committed values are drawn solid. The slot
-    //            is drawn "en route" for now; the ACK-driven slot states come with the
-    //            command work.
+    //   ACTIVE - once the vehicle accepts the command the committed values are drawn solid. The slot
+    //            is "en route" until the vehicle holds on it (blue fill), see StandoffController.
     // The ring and slot come from StandoffGeometry (WGS-84 geodesic), so the slot sits exactly
     // on the drawn ring. Both are tied to the target, so they move with it.
     StandoffGeometry {
@@ -1433,18 +1435,19 @@ FlightMap {
     StandoffSlotIcon {
         coordinate:     standoffActiveGeometry.slotCoordinate
         visible:        _root._standoffActiveSlot
-        iconSource:     "/qmlimages/StandoffSlotEnroute.svg"
+        iconSource:     standoffController.holding ? "/qmlimages/StandoffSlotHolding.svg" : "/qmlimages/StandoffSlotEnroute.svg"
         slotBearing:    standoffController._standoffDirection
     }
 
     // Planned path vehicle -> slot while en route: a thin dashed blue line. Redrawn from the
-    // vehicle position (GLOBAL_POSITION_INT) as it moves; about one dash per 14 pixels.
+    // vehicle position (GLOBAL_POSITION_INT) as it moves; about one dash per 14 pixels. Not drawn
+    // while holding, or when the vehicle has left Standoff / Hold for another mode.
     readonly property var  _standoffPathFrom:   _activeVehicleCoordinate
     readonly property var  _standoffPathTo:     standoffActiveGeometry.slotCoordinate
     readonly property real _standoffPathMeters: (_standoffPathFrom.isValid && _standoffPathTo.isValid) ? _standoffPathFrom.distanceTo(_standoffPathTo) : 0
     readonly property real _standoffPathAzimuth: _standoffPathMeters > 0 ? _standoffPathFrom.azimuthTo(_standoffPathTo) : 0
     // Hidden once the vehicle is on the slot (nothing left to draw).
-    readonly property bool _standoffPathVisible: _standoffActiveSlot && _standoffPathMeters > 5
+    readonly property bool _standoffPathVisible: _standoffActiveSlot && !standoffController.holding && standoffController.inStandoffOrHold && _standoffPathMeters > 5
     readonly property real _metersPerPixel:     _standoffPathFrom.isValid ? 156543.03392 * Math.cos(_standoffPathFrom.latitude * Math.PI / 180) / Math.pow(2, zoomLevel) : 1
     readonly property int  _standoffPathDashes: _standoffPathVisible ? Math.max(1, Math.min(150, Math.round(_standoffPathMeters / (_metersPerPixel * 14)))) : 0
 

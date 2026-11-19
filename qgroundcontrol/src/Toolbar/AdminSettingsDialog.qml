@@ -285,11 +285,29 @@ QGCPopupDialog {
                     fact:                  _flyView ? _flyView.standoffLinkRangeLimit : null
                     Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
                 }
+
+                QGCLabel { text: qsTr("Hold tolerance, horizontal") }
+                FactTextField {
+                    fact:                  _flyView ? _flyView.standoffHoldHorizontalTolerance : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                }
+
+                QGCLabel { text: qsTr("Hold tolerance, vertical") }
+                FactTextField {
+                    fact:                  _flyView ? _flyView.standoffHoldVerticalTolerance : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                }
+
+                QGCLabel { text: qsTr("Hold dwell time") }
+                FactTextField {
+                    fact:                  _flyView ? _flyView.standoffHoldDwellTime : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                }
             }
             QGCLabel {
                 Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 58
                 wrapMode:            Text.WordWrap
-                text:                qsTr("Allowed range for the standoff radius and height above the target. A standoff point farther than the link range limit from the GCS shows a warning but is not blocked.")
+                text:                qsTr("Allowed range for the standoff radius and height above the target. A standoff point farther than the link range limit from the GCS shows a warning but is not blocked. A vehicle that switches from Standoff to Hold shows as holding on the slot once it stays within the hold tolerances for the dwell time.")
             }
             QGCLabel {
                 Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 58

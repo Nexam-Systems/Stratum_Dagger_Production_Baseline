@@ -57,6 +57,22 @@ Item {
 
     signal standoffAccepted()                  // command acknowledged (or, on Dropper, sent): panel can close
 
+    // STRATUM #108 holding detection (Dagger). After an accepted command the slot is "en route".
+    // It becomes "holding" only when the vehicle went from Standoff to Hold (the firmware's own
+    // arrival signal) AND stays within the capture tolerance of the slot for the dwell time. Hold
+    // from the operator or a failsafe elsewhere therefore does not count. If a holding vehicle
+    // leaves the tolerance (in any mode) the slot goes back to en route, and it holds again once
+    // the vehicle is back in Hold on the slot. Other modes (Engagement, Abort, RTL, manual) do not
+    // change the slot by themselves; the vehicle icon carries the mode badge.
+    property bool   holding:            false
+    property var    slotCoordinate:     QtPositioning.coordinate()   // set by the map from StandoffGeometry
+    readonly property string vehicleMode: _activeVehicle ? _activeVehicle.flightMode : ""
+    // True while the vehicle is flying or holding the standoff (not in Engagement, Abort, RTL, ...).
+    readonly property bool   inStandoffOrHold: _activeVehicle && (vehicleMode === "Standoff" || vehicleMode === _activeVehicle.pauseFlightMode)
+
+    property bool   _holdArmed:         false  // seen in Standoff mode since the command was accepted
+    property double _inToleranceSinceMs: 0
+
     property var    _pending:           null   // request awaiting its ACK
     property double _rejectedAtMs:      0
     property double _abortedAtMs:       0
@@ -67,6 +83,7 @@ Item {
         _standoffActive = false
         _standoffDistance = 0
         _standoffHeight = 0
+        _resetHold()
         _resetAck()
         clearRejected()
         statusMessage = ""
@@ -90,6 +107,76 @@ Item {
         awaitingAck = false
         _pending = null
         ackSafetyTimer.stop()
+    }
+
+    function _resetHold() {
+        holding = false
+        _holdArmed = false
+        _inToleranceSinceMs = 0
+    }
+
+    function _nowMs() {
+        return Date.now()
+    }
+
+    function _flyViewSettings() {
+        return QGroundControl.settingsManager.flyViewSettings
+    }
+
+    // Vehicle within the capture tolerance of the slot: horizontal from the position, vertical from
+    // the height above home (the slot height is sent, and so compared, as height above home).
+    function _withinTolerance() {
+        var vehicle = _activeVehicle
+        if (!vehicle || !slotCoordinate.isValid || !vehicle.coordinate.isValid) {
+            return false
+        }
+        var altitude = Number(vehicle.altitudeRelative.rawValue)
+        if (isNaN(altitude)) {
+            return false
+        }
+        var settings = _flyViewSettings()
+        return vehicle.coordinate.distanceTo(slotCoordinate) <= Number(settings.standoffHoldHorizontalTolerance.rawValue)
+                && Math.abs(altitude - _standoffHeight) <= Number(settings.standoffHoldVerticalTolerance.rawValue)
+    }
+
+    // Re-evaluated on mode and position changes, and by a timer so the dwell can complete while
+    // the vehicle hovers without new position updates.
+    function _evaluateHold() {
+        if (!_standoffActive || !_isDagger || !_activeVehicle) {
+            return
+        }
+        if (vehicleMode === "Standoff") {
+            // On its way to the slot.
+            _holdArmed = true
+            holding = false
+            _inToleranceSinceMs = 0
+            return
+        }
+        // A holding vehicle that leaves the tolerance is back to en route in ANY mode (e.g. it
+        // flew off in Engagement).
+        if (holding && !_withinTolerance()) {
+            holding = false
+            _inToleranceSinceMs = 0
+        }
+        if (vehicleMode !== _activeVehicle.pauseFlightMode) {
+            // Engagement, Abort, RTL, manual ...: the slot is otherwise left as it was. The vehicle
+            // stays armed, so a later Hold back on the slot (e.g. after an Abort) holds again.
+            _inToleranceSinceMs = 0
+            return
+        }
+        // Hold: only counts after the vehicle has flown this standoff, and only inside the tolerance.
+        if (!_holdArmed || !_withinTolerance()) {
+            holding = false
+            _inToleranceSinceMs = 0
+            return
+        }
+        var now = _nowMs()
+        if (_inToleranceSinceMs === 0) {
+            _inToleranceSinceMs = now
+        }
+        if (now - _inToleranceSinceMs >= Number(_flyViewSettings().standoffHoldDwellTime.rawValue) * 1000) {
+            holding = true
+        }
     }
 
     // Firmware messages received within the window before `nowMs`, oldest first.
@@ -144,8 +231,16 @@ Item {
         _standoffSpeed     = p.speed
         _standoffDirection = p.direction
         _standoffActive    = true
+        _resetHold()
         clearRejected()
         standoffAccepted()
+    }
+
+    Timer {
+        interval:   500
+        repeat:     true
+        running:    root._standoffActive && root._isDagger
+        onTriggered: root._evaluateHold()
     }
 
     Timer {
@@ -199,7 +294,12 @@ Item {
         }
 
         // Entering Abort while a standoff is active: show what the firmware said.
+        function onCoordinateChanged() {
+            root._evaluateHold()
+        }
+
         function onFlightModeChanged(flightMode) {
+            root._evaluateHold()
             if (flightMode === "Abort" && root._standoffActive) {
                 root._abortedAtMs = Date.now()
                 root.statusMessage = root._appendUnique("", root._statusTextBefore(root._abortedAtMs))
@@ -282,6 +382,7 @@ Item {
         }
         _resetAck()
         clearRejected()
+        _resetHold()
         _standoffActive = false
     }
 }

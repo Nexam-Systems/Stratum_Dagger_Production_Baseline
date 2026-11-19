@@ -17,6 +17,7 @@ MapQuickItem {
     property double heading:        vehicle ? vehicle.heading.value : Number.NaN    ///< Vehicle heading, NAN for none
     property real   size:           ScreenTools.defaultFontPixelHeight * 3          /// Default size for icon, most usage overrides this
     property bool   alert:          false                                           /// Collision alert
+    property string modeBadgeText:  ""                                              ///< Current flight mode shown as a badge on the icon, "" for none
 
     anchorPoint.x:  vehicleItem.width  / 2
     anchorPoint.y:  vehicleItem.height / 2
@@ -150,6 +151,32 @@ MapQuickItem {
             layer.effect: MultiEffect {
                 colorization:       1.0
                 colorizationColor:  _root._stateTintColor
+            }
+        }
+
+        // STRATUM #108: current flight mode while a standoff is active. Sits above the icon and is
+        // not rotated with the heading.
+        Rectangle {
+            id:                         modeBadge
+            visible:                    _root.modeBadgeText !== ""
+            anchors.bottom:             parent.top
+            anchors.bottomMargin:       ScreenTools.defaultFontPixelHeight * 0.15
+            anchors.horizontalCenter:   parent.horizontalCenter
+            width:                      modeBadgeLabel.implicitWidth + ScreenTools.defaultFontPixelWidth * 1.2
+            height:                     modeBadgeLabel.implicitHeight + ScreenTools.defaultFontPixelHeight * 0.2
+            radius:                     height / 2
+            color:                      _root.modeBadgeText === qsTr("Abort") ? "#F59E0B" :
+                                        _root.modeBadgeText === qsTr("Engagement") ? "#DC2626" : "#378ADD"
+            border.color:               Qt.rgba(0, 0, 0, 0.55)
+            border.width:               1
+
+            QGCLabel {
+                id:                 modeBadgeLabel
+                anchors.centerIn:   parent
+                text:               _root.modeBadgeText
+                color:              "white"
+                font.pointSize:     ScreenTools.smallFontPointSize
+                font.bold:          true
             }
         }
 
