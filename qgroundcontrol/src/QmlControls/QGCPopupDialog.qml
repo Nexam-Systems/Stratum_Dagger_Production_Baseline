@@ -44,6 +44,7 @@ Popup {
     default property alias dialogContent: dialogContentParent.data
 
     property string title
+    property string acceptButtonText                    // optional override of the accept button label
     property var    buttons:                Dialog.Ok
     property alias  acceptButtonEnabled:    acceptButton.enabled
     property alias  rejectButtonEnabled:    rejectButton.enabled
@@ -187,6 +188,10 @@ Popup {
         } else if (buttons & Dialog.Abort) {
             rejectButton.text = qsTr("Abort")
             rejectButton.visible = true
+        }
+
+        if (acceptButton.visible && acceptButtonText !== "") {
+            acceptButton.text = acceptButtonText
         }
 
         closePolicy = Popup.NoAutoClose
