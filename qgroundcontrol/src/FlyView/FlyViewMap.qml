@@ -1171,10 +1171,35 @@ FlightMap {
     component StandoffRingDash : MapPolyline {
         property var ring:      []       // StandoffGeometry.ringPath: one coordinate per degree
         property int dashIndex: 0
-        line.width: 2
+        line.width: 3
         line.color: "#D3D1C7"
         path:       ring.length > 0 ? ring.slice(dashIndex * 5, dashIndex * 5 + 4) : []
-        z:          QGroundControl.zOrderMapItems + 0.5
+        z:          QGroundControl.zOrderMapItems + 2
+    }
+
+    // Dark outline under the dashes so the ring reads on any map. It is built from the same
+    // 72-piece MapItemView as the dashes (full 5-degree pieces, so it is continuous) and must be
+    // declared BEFORE the dash view: a separate MapPolyline is always drawn on top of a
+    // MapItemView regardless of its z, which hid the dashes.
+    component StandoffRingShadow : MapPolyline {
+        property var ring:      []
+        property int dashIndex: 0
+        line.width: 5
+        line.color: Qt.rgba(0, 0, 0, 0.55)
+        path:       ring.length > 0 ? ring.slice(dashIndex * 5, dashIndex * 5 + 6) : []
+        z:          QGroundControl.zOrderMapItems + 1
+    }
+
+    // Translucent red fill of the standoff area. Red (the target's colour) stays distinct from
+    // the blue AOP highlight, and the low opacity keeps the map readable through it. Rough layers:
+    // AOP fill (-1) < ring fill (0) < dark outline (+1) < dashes (+2) < target icon / label (+3)
+    // < slot / handle (+4).
+    component StandoffRingFill : MapPolygon {
+        property var ring: []
+        path:           ring
+        color:          Qt.rgba(0.89, 0.29, 0.29, 0.22)
+        border.width:   0
+        z:              QGroundControl.zOrderMapItems
     }
 
     // Target crosshair icon with its ID label. A single target for now, so the ID is fixed.
@@ -1185,7 +1210,7 @@ FlightMap {
 
         anchorPoint.x:  _size / 2
         anchorPoint.y:  _size / 2     // icon centre sits exactly on the target
-        z:              QGroundControl.zOrderMapItems + 1
+        z:              QGroundControl.zOrderMapItems + 3
 
         sourceItem: Item {
             width:  targetIconRoot._size
@@ -1224,7 +1249,7 @@ FlightMap {
 
         anchorPoint.x:  _size / 2
         anchorPoint.y:  _size / 2     // icon centre sits exactly on the ring point
-        z:              QGroundControl.zOrderMapItems + 2
+        z:              QGroundControl.zOrderMapItems + 4
 
         sourceItem: Item {
             width:  slotIconRoot._size
@@ -1276,7 +1301,7 @@ FlightMap {
         coordinate:     ring.length > 180 ? ring[180] : QtPositioning.coordinate()
         anchorPoint.x:  sourceItem.width / 2
         anchorPoint.y:  -ScreenTools.defaultFontPixelHeight * 0.7   // clear of the ring-edge drag handle
-        z:              QGroundControl.zOrderMapItems + 1
+        z:              QGroundControl.zOrderMapItems + 3
 
         sourceItem: QGCMapLabel {
             map:            _root
@@ -1295,7 +1320,7 @@ FlightMap {
 
         anchorPoint.x:  _size / 2
         anchorPoint.y:  _size / 2     // handle centre sits exactly on the ring
-        z:              QGroundControl.zOrderMapItems + 2
+        z:              QGroundControl.zOrderMapItems + 4
 
         sourceItem: Item {
             width:  handleRoot._size
@@ -1327,12 +1352,16 @@ FlightMap {
     }
 
     // ---- DRAFT (Set Standoff panel open) ----
-    MapPolyline {       // dark under-stroke so the ring reads on any map
-        path:       _root._standoffDraftRingPath
+    StandoffRingFill {
+        ring:       _root._standoffDraftRingPath
         visible:    _root._standoffDraftRing
-        line.width: 4
-        line.color: Qt.rgba(0, 0, 0, 0.45)
-        z:          QGroundControl.zOrderMapItems
+    }
+    MapItemView {       // dark under-stroke (declared before the dashes, see StandoffRingShadow)
+        model:      _root._standoffDraftRing ? 72 : 0
+        delegate:   StandoffRingShadow {
+            ring:       _root._standoffDraftRingPath
+            dashIndex:  index
+        }
     }
     MapItemView {
         model:      _root._standoffDraftRing ? 72 : 0
@@ -1371,12 +1400,16 @@ FlightMap {
     }
 
     // ---- ACTIVE (Set Standoff pressed) ----
-    MapPolyline {
-        path:       _root._standoffActiveRingPath
+    StandoffRingFill {
+        ring:       _root._standoffActiveRingPath
         visible:    _root._standoffActiveRing
-        line.width: 4
-        line.color: Qt.rgba(0, 0, 0, 0.45)
-        z:          QGroundControl.zOrderMapItems
+    }
+    MapItemView {
+        model:      _root._standoffActiveRing ? 72 : 0
+        delegate:   StandoffRingShadow {
+            ring:       _root._standoffActiveRingPath
+            dashIndex:  index
+        }
     }
     MapItemView {
         model:      _root._standoffActiveRing ? 72 : 0

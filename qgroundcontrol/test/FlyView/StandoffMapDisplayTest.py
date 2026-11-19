@@ -76,6 +76,18 @@ class StandoffMapDisplayTest(unittest.TestCase):
         self.assertIn("standoffGeometry.maxDistance", handler)
         self.assertIn("standoffGeometry.minDistance", handler)
 
+    def test_ring_has_a_translucent_red_fill_and_the_dark_outline_sits_under_the_dashes(self):
+        self.assertIn("component StandoffRingFill : MapPolygon", self.map)
+        self.assertIn("Qt.rgba(0.89, 0.29, 0.29, 0.22)", self.map)   # red, low opacity: map stays visible
+        draft = self.map.split("// ---- DRAFT", 1)[1].split("// ---- ACTIVE", 1)[0]
+        active = self.map.split("// ---- ACTIVE", 1)[1].split("XC25 fetched-target", 1)[0]
+        for part in (draft, active):
+            self.assertIn("StandoffRingFill {", part)
+            # the dark outline must be a MapItemView declared BEFORE the dash view; a separate
+            # MapPolyline is always drawn on top of a MapItemView and hid the dashes
+            self.assertLess(part.index("delegate:   StandoffRingShadow"), part.index("delegate:   StandoffRingDash"))
+            self.assertNotIn("line.color: Qt.rgba(0, 0, 0, 0.55)", part)
+
     def test_panel_hands_its_model_to_the_map_and_closing_clears_it(self):
         self.assertIn("mapControl.setStandoffDraft(standoffGeometry)", self.widget)
         stop = self.map.split("function stopStandoffPick() {", 1)[1].split("}", 1)[0]
