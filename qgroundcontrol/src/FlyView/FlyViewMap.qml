@@ -1384,7 +1384,8 @@ FlightMap {
     StandoffSlotIcon {
         coordinate:     _root._standoffDraft ? _root._standoffDraft.slotCoordinate : QtPositioning.coordinate()
         visible:        _root._standoffDraftSlot
-        iconSource:     "/qmlimages/StandoffSlotDraft.svg"
+        // The vehicle rejected (or never answered) the command: the draft slot turns red with a cross.
+        iconSource:     standoffController.rejected ? "/qmlimages/StandoffSlotRejected.svg" : "/qmlimages/StandoffSlotDraft.svg"
         slotBearing:    _root._standoffDraft ? _root._standoffDraft.direction : 0
         dragTarget:     _root._standoffPendingCoordinate
         onDragged:      (bearing) => _root.standoffSlotDragged(bearing)
@@ -1434,6 +1435,33 @@ FlightMap {
         visible:        _root._standoffActiveSlot
         iconSource:     "/qmlimages/StandoffSlotEnroute.svg"
         slotBearing:    standoffController._standoffDirection
+    }
+
+    // Planned path vehicle -> slot while en route: a thin dashed blue line. Redrawn from the
+    // vehicle position (GLOBAL_POSITION_INT) as it moves; about one dash per 14 pixels.
+    readonly property var  _standoffPathFrom:   _activeVehicleCoordinate
+    readonly property var  _standoffPathTo:     standoffActiveGeometry.slotCoordinate
+    readonly property real _standoffPathMeters: (_standoffPathFrom.isValid && _standoffPathTo.isValid) ? _standoffPathFrom.distanceTo(_standoffPathTo) : 0
+    readonly property real _standoffPathAzimuth: _standoffPathMeters > 0 ? _standoffPathFrom.azimuthTo(_standoffPathTo) : 0
+    // Hidden once the vehicle is on the slot (nothing left to draw).
+    readonly property bool _standoffPathVisible: _standoffActiveSlot && _standoffPathMeters > 5
+    readonly property real _metersPerPixel:     _standoffPathFrom.isValid ? 156543.03392 * Math.cos(_standoffPathFrom.latitude * Math.PI / 180) / Math.pow(2, zoomLevel) : 1
+    readonly property int  _standoffPathDashes: _standoffPathVisible ? Math.max(1, Math.min(150, Math.round(_standoffPathMeters / (_metersPerPixel * 14)))) : 0
+
+    component StandoffPathDash : MapPolyline {
+        property int dashIndex: 0
+        line.width: 2
+        line.color: "#378ADD"
+        // Draw 55% of each step; the rest is the gap.
+        path: [
+            _root._standoffPathFrom.atDistanceAndAzimuth(_root._standoffPathMeters * dashIndex / _root._standoffPathDashes, _root._standoffPathAzimuth),
+            _root._standoffPathFrom.atDistanceAndAzimuth(_root._standoffPathMeters * (dashIndex + 0.55) / _root._standoffPathDashes, _root._standoffPathAzimuth)
+        ]
+        z: QGroundControl.zOrderMapItems + 2
+    }
+    MapItemView {
+        model:      _root._standoffPathDashes
+        delegate:   StandoffPathDash { dashIndex: index }
     }
 
     // STRATUM: XC25 fetched-target marker. Plotted on demand by the "Fetch Target"
@@ -1590,6 +1618,30 @@ FlightMap {
                     }
                 }
             }
+        }
+    }
+
+    // STRATUM #98: firmware STATUSTEXT shown right after the standoff is aborted (clears itself).
+    Rectangle {
+        anchors.top:                parent.top
+        anchors.topMargin:          ScreenTools.defaultFontPixelHeight * 5
+        anchors.horizontalCenter:   parent.horizontalCenter
+        visible:                    standoffController.statusMessage !== ""
+        z:                          QGroundControl.zOrderTopMost
+        radius:                     ScreenTools.defaultFontPixelHeight / 3
+        color:                      Qt.rgba(0, 0, 0, 0.75)
+        border.color:               "#E24B4A"
+        width:                      Math.min(_root.width * 0.8, bannerLabel.implicitWidth + ScreenTools.defaultFontPixelHeight * 2)
+        height:                     bannerLabel.implicitHeight + ScreenTools.defaultFontPixelHeight
+
+        QGCLabel {
+            id:                 bannerLabel
+            anchors.centerIn:   parent
+            width:              parent.width - ScreenTools.defaultFontPixelHeight * 2
+            wrapMode:           Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+            color:              "white"
+            text:               qsTr("Standoff aborted: %1").arg(standoffController.statusMessage)
         }
     }
 

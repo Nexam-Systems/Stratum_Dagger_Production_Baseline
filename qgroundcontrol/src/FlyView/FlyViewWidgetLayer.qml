@@ -451,6 +451,9 @@ Item {
             if (mapControl) {
                 mapControl.startStandoffPick()
                 mapControl.setStandoffDraft(standoffGeometry)   // map draws the draft ring and slot from it
+                if (!mapControl.standoffCmdController.awaitingAck) {
+                    mapControl.standoffCmdController.clearRejected()   // never show a stale rejection on reopen
+                }
                 _updatePending()   // fields may still hold a valid target from last use
             }
         }
@@ -458,7 +461,20 @@ Item {
             visible = false
             if (mapControl) {
                 mapControl.stopStandoffPick()
+                mapControl.standoffCmdController.clearRejected()
             }
+        }
+        // Any edit after a rejection starts a fresh draft: the rejected marker goes away.
+        function _inputEdited() {
+            if (mapControl && mapControl.standoffCmdController.rejected) {
+                mapControl.standoffCmdController.clearRejected()
+            }
+        }
+
+        // Standoff acknowledged by the vehicle (or, on Dropper, sent): the panel's job is done.
+        Connections {
+            target: mapControl ? mapControl.standoffCmdController : null
+            function onStandoffAccepted() { standoffPanel.close() }
         }
         function toggle() {
             if (visible) {
@@ -546,7 +562,10 @@ Item {
                 unitsLabel:            qsTr("deg")
                 showUnits:             true
                 inputMethodHints:      Qt.ImhFormattedNumbersOnly
-                onTextChanged:         standoffPanel._updatePending()
+                onTextChanged: {
+                    standoffPanel._updatePending()
+                    standoffPanel._inputEdited()
+                }
             }
 
             QGCLabel { text: qsTr("Longitude") }
@@ -556,7 +575,10 @@ Item {
                 unitsLabel:            qsTr("deg")
                 showUnits:             true
                 inputMethodHints:      Qt.ImhFormattedNumbersOnly
-                onTextChanged:         standoffPanel._updatePending()
+                onTextChanged: {
+                    standoffPanel._updatePending()
+                    standoffPanel._inputEdited()
+                }
             }
 
             QGCLabel { text: qsTr("Altitude (AMSL)") }
@@ -566,6 +588,7 @@ Item {
                 unitsLabel:            qsTr("m")
                 showUnits:             true
                 inputMethodHints:      Qt.ImhFormattedNumbersOnly
+                onTextChanged:         standoffPanel._inputEdited()
             }
 
             // STRATUM: raw metres / km-h to match the web UI standoff contract exactly
@@ -578,6 +601,7 @@ Item {
                 unitsLabel:            qsTr("m")
                 showUnits:             true
                 inputMethodHints:      Qt.ImhFormattedNumbersOnly
+                onTextChanged:         standoffPanel._inputEdited()
             }
 
             QGCLabel { text: qsTr("Height above target") }
@@ -588,6 +612,7 @@ Item {
                 unitsLabel:            qsTr("m")
                 showUnits:             true
                 inputMethodHints:      Qt.ImhFormattedNumbersOnly
+                onTextChanged:         standoffPanel._inputEdited()
             }
 
             QGCLabel { text: qsTr("Speed") }
@@ -598,6 +623,7 @@ Item {
                 unitsLabel:            qsTr("km/h")
                 showUnits:             true
                 inputMethodHints:      Qt.ImhFormattedNumbersOnly
+                onTextChanged:         standoffPanel._inputEdited()
             }
 
             QGCLabel { text: qsTr("Direction") }
@@ -608,6 +634,7 @@ Item {
                 unitsLabel:            qsTr("deg")
                 showUnits:             true
                 inputMethodHints:      Qt.ImhFormattedNumbersOnly
+                onTextChanged:         standoffPanel._inputEdited()
                 // Compass bearing sent to the standoff contract: 0 = N, increasing clockwise.
                 validator:             DoubleValidator { bottom: 0; top: 360; decimals: 1 }
             }
@@ -711,6 +738,26 @@ Item {
                 text:                qsTr("Target is outside the defined AOP boundary — standoff rejected.")
             }
 
+            // STRATUM #98: the command was sent; waiting for the vehicle's acknowledgement.
+            QGCLabel {
+                Layout.columnSpan:   2
+                Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 34
+                visible:             mapControl && mapControl.standoffCmdController.awaitingAck
+                wrapMode:            Text.WordWrap
+                text:                qsTr("Waiting for the vehicle to accept the standoff …")
+            }
+
+            // STRATUM #98: the vehicle rejected the command, or did not answer. The values above
+            // are kept so they can be corrected; any edit starts a fresh draft.
+            QGCLabel {
+                Layout.columnSpan:   2
+                Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 34
+                visible:             mapControl && mapControl.standoffCmdController.rejected
+                color:               qgcPal.lightTheme ? qgcPal.colorRed : "#EF5350"
+                wrapMode:            Text.WordWrap
+                text:                mapControl ? qsTr("Standoff rejected. %1\nYour values are kept - adjust them and try again.").arg(mapControl.standoffCmdController.rejectReason) : ""
+            }
+
             RowLayout {
                 Layout.columnSpan:  2
                 Layout.alignment:   Qt.AlignRight
@@ -725,6 +772,7 @@ Item {
                     text:       qsTr("Set Standoff")
                     primary:    true
                     enabled:    standoffPanel._coordValid && !standoffPanel._aopReject && standoffPanel._inputsValid && _activeVehicle !== null
+                                && !(mapControl && mapControl.standoffCmdController.awaitingAck)
                     onClicked: {
                         if (!standoffPanel._inputsValid) {
                             return
@@ -746,13 +794,13 @@ Item {
                             return
                         }
                         standoffPanel._aopReject = false
-                        // STRATUM: beginStandoff returns false when Vehicle::guidedModeStandoff
-                        // rejects the request (e.g. hold point beyond maxGoToLocationDistance).
-                        // Leave the panel open so the operator can adjust; the rejection toast
-                        // is emitted from Vehicle.cc.
-                        if (mapControl.standoffCmdController.beginStandoff(distance, height, speed, direction, target)) {
-                            standoffPanel.close()
-                        }
+                        // STRATUM: beginStandoff returns false when the request is refused up front
+                        // (e.g. hold point beyond maxGoToLocationDistance); the panel stays open so
+                        // the operator can adjust, and the rejection toast comes from Vehicle.cc.
+                        // When it returns true the command was sent: the panel stays open while the
+                        // vehicle's ACK is pending and closes itself on standoffAccepted; a rejection
+                        // or timeout keeps the values here for correction.
+                        mapControl.standoffCmdController.beginStandoff(distance, height, speed, direction, target)
                     }
                 }
             }
