@@ -502,6 +502,13 @@ Item {
             function onStandoffSlotDragged(bearing) {
                 standoffDirectionField.text = ((Math.round(bearing * 10) / 10) % 360).toFixed(1)
             }
+            // Draft ring edge dragged on the map: only the distance changes, whole metres,
+            // kept inside the configured radius limits so a drag never makes the input invalid.
+            function onStandoffRingDragged(distance) {
+                var r = Math.round(distance)
+                r = Math.min(standoffGeometry.maxDistance, Math.max(standoffGeometry.minDistance, r))
+                standoffDistanceField.text = r.toString()
+            }
         }
 
         DeadMouseArea { anchors.fill: parent }

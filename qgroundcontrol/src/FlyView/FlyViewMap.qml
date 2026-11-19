@@ -86,6 +86,11 @@ FlightMap {
     // from the target. The panel writes it to its Direction field (R and H are unchanged).
     signal standoffSlotDragged(real bearing)
 
+    // STRATUM #98: the draft ring edge was dragged on the map; distance is the new R [m] from
+    // the target to the pointer. The panel clamps it to the configured limits and writes it to
+    // its Distance field (theta and H are unchanged).
+    signal standoffRingDragged(real distance)
+
     // STRATUM: emitted by the map-click "Set standoff here" menu item. Handled in
     // FlyView.qml by opening the Set Standoff panel pre-filled with the coordinate.
     signal setStandoffHereRequested(var coordinate)
@@ -1270,13 +1275,54 @@ FlightMap {
 
         coordinate:     ring.length > 180 ? ring[180] : QtPositioning.coordinate()
         anchorPoint.x:  sourceItem.width / 2
-        anchorPoint.y:  0
+        anchorPoint.y:  -ScreenTools.defaultFontPixelHeight * 0.7   // clear of the ring-edge drag handle
         z:              QGroundControl.zOrderMapItems + 1
 
         sourceItem: QGCMapLabel {
             map:            _root
             text:           qsTr("R %1 m · +%2 m AGL").arg(Math.round(ringRadius)).arg(isFinite(ringHeight) ? Math.round(ringHeight) : "--")
             font.pointSize: ScreenTools.smallFontPointSize
+        }
+    }
+
+    // Grab handle on the draft ring edge. Dragging it changes R only (the distance from the
+    // target to the pointer); the bearing and height are untouched. It sits opposite the slot.
+    component StandoffRingHandle : MapQuickItem {
+        id:             handleRoot
+        property var    dragTarget:  QtPositioning.coordinate()
+        readonly property real _size: ScreenTools.defaultFontPixelHeight * 1.1
+        signal dragged(real distance)
+
+        anchorPoint.x:  _size / 2
+        anchorPoint.y:  _size / 2     // handle centre sits exactly on the ring
+        z:              QGroundControl.zOrderMapItems + 2
+
+        sourceItem: Item {
+            width:  handleRoot._size
+            height: handleRoot._size
+
+            Rectangle {
+                anchors.fill:   parent
+                radius:         width / 2
+                color:          "#D3D1C7"
+                border.color:   Qt.rgba(0, 0, 0, 0.55)
+                border.width:   2
+            }
+
+            MouseArea {
+                anchors.fill:       parent
+                enabled:            handleRoot.dragTarget.isValid
+                preventStealing:    true
+                cursorShape:        enabled ? Qt.SizeAllCursor : Qt.ArrowCursor
+                onPositionChanged: (mouse) => {
+                    if (!pressed) {
+                        return
+                    }
+                    var point = mapToItem(_root, mouse.x, mouse.y)
+                    var coordinate = _root.toCoordinate(Qt.point(point.x, point.y), false /* clipToViewPort */)
+                    handleRoot.dragged(handleRoot.dragTarget.distanceTo(coordinate))
+                }
+            }
         }
     }
 
@@ -1313,6 +1359,15 @@ FlightMap {
         slotBearing:    _root._standoffDraft ? _root._standoffDraft.direction : 0
         dragTarget:     _root._standoffPendingCoordinate
         onDragged:      (bearing) => _root.standoffSlotDragged(bearing)
+    }
+    StandoffRingHandle {
+        // Ring point opposite the slot (one ring point per degree of bearing).
+        coordinate:     _root._standoffDraftRingPath.length > 0
+                            ? _root._standoffDraftRingPath[(Math.round(_root._standoffDraft && isFinite(_root._standoffDraft.direction) ? _root._standoffDraft.direction : 0) + 180) % 360]
+                            : QtPositioning.coordinate()
+        visible:        _root._standoffDraftRing
+        dragTarget:     _root._standoffPendingCoordinate
+        onDragged:      (distance) => _root.standoffRingDragged(distance)
     }
 
     // ---- ACTIVE (Set Standoff pressed) ----

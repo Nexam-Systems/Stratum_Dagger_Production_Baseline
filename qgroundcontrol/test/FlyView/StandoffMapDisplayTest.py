@@ -61,6 +61,21 @@ class StandoffMapDisplayTest(unittest.TestCase):
         self.assertNotIn("standoffHeightField", handler)
         self.assertIn("% 360", handler)  # 359.96 must not become the invalid 360.0
 
+    def test_ring_handle_is_draft_only_and_changes_only_the_distance(self):
+        draft = self.map.split("// ---- DRAFT", 1)[1].split("// ---- ACTIVE", 1)[0]
+        active = self.map.split("// ---- ACTIVE", 1)[1].split("XC25 fetched-target", 1)[0]
+        self.assertIn("StandoffRingHandle {", draft)
+        self.assertNotIn("StandoffRingHandle", active)
+        self.assertIn("onDragged:      (distance) => _root.standoffRingDragged(distance)", draft)
+        self.assertIn("signal standoffRingDragged(real distance)", self.map)
+        handler = self.widget.split("function onStandoffRingDragged(distance)", 1)[1].split("\n            }", 1)[0]
+        self.assertIn("standoffDistanceField.text", handler)
+        self.assertNotIn("standoffDirectionField", handler)
+        self.assertNotIn("standoffHeightField", handler)
+        # a drag is clamped to the configured limits so it can never make the input invalid
+        self.assertIn("standoffGeometry.maxDistance", handler)
+        self.assertIn("standoffGeometry.minDistance", handler)
+
     def test_panel_hands_its_model_to_the_map_and_closing_clears_it(self):
         self.assertIn("mapControl.setStandoffDraft(standoffGeometry)", self.widget)
         stop = self.map.split("function stopStandoffPick() {", 1)[1].split("}", 1)[0]
