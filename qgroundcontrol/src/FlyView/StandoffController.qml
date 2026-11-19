@@ -61,8 +61,9 @@ Item {
     // It becomes "holding" only when the vehicle went from Standoff to Hold (the firmware's own
     // arrival signal) AND stays within the capture tolerance of the slot for the dwell time. Hold
     // from the operator or a failsafe elsewhere therefore does not count. If a holding vehicle
-    // leaves the tolerance the slot goes back to en route. Other modes (Engagement, Abort, RTL,
-    // manual) leave the slot as it was; the vehicle icon carries the mode badge.
+    // leaves the tolerance (in any mode) the slot goes back to en route, and it holds again once
+    // the vehicle is back in Hold on the slot. Other modes (Engagement, Abort, RTL, manual) do not
+    // change the slot by themselves; the vehicle icon carries the mode badge.
     property bool   holding:            false
     property var    slotCoordinate:     QtPositioning.coordinate()   // set by the map from StandoffGeometry
     readonly property string vehicleMode: _activeVehicle ? _activeVehicle.flightMode : ""
@@ -151,13 +152,19 @@ Item {
             _inToleranceSinceMs = 0
             return
         }
+        // A holding vehicle that leaves the tolerance is back to en route in ANY mode (e.g. it
+        // flew off in Engagement).
+        if (holding && !_withinTolerance()) {
+            holding = false
+            _inToleranceSinceMs = 0
+        }
         if (vehicleMode !== _activeVehicle.pauseFlightMode) {
-            // Engagement, Abort, RTL, manual ...: the slot stays as it was.
-            _holdArmed = false
+            // Engagement, Abort, RTL, manual ...: the slot is otherwise left as it was. The vehicle
+            // stays armed, so a later Hold back on the slot (e.g. after an Abort) holds again.
             _inToleranceSinceMs = 0
             return
         }
-        // Hold: only counts when it followed Standoff mode, and only inside the tolerance.
+        // Hold: only counts after the vehicle has flown this standoff, and only inside the tolerance.
         if (!_holdArmed || !_withinTolerance()) {
             holding = false
             _inToleranceSinceMs = 0

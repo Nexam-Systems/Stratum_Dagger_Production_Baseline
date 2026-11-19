@@ -296,12 +296,36 @@ class StandoffHoldingTest(unittest.TestCase):
         self.settle()
         self.assertFalse(self.holding())
 
-    def test_hold_that_did_not_come_from_standoff_mode_is_not_holding(self):
+    def test_engage_and_fly_away_returns_to_en_route_and_abort_back_on_the_slot_holds_again(self):
         self.mount()
         self.accepted_standoff()
-        self.vehicle.flightMode = "Return"                   # left Standoff for another mode ...
         self.place(SLOT)
-        self.vehicle.flightMode = "Hold"                     # ... then an operator / failsafe Hold on the slot
+        self.vehicle.flightMode = "Hold"
+        self.settle()
+        self.assertTrue(self.holding())
+
+        for _ in range(2):                                   # the same cycle twice
+            self.vehicle.flightMode = "Engagement"           # engage: still on the slot, nothing changes yet
+            QTest.qWait(5)
+            self.assertTrue(self.holding())
+            self.place(SLOT.atDistanceAndAzimuth(80, 0))     # ... then it flies away in Engagement
+            QTest.qWait(5)
+            self.assertFalse(self.holding())                 # en route right away
+            self.vehicle.flightMode = "Abort"
+            self.place(SLOT.atDistanceAndAzimuth(30, 0))
+            self.settle()
+            self.assertFalse(self.holding())
+            self.place(SLOT)                                 # back on the slot, firmware puts it in Hold
+            self.vehicle.flightMode = "Hold"
+            self.settle()
+            self.assertTrue(self.holding())
+
+    def test_hold_elsewhere_after_another_mode_is_not_holding(self):
+        self.mount()
+        self.accepted_standoff()
+        self.vehicle.flightMode = "Return"
+        self.place(SLOT.atDistanceAndAzimuth(200, 0))
+        self.vehicle.flightMode = "Hold"
         self.settle()
         self.assertFalse(self.holding())
 
