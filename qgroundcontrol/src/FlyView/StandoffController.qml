@@ -44,11 +44,32 @@ Item {
     // True from the moment a standoff is committed until it is cancelled. Drives the
     // on-map standoff display (target, ring centred on it, slot at the standoff bearing).
     property bool   _standoffActive:    false
+
+    // STRATUM #98 slot lifecycle (Dagger). Set Standoff only SENDS the command; the standoff
+    // becomes active (slot "en route") when the vehicle acknowledges it as accepted:
+    //   awaitingAck  - command sent, waiting for COMMAND_ACK (the draft stays on the map/panel)
+    //   rejected     - ACK was a rejection, or no ACK arrived: the draft is kept for correction
+    // A previously accepted standoff stays active while a new command is pending or rejected.
+    property bool   awaitingAck:        false
+    property bool   rejected:           false
+    property string rejectReason:       ""     // why the last command was rejected (incl. firmware STATUSTEXT)
+    property string statusMessage:      ""     // firmware STATUSTEXT shown after an Abort
+
+    signal standoffAccepted()                  // command acknowledged (or, on Dropper, sent): panel can close
+
+    property var    _pending:           null   // request awaiting its ACK
+    property double _rejectedAtMs:      0
+    property double _abortedAtMs:       0
+    property var    _recentText:        []     // [{ atMs, text }] last STATUSTEXT messages
+
     on_ActiveVehicleChanged: {
         _targetCoordinate = QtPositioning.coordinate()
         _standoffActive = false
         _standoffDistance = 0
         _standoffHeight = 0
+        _resetAck()
+        clearRejected()
+        statusMessage = ""
     }
 
     // STRATUM: bridge companion computer + standoff command ids (Dropper web UI contract).
@@ -56,14 +77,157 @@ Item {
     readonly property int _cmdStandoffParams:   31010
     readonly property int _cmdStandoffActivate: 31011
 
+    readonly property int _statusTextWindowMs:  2000    // STATUSTEXT this close to a reject/abort belongs to it
+    readonly property int _ackSafetyTimeoutMs:  5000    // backstop if the command queue never reports a result
+
+    function clearRejected() {
+        rejected = false
+        rejectReason = ""
+        _rejectedAtMs = 0
+    }
+
+    function _resetAck() {
+        awaitingAck = false
+        _pending = null
+        ackSafetyTimer.stop()
+    }
+
+    // Firmware messages received within the window before `nowMs`, oldest first.
+    function _statusTextBefore(nowMs) {
+        var out = []
+        for (var i = 0; i < _recentText.length; ++i) {
+            if (nowMs - _recentText[i].atMs <= _statusTextWindowMs) {
+                out.push(_recentText[i].text)
+            }
+        }
+        return out
+    }
+
+    function _appendUnique(base, texts) {
+        var result = base
+        for (var i = 0; i < texts.length; ++i) {
+            if (result.indexOf(texts[i]) === -1) {
+                result += (result.length > 0 ? "\n" : "") + texts[i]
+            }
+        }
+        return result
+    }
+
+    function _ackReason(ackResult, failureCode) {
+        if (failureCode === 1) {
+            return qsTr("The vehicle did not respond.")
+        }
+        if (failureCode === 2) {
+            return qsTr("A previous standoff command is still waiting for a response.")
+        }
+        switch (ackResult) {
+        case 1:  return qsTr("The vehicle temporarily rejected the command.")
+        case 2:  return qsTr("The vehicle denied the command.")
+        case 3:  return qsTr("The vehicle does not support the command.")
+        case 6:  return qsTr("The command was cancelled.")
+        default: return qsTr("The vehicle could not run the command.")
+        }
+    }
+
+    function _reject(reason) {
+        _resetAck()
+        rejected = true
+        _rejectedAtMs = Date.now()
+        rejectReason = _appendUnique(reason, _statusTextBefore(_rejectedAtMs))
+    }
+
+    // The vehicle accepted the command: the standoff is now active (slot en route).
+    function _commit(p) {
+        _targetCoordinate  = p.target
+        _standoffDistance  = p.distance
+        _standoffHeight    = p.height
+        _standoffSpeed     = p.speed
+        _standoffDirection = p.direction
+        _standoffActive    = true
+        clearRejected()
+        standoffAccepted()
+    }
+
+    Timer {
+        id:         ackSafetyTimer
+        interval:   root._ackSafetyTimeoutMs
+        onTriggered: if (root.awaitingAck) root._reject(qsTr("The vehicle did not respond."))
+    }
+
+    Connections {
+        target:                 root._activeVehicle
+        ignoreUnknownSignals:   true
+
+        // COMMAND_ACK (and queue failures such as no response) for the standoff command.
+        function onMavCommandResult(vehicleId, targetComponent, command, ackResult, failureCode) {
+            if (!root.awaitingAck || command !== root._cmdStandoffParams || vehicleId !== root._activeVehicle.id) {
+                return
+            }
+            var pending = root._pending
+            if (ackResult === 0 /* MAV_RESULT_ACCEPTED */) {
+                root._resetAck()
+                // Geometry was accepted first; only now switch the vehicle into Standoff mode.
+                root._activeVehicle.flightMode = "Standoff"
+                root._commit(pending)
+            } else {
+                root._reject(root._ackReason(ackResult, failureCode))
+            }
+        }
+
+        // STATUSTEXT: keep the last few, and attach them to a rejection or an abort.
+        function onTextMessageReceived(sysid, componentid, severity, text, description) {
+            if (severity > 6) {
+                return    // ignore debug noise
+            }
+            var now = Date.now()
+            var kept = []
+            for (var i = 0; i < root._recentText.length; ++i) {
+                if (now - root._recentText[i].atMs <= 10000) {
+                    kept.push(root._recentText[i])
+                }
+            }
+            kept.push({ atMs: now, text: text })
+            root._recentText = kept
+
+            if (root.rejected && now - root._rejectedAtMs <= root._statusTextWindowMs) {
+                root.rejectReason = root._appendUnique(root.rejectReason, [text])
+            }
+            if (root._abortedAtMs > 0 && now - root._abortedAtMs <= root._statusTextWindowMs * 2) {
+                root.statusMessage = root._appendUnique(root.statusMessage, [text])
+                statusClearTimer.restart()
+            }
+        }
+
+        // Entering Abort while a standoff is active: show what the firmware said.
+        function onFlightModeChanged(flightMode) {
+            if (flightMode === "Abort" && root._standoffActive) {
+                root._abortedAtMs = Date.now()
+                root.statusMessage = root._appendUnique("", root._statusTextBefore(root._abortedAtMs))
+                if (root.statusMessage.length > 0) {
+                    statusClearTimer.restart()
+                }
+            } else if (flightMode !== "Abort") {
+                root._abortedAtMs = 0
+            }
+        }
+    }
+
+    Timer {
+        id:         statusClearTimer
+        interval:   10000
+        onTriggered: root.statusMessage = ""
+    }
+
     // distanceMeters / heightMeters are in METERS, speed in KM/H (Dropper), direction is
     // a compass bearing in DEGREES (0 = N, increasing clockwise). targetCoordinate carries the target designated
     // in the Set Standoff panel (manual lat/lon entry or crosshair map pick).
-    // Returns true on commit, false if the request was rejected (bad vehicle, invalid
-    // coordinate, or Vehicle::guidedModeStandoff distance check). On a false return
-    // NOTHING is mutated: no flight-mode switch, no active standoff display.
+    // Returns true when the request was SENT, false if it was refused up front (bad vehicle,
+    // invalid coordinate, a command still awaiting its ACK, or the Vehicle::guidedModeStandoff
+    // distance check). On a false return NOTHING is mutated.
+    // Dagger: the standoff only becomes active (standoffAccepted) after the vehicle's ACK.
+    // Dropper: the bridge contract has no per-command ACK handling here, so it is active on send.
     function beginStandoff(distanceMeters, heightMeters, speed, direction, targetCoordinate) {
-        if (!_activeVehicle) {
+        if (!_activeVehicle || awaitingAck) {
             return false
         }
         var target = _targetCoordinate
@@ -74,6 +238,8 @@ Item {
             return false
         }
 
+        var request = { target: target, distance: distanceMeters, height: heightMeters, speed: speed, direction: direction }
+
         if (_isDagger) {
             // Dagger path: hand PX4 the TARGET point + geometry. guidedModeStandoff
             // range-checks against flyViewSettings.maxGoToLocationDistance and returns
@@ -83,27 +249,25 @@ Item {
             if (!_activeVehicle.guidedModeStandoff(target, distanceMeters, bearingDeg, heightMeters)) {
                 return false
             }
-            _activeVehicle.flightMode = "Standoff"
-        } else {
-            // Dropper path: web UI contract to the bridge companion computer.
-            _activeVehicle.sendCommand(_bridgeComponentId, _cmdStandoffParams, true,
-                                       target.latitude,
-                                       target.longitude,
-                                       distanceMeters,
-                                       heightMeters,
-                                       speed,
-                                       direction,
-                                       0)
-            _activeVehicle.sendCommand(_bridgeComponentId, _cmdStandoffActivate, true,
-                                       1, 0, 0, 0, 0, 0, 0)
+            clearRejected()
+            _pending = request
+            awaitingAck = true
+            ackSafetyTimer.restart()
+            return true
         }
 
-        _targetCoordinate  = target
-        _standoffDistance  = distanceMeters
-        _standoffHeight    = heightMeters
-        _standoffSpeed     = speed
-        _standoffDirection = direction
-        _standoffActive    = true
+        // Dropper path: web UI contract to the bridge companion computer.
+        _activeVehicle.sendCommand(_bridgeComponentId, _cmdStandoffParams, true,
+                                   target.latitude,
+                                   target.longitude,
+                                   distanceMeters,
+                                   heightMeters,
+                                   speed,
+                                   direction,
+                                   0)
+        _activeVehicle.sendCommand(_bridgeComponentId, _cmdStandoffActivate, true,
+                                   1, 0, 0, 0, 0, 0, 0)
+        _commit(request)
         return true
     }
 
@@ -116,6 +280,8 @@ Item {
             _activeVehicle.sendCommand(_bridgeComponentId, _cmdStandoffActivate, true,
                                        0, 0, 0, 0, 0, 0, 0)
         }
+        _resetAck()
+        clearRejected()
         _standoffActive = false
     }
 }
