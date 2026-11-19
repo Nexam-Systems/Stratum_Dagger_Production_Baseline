@@ -236,7 +236,7 @@ Item {
             } else {
                 console.error("setupSlider called for inapproproate change speed action", _vehicleInFwdFlight, _activeVehicle.haveMRSpeedLimits)
             }
-        } else if (actionCode === actionChangeAlt || actionCode === actionOrbit || actionCode === actionGoto || actionCode === actionPause) {
+        } else if (actionCode === actionOrbit || actionCode === actionGoto || actionCode === actionPause) {
             guidedValueSlider.setupSlider(
                 GuidedValueSlider.SliderType.Altitude,
                 _flyViewSettings.guidedMinimumAltitude.value,
@@ -412,8 +412,38 @@ Item {
         }
     }
 
+    // STRATUM KAN-45: Change Height is entered in a small pop-up (like Takeoff) instead of the
+    // scrollable height slider. Every Change Height entry point goes through confirmAction(),
+    // which redirects here.
+    function showChangeHeightDialog() {
+        closeAll()
+        if (!_activeVehicle || !showChangeAlt) {
+            return
+        }
+        changeHeightDialogFactory.open()
+    }
+
+    QGCPopupDialogFactory {
+        id:              changeHeightDialogFactory
+        dialogComponent: changeHeightDialogComponent
+    }
+
+    Component {
+        id: changeHeightDialogComponent
+
+        GuidedActionChangeHeightDialog {
+            guidedController: _root
+        }
+    }
+
     // Called when an action is about to be executed in order to confirm
     function confirmAction(actionCode, actionData, mapIndicator) {
+        if (actionCode === actionChangeAlt) {
+            confirmDialog.confirmCancelled(mapIndicator)
+            showChangeHeightDialog()
+            return
+        }
+
         var showImmediate = true
 
         // Cancel any previously pending action, notifying its map indicator if it differs from the incoming one
@@ -505,12 +535,6 @@ Item {
                 confirmDialog.optionChecked = false
             }
             confirmDialog.hideTrigger = Qt.binding(function() { return !showRTL })
-            break;
-        case actionChangeAlt:
-            confirmDialog.title = changeAltTitle
-            confirmDialog.message = changeAltMessage
-            confirmDialog.hideTrigger = Qt.binding(function() { return !showChangeAlt })
-            guidedValueSlider.visible = true
             break;
         case actionChangeLoiterRadius:
             confirmDialog.title = changeLoiterRadiusTitle
