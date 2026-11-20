@@ -18,6 +18,7 @@ Rectangle {
     anchors.fill:   parent
 
     readonly property real _margins: ScreenTools.defaultFontPixelHeight
+    readonly property real _rowPadding: ScreenTools.defaultFontPixelWidth
     readonly property var  _vs:      QGroundControl.settingsManager.videoSettings
     readonly property var  _vm:      QGroundControl.videoManager
     readonly property bool _dev:     QGroundControl.corePlugin.stratumDevBuild
@@ -355,9 +356,12 @@ Rectangle {
             Rectangle { Layout.fillWidth: true; height: 1; color: qgcPal.groupBorder }
 
             // ---- Column headers -----------------------------------------
+            // Inset by the same amount as the row cards below so the columns line up.
             RowLayout {
-                Layout.fillWidth: true
-                spacing:          ScreenTools.defaultFontPixelWidth
+                Layout.fillWidth:   true
+                Layout.leftMargin:  root._rowPadding + 1
+                Layout.rightMargin: root._rowPadding + 1
+                spacing:            ScreenTools.defaultFontPixelWidth
                 QGCLabel { text: qsTr("Serial Number");  Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 24; font.bold: true }
                 QGCLabel { text: qsTr("Vehicle Name");   Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 18; font.bold: true }
                 QGCLabel { text: qsTr("Status");         Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16; font.bold: true }
@@ -366,182 +370,195 @@ Rectangle {
             }
 
             // ---- Device rows --------------------------------------------
+            // Each vehicle is a bordered card so its fields and Apply / Connect / Remove buttons
+            // read as one group.
             Repeater {
                 model: deviceModel
-                delegate: RowLayout {
-                    id:               assetRow
+                delegate: Rectangle {
+                    id:                  assetCard
                     required property int    index
                     required property string serial
                     required property string name
 
-                    Layout.fillWidth: true
-                    spacing:          ScreenTools.defaultFontPixelWidth
+                    Layout.fillWidth:    true
+                    implicitHeight:      assetRow.implicitHeight + root._rowPadding * 2
+                    color:               "transparent"
+                    radius:              ScreenTools.defaultFontPixelWidth / 2
+                    border.width:        1
+                    border.color:        qgcPal.groupBorder
 
-                    // Live connection state: true only when a Vehicle is actually connected on
-                    // this asset's link (a Vehicle exists only after a heartbeat), not merely
-                    // when the UDP socket was created. _linkCfg is still used for Disconnect.
-                    readonly property string _linkName: root.assetLinkName(serialField.text, name)
-                    readonly property var    _linkCfg: {
-                        void(QGroundControl.linkManager.linkConfigurations.count)
-                        return root.assetLinkConfig(serialField.text, name)
-                    }
-                    readonly property bool   _connected: {
-                        void(QGroundControl.multiVehicleManager.vehicles.count)
-                        return root.vehicleOnLink(_linkName) !== null
-                    }
-                    // Link up (even before the first heartbeat): Disconnect must stay reachable
-                    // so a half-open connection can still be wiped.
-                    readonly property bool   _linkUp: _connected || (_linkCfg !== null && _linkCfg.linkActive)
-
-                    QGCTextField {
-                        id:                    serialField
-                        Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 24
-                        // Stored serials are clean hex; display them grouped in fours.
-                        text:                  _format(_clean(serial))
-                        placeholderText:       qsTr("e.g. 2033-65AB-DE49-00FC")
-                        inputMethodHints:      Qt.ImhNoPredictiveText
-
-                        property int _prevCleanLen: _clean(serial).length
-
-                        // Keep only hex, upper-case, capped at the 16-char (8-byte) frame.
-                        function _clean(raw) {
-                            var c = raw.replace(/[^0-9a-fA-F]/g, "").toUpperCase()
-                            return c.length > 16 ? c.substring(0, 16) : c
-                        }
-                        // Group into fours with dashes; add a trailing dash right after a
-                        // completed group so "4B2C" becomes "4B2C-" (but never at full length).
-                        function _format(clean) {
-                            var groups = []
-                            for (var i = 0; i < clean.length; i += 4) groups.push(clean.substring(i, i + 4))
-                            var out = groups.join("-")
-                            if (clean.length > 0 && clean.length < 16 && (clean.length % 4) === 0) out += "-"
-                            return out
-                        }
-
-                        onTextEdited: {
-                            var clean = _clean(text)
-                            // Backspace over an auto-inserted trailing dash: hex content is
-                            // unchanged but the field shrank -> drop the last hex digit so
-                            // delete feels natural.
-                            if (clean.length === _prevCleanLen && text.length < _format(clean).length) {
-                                clean = clean.substring(0, Math.max(0, clean.length - 1))
-                            }
-                            var formatted = _format(clean)
-                            _prevCleanLen = clean.length
-                            if (text !== formatted) {
-                                text = formatted
-                                cursorPosition = formatted.length
-                            }
-                        }
-
-                        onEditingFinished: {
-                            var clean = _clean(text)
-                            if (clean !== serial) {
-                                // A changed serial means a different vehicle: drop the old
-                                // asset's link/key/camera. The new serial is registered on Connect.
-                                root.wipeAsset(serial, name)
-                                deviceModel.setProperty(index, "serial", clean)
-                                root.saveRegistry()
-                            }
-                        }
-                    }
-                    QGCTextField {
-                        Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 18
-                        text:                  name
-                        placeholderText:       qsTr("e.g. Dagger 01")
-                        onEditingFinished: {
-                            if (text !== name) {
-                                // The key and link are named after the asset, so a rename
-                                // disconnects and wipes the old one; Connect re-registers it.
-                                root.wipeAsset(serialField.text, name)
-                                deviceModel.setProperty(index, "name", text)
-                                root.saveRegistry()
-                            }
-                        }
-                    }
                     RowLayout {
-                        Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
-                        spacing:               ScreenTools.defaultFontPixelWidth / 2
-                        Rectangle {
-                            implicitWidth:    ScreenTools.defaultFontPixelHeight * 0.5
-                            implicitHeight:   implicitWidth
-                            radius:           implicitWidth / 2
-                            color:            assetRow._connected ? qgcPal.colorGreen : (qgcPal.lightTheme ? qgcPal.colorGrey : "#808080")
-                            Layout.alignment: Qt.AlignVCenter
+                        id:               assetRow
+                        anchors.fill:     parent
+                        anchors.margins:  root._rowPadding + 1
+                        spacing:          ScreenTools.defaultFontPixelWidth
+
+                        // Live connection state: true only when a Vehicle is actually connected on
+                        // this asset's link (a Vehicle exists only after a heartbeat), not merely
+                        // when the UDP socket was created. _linkCfg is still used for Disconnect.
+                        readonly property string _linkName: root.assetLinkName(serialField.text, name)
+                        readonly property var    _linkCfg: {
+                            void(QGroundControl.linkManager.linkConfigurations.count)
+                            return root.assetLinkConfig(serialField.text, name)
                         }
-                        QGCLabel {
-                            text:  assetRow._connected ? qsTr("Connected") : qsTr("Offline")
-                            color: assetRow._connected ? qgcPal.colorGreen : qgcPal.text
+                        readonly property bool   _connected: {
+                            void(QGroundControl.multiVehicleManager.vehicles.count)
+                            return root.vehicleOnLink(_linkName) !== null
                         }
-                    }
-                    Item { Layout.fillWidth: true }
-                    QGCButton {
-                        text:    qsTr("Apply")
-                        enabled: serialField.text.length > 0
-                        // Validate only: no signing key and no camera/RTSP changes until Connect.
-                        onClicked: {
-                            const r = root._vm.decodeDeviceSerial(serialField.text)
-                            if (!r.valid) {
+                        // Link up (even before the first heartbeat): Disconnect must stay reachable
+                        // so a half-open connection can still be wiped.
+                        readonly property bool   _linkUp: _connected || (_linkCfg !== null && _linkCfg.linkActive)
+
+                        QGCTextField {
+                            id:                    serialField
+                            Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 24
+                            // Stored serials are clean hex; display them grouped in fours.
+                            text:                  _format(_clean(serial))
+                            placeholderText:       qsTr("e.g. 2033-65AB-DE49-00FC")
+                            inputMethodHints:      Qt.ImhNoPredictiveText
+
+                            property int _prevCleanLen: _clean(serial).length
+
+                            // Keep only hex, upper-case, capped at the 16-char (8-byte) frame.
+                            function _clean(raw) {
+                                var c = raw.replace(/[^0-9a-fA-F]/g, "").toUpperCase()
+                                return c.length > 16 ? c.substring(0, 16) : c
+                            }
+                            // Group into fours with dashes; add a trailing dash right after a
+                            // completed group so "4B2C" becomes "4B2C-" (but never at full length).
+                            function _format(clean) {
+                                var groups = []
+                                for (var i = 0; i < clean.length; i += 4) groups.push(clean.substring(i, i + 4))
+                                var out = groups.join("-")
+                                if (clean.length > 0 && clean.length < 16 && (clean.length % 4) === 0) out += "-"
+                                return out
+                            }
+
+                            onTextEdited: {
+                                var clean = _clean(text)
+                                // Backspace over an auto-inserted trailing dash: hex content is
+                                // unchanged but the field shrank -> drop the last hex digit so
+                                // delete feels natural.
+                                if (clean.length === _prevCleanLen && text.length < _format(clean).length) {
+                                    clean = clean.substring(0, Math.max(0, clean.length - 1))
+                                }
+                                var formatted = _format(clean)
+                                _prevCleanLen = clean.length
+                                if (text !== formatted) {
+                                    text = formatted
+                                    cursorPosition = formatted.length
+                                }
+                            }
+
+                            onEditingFinished: {
+                                var clean = _clean(text)
+                                if (clean !== serial) {
+                                    // A changed serial means a different vehicle: drop the old
+                                    // asset's link/key/camera. The new serial is registered on Connect.
+                                    root.wipeAsset(serial, name)
+                                    deviceModel.setProperty(index, "serial", clean)
+                                    root.saveRegistry()
+                                }
+                            }
+                        }
+                        QGCTextField {
+                            Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 18
+                            text:                  name
+                            placeholderText:       qsTr("e.g. Dagger 01")
+                            onEditingFinished: {
+                                if (text !== name) {
+                                    // The key and link are named after the asset, so a rename
+                                    // disconnects and wipes the old one; Connect re-registers it.
+                                    root.wipeAsset(serialField.text, name)
+                                    deviceModel.setProperty(index, "name", text)
+                                    root.saveRegistry()
+                                }
+                            }
+                        }
+                        RowLayout {
+                            Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                            spacing:               ScreenTools.defaultFontPixelWidth / 2
+                            Rectangle {
+                                implicitWidth:    ScreenTools.defaultFontPixelHeight * 0.5
+                                implicitHeight:   implicitWidth
+                                radius:           implicitWidth / 2
+                                color:            assetRow._connected ? qgcPal.colorGreen : (qgcPal.lightTheme ? qgcPal.colorGrey : "#808080")
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+                            QGCLabel {
+                                text:  assetRow._connected ? qsTr("Connected") : qsTr("Offline")
+                                color: assetRow._connected ? qgcPal.colorGreen : qgcPal.text
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        QGCButton {
+                            text:    qsTr("Apply")
+                            enabled: serialField.text.length > 0
+                            // Validate only: no signing key and no camera/RTSP changes until Connect.
+                            onClicked: {
+                                const r = root._vm.decodeDeviceSerial(serialField.text)
+                                if (!r.valid) {
+                                    QGroundControl.showMessageDialog(root, qsTr("Apply Asset"),
+                                        root._dev ? qsTr("Could not decode serial: %1").arg(r.error)
+                                                  : qsTr("Serial key invalid."))
+                                    return
+                                }
                                 QGroundControl.showMessageDialog(root, qsTr("Apply Asset"),
-                                    root._dev ? qsTr("Could not decode serial: %1").arg(r.error)
-                                              : qsTr("Serial key invalid."))
-                                return
+                                    root._dev
+                                        ? qsTr("Registered %1.\nCamera: %2\nVehicle: %3:%4\nHandshake key NX%5 (applied on Connect).")
+                                            .arg(name.length ? name : serialField.text)
+                                            .arg(r.cameraIp).arg(r.dataIp).arg(r.port).arg(r.handshake)
+                                        : qsTr("Vehicle registered."))
                             }
-                            QGroundControl.showMessageDialog(root, qsTr("Apply Asset"),
-                                root._dev
-                                    ? qsTr("Registered %1.\nCamera: %2\nVehicle: %3:%4\nHandshake key NX%5 (applied on Connect).")
-                                        .arg(name.length ? name : serialField.text)
-                                        .arg(r.cameraIp).arg(r.dataIp).arg(r.port).arg(r.handshake)
-                                    : qsTr("Vehicle registered."))
                         }
-                    }
-                    QGCButton {
-                        text:    qsTr("Test Pairing")
-                        enabled: serialField.text.length > 0
-                        onClicked: {
-                            const r = root._vm.decodeDeviceSerial(serialField.text)
-                            if (!r.valid) {
-                                QGroundControl.showMessageDialog(root, qsTr("Test Pairing"),
-                                    root._dev ? qsTr("Could not decode serial: %1").arg(r.error)
-                                              : qsTr("Serial key invalid."))
-                                return
+                        QGCButton {
+                            text:    qsTr("Test Pairing")
+                            enabled: serialField.text.length > 0
+                            onClicked: {
+                                const r = root._vm.decodeDeviceSerial(serialField.text)
+                                if (!r.valid) {
+                                    QGroundControl.showMessageDialog(root, qsTr("Test Pairing"),
+                                        root._dev ? qsTr("Could not decode serial: %1").arg(r.error)
+                                                  : qsTr("Serial key invalid."))
+                                    return
+                                }
+                                pairingDialogFactory.open()
+                                // Ping the vehicle IP, then the camera IP (host reachability, no port).
+                                root._vm.startPairingTest(r.dataIp, r.cameraIp)
                             }
-                            pairingDialogFactory.open()
-                            // Ping the vehicle IP, then the camera IP (host reachability, no port).
-                            root._vm.startPairingTest(r.dataIp, r.cameraIp)
                         }
-                    }
-                    QGCButton {
-                        text:    qsTr("Connect")
-                        visible: !assetRow._linkUp
-                        enabled: serialField.text.length > 0
-                        onClicked: {
-                            const r = root._vm.decodeDeviceSerial(serialField.text)
-                            if (!r.valid) {
-                                QGroundControl.showMessageDialog(root, qsTr("Connect Asset"),
-                                    root._dev ? qsTr("Could not decode serial: %1").arg(r.error)
-                                              : qsTr("Serial key invalid."))
-                                return
+                        QGCButton {
+                            text:    qsTr("Connect")
+                            visible: !assetRow._linkUp
+                            enabled: serialField.text.length > 0
+                            onClicked: {
+                                const r = root._vm.decodeDeviceSerial(serialField.text)
+                                if (!r.valid) {
+                                    QGroundControl.showMessageDialog(root, qsTr("Connect Asset"),
+                                        root._dev ? qsTr("Could not decode serial: %1").arg(r.error)
+                                                  : qsTr("Serial key invalid."))
+                                    return
+                                }
+                                const displayName = name.length ? name : serialField.text
+                                root.connectDevice(serialField.text, name)
+                                // Reactive dialog: shows "Connecting …" until the vehicle actually
+                                // appears on the link, then "Connected to X." and auto-closes.
+                                connectStatusDialogFactory.open({
+                                    linkName:    assetRow._linkName,
+                                    displayName: displayName,
+                                    detail:      root._dev ? qsTr(" at %1:%2").arg(r.dataIp).arg(r.port) : ""
+                                })
                             }
-                            const displayName = name.length ? name : serialField.text
-                            root.connectDevice(serialField.text, name)
-                            // Reactive dialog: shows "Connecting …" until the vehicle actually
-                            // appears on the link, then "Connected to X." and auto-closes.
-                            connectStatusDialogFactory.open({
-                                linkName:    assetRow._linkName,
-                                displayName: displayName,
-                                detail:      root._dev ? qsTr(" at %1:%2").arg(r.dataIp).arg(r.port) : ""
-                            })
                         }
-                    }
-                    QGCButton {
-                        text:    qsTr("Disconnect")
-                        visible: assetRow._linkUp
-                        onClicked: root.disconnectDevice(serialField.text, name)
-                    }
-                    QGCButton {
-                        text: qsTr("Remove")
-                        onClicked: root.removeDeviceAt(index)
+                        QGCButton {
+                            text:    qsTr("Disconnect")
+                            visible: assetRow._linkUp
+                            onClicked: root.disconnectDevice(serialField.text, name)
+                        }
+                        QGCButton {
+                            text: qsTr("Remove")
+                            onClicked: root.removeDeviceAt(index)
+                        }
                     }
                 }
             }
