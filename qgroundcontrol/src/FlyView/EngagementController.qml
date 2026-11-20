@@ -170,8 +170,10 @@ Item {
 
     // Operator-initiated break-off. Deliberately independent of any valid
     // time-to-impact estimate: abort must work even when the countdown is "computing".
+    // It is only meaningful during an engagement, so it does nothing in any other mode
+    // (this also covers the joystick Abort action).
     function abort() {
-        if (!_activeVehicle) {
+        if (!_activeVehicle || !(engaged || visionEngaged || pnEngaged)) {
             return
         }
         _activeVehicle.flightMode = abortModeName

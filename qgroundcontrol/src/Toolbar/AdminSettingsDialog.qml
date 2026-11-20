@@ -13,6 +13,7 @@ QGCPopupDialog {
     buttons:    Dialog.Close
 
     readonly property var _admin:     QGroundControl.settingsManager.adminSettings
+    readonly property var _flyView:   QGroundControl.settingsManager.flyViewSettings
     readonly property bool _unlocked: _admin ? _admin.unlocked : false
 
     QGCPalette { id: qgcPal }
@@ -243,6 +244,78 @@ QGCPopupDialog {
                 QGCLabel {
                     text: _admin ? qsTr("%1 °C").arg(Number(_admin.escFlightWarnTempC.rawValue)) : "80 °C"
                 }
+            }
+
+            QGCLabel {
+                Layout.topMargin:   ScreenTools.defaultFontPixelHeight / 2
+                text:               qsTr("Standoff limits")
+                font.bold:          true
+            }
+            GridLayout {
+                columns:        2
+                columnSpacing:  ScreenTools.defaultFontPixelWidth
+                rowSpacing:     ScreenTools.defaultFontPixelHeight / 3
+
+                QGCLabel { text: qsTr("Min radius (R)") }
+                FactTextField {
+                    fact:                  _flyView ? _flyView.standoffMinDistance : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                }
+
+                QGCLabel { text: qsTr("Max radius (R)") }
+                FactTextField {
+                    fact:                  _flyView ? _flyView.standoffMaxDistance : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                }
+
+                QGCLabel { text: qsTr("Min height (H)") }
+                FactTextField {
+                    fact:                  _flyView ? _flyView.standoffMinHeight : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                }
+
+                QGCLabel { text: qsTr("Max height (H)") }
+                FactTextField {
+                    fact:                  _flyView ? _flyView.standoffMaxHeight : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                }
+
+                QGCLabel { text: qsTr("Link range limit") }
+                FactTextField {
+                    fact:                  _flyView ? _flyView.standoffLinkRangeLimit : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                }
+
+                QGCLabel { text: qsTr("Hold tolerance, horizontal") }
+                FactTextField {
+                    fact:                  _flyView ? _flyView.standoffHoldHorizontalTolerance : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                }
+
+                QGCLabel { text: qsTr("Hold tolerance, vertical") }
+                FactTextField {
+                    fact:                  _flyView ? _flyView.standoffHoldVerticalTolerance : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                }
+
+                QGCLabel { text: qsTr("Hold dwell time") }
+                FactTextField {
+                    fact:                  _flyView ? _flyView.standoffHoldDwellTime : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                }
+            }
+            QGCLabel {
+                Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 58
+                wrapMode:            Text.WordWrap
+                text:                qsTr("Allowed range for the standoff radius and height above the target. A standoff point farther than the link range limit from the GCS shows a warning but is not blocked. A vehicle that switches from Standoff to Hold shows as holding on the slot once it stays within the hold tolerances for the dwell time.")
+            }
+            QGCLabel {
+                Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 58
+                wrapMode:            Text.WordWrap
+                color:               qgcPal.warningText
+                visible:             _flyView && (Number(_flyView.standoffMinDistance.rawValue) > Number(_flyView.standoffMaxDistance.rawValue)
+                                                  || Number(_flyView.standoffMinHeight.rawValue) > Number(_flyView.standoffMaxHeight.rawValue))
+                text:                qsTr("A minimum is higher than its maximum, so no standoff value is accepted.")
             }
 
             QGCLabel {

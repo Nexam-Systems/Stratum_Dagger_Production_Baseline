@@ -116,6 +116,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         CameraGeolocation.cc
         CameraGeolocation.h
         CameraGroundRay.h
+        StandoffGeometry.cc
+        StandoffGeometry.h
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

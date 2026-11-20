@@ -313,8 +313,9 @@ Single controller for both profiles. Contract:
    **nothing**: no flight-mode switch, no `_standoffActive`, no on-map circle.
 3. **Dropper** — sends `31010` (params) then `31011` (activate=1) to
    `compid = 191`.
-4. On success, latches the state that drives the on-map surveillance circle
-   (radius = `_standoffDistance`, centre = target).
+4. On success, latches the state that drives the on-map standoff display (target,
+   dashed ring with radius = `_standoffDistance`, and the slot at bearing
+   `_standoffDirection`; see `StandoffGeometry` and `FlyViewMap.qml`).
 5. `cancelStandoff()` mirrors: on Dropper it fires `31011 activate=0`; on Dagger
    the flight-mode switch alone is enough.
 

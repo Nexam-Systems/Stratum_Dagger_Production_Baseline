@@ -108,11 +108,11 @@ class RTLAbortGateTest(unittest.TestCase):
         return self.gate.property("abortAllowed")
 
     # ---- Ground / nominal ----
-    def test_on_ground_allows_both(self):
+    def test_on_ground_allows_rtl_but_abort_needs_engagement(self):
         self.set(inArmed=False, inFlying=False)
         self.advance()
         self.assertTrue(self.rtl())
-        self.assertTrue(self.abort())
+        self.assertFalse(self.abort())  # not engaged
 
     def test_airborne_provisional_nominal_allows(self):
         self.advance()  # 1 min flown, 1 km home, PNR counting -> allowed
@@ -177,6 +177,39 @@ class RTLAbortGateTest(unittest.TestCase):
             self.set(inFlightMode="Abort"); self.advance()
             self.assertEqual(self.gate.property("abortsDone"), expected)
         self.assertFalse(self.abort())  # budget (maxAborts=3) exhausted
+
+    # ---- Abort needs an engagement ----
+    def test_abort_is_off_until_an_engagement_mode_is_active(self):
+        for mode in ("Hold", "Standoff", "Manual", "Abort"):
+            self.set(inFlightMode=mode); self.advance()
+            self.assertFalse(self.abort(), mode)
+            self.assertFalse(self.gate.property("engaged"), mode)
+        for mode in ("Engagement", "Vision Engagement", "PN Engagement"):
+            self.set(inFlightMode=mode); self.advance()
+            self.assertTrue(self.abort(), mode)
+            self.assertTrue(self.gate.property("engaged"), mode)
+
+    def test_abort_goes_off_after_abort_until_engaged_again(self):
+        self.set(inFlightMode="Engagement"); self.advance()
+        self.assertTrue(self.abort())
+        self.set(inFlightMode="Abort"); self.advance()
+        self.assertFalse(self.abort())
+        self.set(inFlightMode="Hold"); self.advance()
+        self.assertFalse(self.abort())
+        self.set(inFlightMode="Engagement"); self.advance()
+        self.assertEqual(self.gate.property("abortsDone"), 1)
+        self.assertTrue(self.abort())      # engaged again, 2 aborts left
+
+    def test_three_abort_cycles_then_no_more_even_when_engaged(self):
+        self.gate.setProperty("hysteresisSeconds", 3)  # the cap must not wait for the debounce
+        for cycle in (1, 2, 3):
+            self.set(inFlightMode="Engagement"); self.advance(0.25)
+            self.assertTrue(self.abort(), f"cycle {cycle}")
+            self.set(inFlightMode="Abort"); self.advance(0.25)
+            self.assertEqual(self.gate.property("abortsDone"), cycle)
+        self.set(inFlightMode="Engagement"); self.advance(0.25)
+        self.assertEqual(self.gate.property("abortsRemaining"), 0)
+        self.assertFalse(self.abort())
 
     def test_abort_resets_on_disarm(self):
         self.set(inFlightMode="Abort"); self.advance()
