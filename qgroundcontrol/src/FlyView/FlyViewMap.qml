@@ -22,6 +22,7 @@ FlightMap {
     property Item   pipView
     property Item   pipState:                   _pipState
     property var    rightPanelWidth
+    property real   rightDockInset:             0       // width of the right control panel hovering over the map's right edge
     property var    planMasterController
     property bool   pipMode:                    false   // true: map is shown in a small pip mode
     property var    toolInsets                          // Insets for the center viewport area
@@ -47,7 +48,7 @@ FlightMap {
     // also keeps any default-polygon reset inside the visible area. FlyViewMap (unlike
     // PlanView's editorMap) declares no centerViewport, so define one here.
     property real   _aopTopInset:               (toolInsets ? toolInsets.topEdgeCenterInset : 0) + ScreenTools.defaultFontPixelHeight
-    property rect   centerViewport:             Qt.rect(0, _aopTopInset, width, height - _aopTopInset)
+    property rect   centerViewport:             Qt.rect(0, _aopTopInset, Math.max(0, width - rightDockInset), height - _aopTopInset)
 
     // STRATUM: Area-Of-Operations (AOP) edit state. When true the inclusion
     // geofence polygon becomes interactive (draggable vertices, add/remove)

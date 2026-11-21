@@ -169,11 +169,12 @@ Item {
         id:                 mapHolder
         anchors.fill:       parent
 
+        // STRATUM KAN-51: the map / video run under the right control panel (the panel hovers over
+        // them); the panel's own opacity decides how much of the map shows through.
         Item {
             id: flightSurface
             anchors.fill: parent
             anchors.topMargin: QGroundControl.videoManager.fullScreen ? 0 : toolbar.height
-            anchors.rightMargin: _root._dockWidth
         }
 
         FlyViewMap {
@@ -181,6 +182,7 @@ Item {
             parent:                 flightSurface
             planMasterController:   _planController
             rightPanelWidth:        ScreenTools.defaultFontPixelHeight * 9
+            rightDockInset:         _root._dockWidth
             pipView:                _pipView
             pipMode:                !_mainWindowIsMap
             toolInsets:             customOverlay.totalToolInsets

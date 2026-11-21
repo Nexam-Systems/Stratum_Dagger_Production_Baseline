@@ -357,6 +357,8 @@ Item {
         guidedController:       _root._guidedController
         engagementController:    _root.engagementController
         cameraPrimary:           _root.cameraMaximized
+        // STRATUM KAN-51: admin-set opacity (0-100 %) of the panel background and border.
+        backgroundOpacity:       Math.max(0, Math.min(1, Number(QGroundControl.settingsManager.flyViewSettings.rightPanelOpacity.rawValue) / 100))
         rtlAbortGate:            rtlAbortGate
         contextActive:           _root.visible && _root.panelExpanded && !(_root.mapControl && _root.mapControl._aopEditMode) && !standoffPanel.visible
         actionModel:             missionActions.model

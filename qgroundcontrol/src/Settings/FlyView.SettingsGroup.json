@@ -167,6 +167,17 @@
             "keywords": "standoff,stratum,hold,capture,dwell"
         },
         {
+            "name": "rightPanelOpacity",
+            "shortDesc": "Opacity of the right control panel background and border. At 0% only the buttons, compass heading and camera/map preview show over the map.",
+            "type": "double",
+            "units": "%",
+            "default": 100,
+            "min": 0,
+            "max": 100,
+            "label": "Right Control Panel Opacity",
+            "keywords": "right,panel,control,opacity,transparent,background"
+        },
+        {
             "name": "maxAOPDistance",
             "shortDesc": "Maximum allowed distance of any Area of Operations vertex from the vehicle home position.",
             "type": "double",

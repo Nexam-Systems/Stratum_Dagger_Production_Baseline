@@ -12,6 +12,9 @@ Rectangle {
     property var actionModel: []
     readonly property var activeHold: abortButton.holding ? abortButton : engageButton.holding ? engageButton : null
     property bool cameraPrimary: false
+    // STRATUM KAN-51: opacity (0..1) of the panel background, border and separator; set from the
+    // hidden Admin panel. 0 leaves only the buttons, compass heading and camera/map preview.
+    property real backgroundOpacity: 1.0
     property bool contextActive: true
     // STRATUM #42: Layer-1 gate -> grays the RTL / Abort buttons when it says stop.
     property var rtlAbortGate: null
@@ -104,9 +107,14 @@ Rectangle {
         return root.accentGlow
     }
 
-    border.color: panelPalette.groupBorder
+    border.color: Qt.rgba(panelPalette.groupBorder.r, panelPalette.groupBorder.g, panelPalette.groupBorder.b, panelPalette.groupBorder.a * root.backgroundOpacity)
     border.width: 1
-    color: panelPalette.highContrast || panelPalette.lightTheme ? panelPalette.window : Qt.rgba(panelPalette.window.r, panelPalette.window.g, panelPalette.window.b, 0.80)
+    // STRATUM KAN-51: only the panel chrome (background, border, separator) follows backgroundOpacity;
+    // the buttons, compass heading and camera/map preview are separate items and keep their look.
+    color: {
+        var base = panelPalette.highContrast || panelPalette.lightTheme ? panelPalette.window : Qt.rgba(panelPalette.window.r, panelPalette.window.g, panelPalette.window.b, 0.80)
+        return Qt.rgba(base.r, base.g, base.b, base.a * root.backgroundOpacity)
+    }
 
     onContextActiveChanged: if (!contextActive)
         cancelHolds()
@@ -385,7 +393,7 @@ Rectangle {
 
         Rectangle {
             width: parent.width
-            color: panelPalette.groupBorder
+            color: Qt.rgba(panelPalette.groupBorder.r, panelPalette.groupBorder.g, panelPalette.groupBorder.b, panelPalette.groupBorder.a * root.backgroundOpacity)
             height: 1
         }
 
