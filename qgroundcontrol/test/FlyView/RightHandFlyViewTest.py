@@ -662,7 +662,7 @@ actionModel: [modeAction]
         self.assertLess(panel_color.alpha(), 255)
         engage_color = engage.property("background").property("color")
         takeoff_color = takeoff.property("background").property("color")
-        self.assertEqual(engage_color.name(), "#7c202c")
+        self.assertEqual(engage_color.name(), "#b3141f")
         self.assertLess(engage_color.alpha(), 255)
         # KAN-21: non-engage/abort buttons use the neutral theme button colour.
         self.assertEqual(takeoff_color.name(), "#102d43")
@@ -672,7 +672,7 @@ actionModel: [modeAction]
         self.display_mode.highContrast = True
         self.assertEqual(panel.property("color"), QColor("#050A06"))
         # KAN-21: Engage stays red in the high-contrast theme too.
-        self.assertEqual(engage.property("background").property("color"), QColor("#7c202c"))
+        self.assertEqual(engage.property("background").property("color"), QColor("#b3141f"))
         self.assertEqual(engage.property("foreground"), QColor("#D6FF85"))
         self.assertFalse(self.errors, self.errors)
 
