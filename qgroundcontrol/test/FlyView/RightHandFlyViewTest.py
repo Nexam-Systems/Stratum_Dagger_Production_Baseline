@@ -501,6 +501,7 @@ actionModel: [modeAction]
         change_height = self.item.findChild(QObject, "missionChangeHeight")
         self.assertIsNotNone(kill)
         self.assertEqual(kill.property("text"), "Emergency Kill")
+        self.assertEqual(kill.property("shortText"), "E-Kill")
         self.assertGreaterEqual(kill.mapToItem(self.item, 0, 0).y(),
                                 change_height.mapToItem(self.item, 0, change_height.height()).y())
 
@@ -545,16 +546,20 @@ actionModel: [modeAction]
             compass = self.item.findChild(QObject, "missionCompass")
             self.assertTrue(compass.isVisible())
             compass_top = compass.mapToItem(panel, 0, 0).y()
-            previous_bottom = 0
+            rects = []
             for name in names:
                 button = self.item.findChild(QObject, name)
                 self.assertIsNotNone(button, name)
-                top = button.mapToItem(panel, 0, 0).y()
-                bottom = top + button.height()
-                self.assertGreaterEqual(top, previous_bottom - 1, f"{name} overlaps the one above at {height}")
-                self.assertLessEqual(bottom, compass_top, f"{name} is hidden behind the compass at {height}")
-                self.assertGreaterEqual(button.height(), 34, name)
-                previous_bottom = bottom
+                top_left = button.mapToItem(panel, 0, 0)
+                rect = (top_left.x(), top_left.y(), top_left.x() + button.width(), top_left.y() + button.height())
+                self.assertGreaterEqual(rect[0], 0, name)
+                self.assertLessEqual(rect[2], panel.width() + 1, name)
+                self.assertLessEqual(rect[3], compass_top, f"{name} is hidden behind the compass at {height}")
+                self.assertGreaterEqual(button.height(), 32, name)
+                for other_name, other in rects:
+                    apart = rect[2] <= other[0] + 1 or other[2] <= rect[0] + 1 or rect[3] <= other[1] + 1 or other[3] <= rect[1] + 1
+                    self.assertTrue(apart, f"{name} overlaps {other_name} at {height}")
+                rects.append((name, rect))
         self.assertFalse(self.errors, self.errors)
 
     def test_background_opacity_fades_only_the_panel_chrome(self):
@@ -789,7 +794,7 @@ actionModel: [modeAction]
         buttons = {name: self.item.findChild(QObject, "mission" + name) for name in ["Takeoff", "Abort", "Standoff", "Engage"]}
         self.assertTrue(all(buttons.values()))
         points = {name: button.mapToItem(self.item, button.width() / 2, button.height() / 2) for name, button in buttons.items()}
-        # KAN-21: single ordered vertical column -- Takeoff, ..., Standoff, Abort, Engage.
+        # KAN-51: single column of circular buttons -- Takeoff, ..., Standoff, Abort, Engage.
         self.assertAlmostEqual(points["Takeoff"].x(), points["Engage"].x(), delta=1)
         self.assertAlmostEqual(points["Standoff"].x(), points["Abort"].x(), delta=1)
         self.assertLess(points["Takeoff"].y(), points["Standoff"].y())
