@@ -355,7 +355,7 @@ Item {
                                        ('warningText', 'window')]:
             first, second = sorted([luminance(colors[foreground]), luminance(colors[background])])
             self.assertGreaterEqual((second + 0.05) / (first + 0.05), 4.5, foreground)
-        for background in ['#7C202C', '#441B26', '#073E37', '#102D43']:
+        for background in ['#B3141F', '#441B26', '#073E37', '#102D43']:
             first, second = sorted([luminance('#F1F7FA'), luminance(background)])
             self.assertGreaterEqual((second + 0.05) / (first + 0.05), 4.5)
 

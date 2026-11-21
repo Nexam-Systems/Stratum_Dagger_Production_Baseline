@@ -74,23 +74,21 @@ Rectangle {
         return qsTr("Safe Recovery")
     }
 
-    // STRATUM KAN-21: button theming. Engage reads red and Abort reads orange in BOTH
-    // the normal and high-contrast themes (safety-critical, must stay recognisable);
-    // every other command uses the neutral theme button colour. A coloured edge glow is
-    // kept on all buttons. accentGlow follows the active theme accent.
+    // STRATUM KAN-21 / KAN-50: button theming. Engage and Emergency Kill share the same crimson red
+    // and Abort reads orange in BOTH the normal and high-contrast themes (safety-critical, must
+    // stay recognisable); every other command uses the neutral theme button colour. A coloured
+    // edge glow is kept on all buttons. accentGlow follows the active theme accent.
     readonly property color accentGlow: panelPalette.lightTheme ? panelPalette.brandingPurple : (panelPalette.highContrast ? "#2EE62E" : "#79CBE8")
     function actionSpecial(role) { return role === "engage" || role === "abort" || role === "kill" || role === "killActive" }
 
     function actionFill(role) {
         if (panelPalette.lightTheme) {
             if (role === "killActive") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorRed.r, panelPalette.colorRed.g, panelPalette.colorRed.b, 0.55))
-            if (role === "kill") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorRed.r, panelPalette.colorRed.g, panelPalette.colorRed.b, 0.28))
-            if (role === "engage") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorRed.r, panelPalette.colorRed.g, panelPalette.colorRed.b, 0.12))
+            if (role === "kill" || role === "engage") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorRed.r, panelPalette.colorRed.g, panelPalette.colorRed.b, 0.28))
             if (role === "abort") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorOrange.r, panelPalette.colorOrange.g, panelPalette.colorOrange.b, 0.12))
         }
         if (role === "killActive") return "#E3162B"
-        if (role === "kill")   return "#B3141F"
-        if (role === "engage") return "#7C202C"
+        if (role === "kill" || role === "engage") return "#B3141F"
         if (role === "abort")  return "#7A3E12"
         return panelPalette.button
     }
@@ -101,8 +99,7 @@ Rectangle {
             if (role === "abort") return panelPalette.colorOrange
         }
         if (role === "killActive") return "#FFFFFF"
-        if (role === "kill")   return "#FF3B3B"
-        if (role === "engage") return "#FF7A89"
+        if (role === "kill" || role === "engage") return "#FF3B3B"
         if (role === "abort")  return "#FF9F45"
         return root.accentGlow
     }
