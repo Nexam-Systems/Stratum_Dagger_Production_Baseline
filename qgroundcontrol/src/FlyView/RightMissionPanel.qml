@@ -79,13 +79,17 @@ Rectangle {
     // every other command uses the neutral theme button colour. A coloured edge glow is
     // kept on all buttons. accentGlow follows the active theme accent.
     readonly property color accentGlow: panelPalette.lightTheme ? panelPalette.brandingPurple : (panelPalette.highContrast ? "#2EE62E" : "#79CBE8")
-    function actionSpecial(role) { return role === "engage" || role === "abort" }
+    function actionSpecial(role) { return role === "engage" || role === "abort" || role === "kill" || role === "killActive" }
 
     function actionFill(role) {
         if (panelPalette.lightTheme) {
+            if (role === "killActive") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorRed.r, panelPalette.colorRed.g, panelPalette.colorRed.b, 0.55))
+            if (role === "kill") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorRed.r, panelPalette.colorRed.g, panelPalette.colorRed.b, 0.28))
             if (role === "engage") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorRed.r, panelPalette.colorRed.g, panelPalette.colorRed.b, 0.12))
             if (role === "abort") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorOrange.r, panelPalette.colorOrange.g, panelPalette.colorOrange.b, 0.12))
         }
+        if (role === "killActive") return "#E3162B"
+        if (role === "kill")   return "#B3141F"
         if (role === "engage") return "#7C202C"
         if (role === "abort")  return "#7A3E12"
         return panelPalette.button
@@ -93,9 +97,11 @@ Rectangle {
 
     function actionBorder(role) {
         if (panelPalette.lightTheme) {
-            if (role === "engage") return panelPalette.colorRed
+            if (role === "kill" || role === "killActive" || role === "engage") return panelPalette.colorRed
             if (role === "abort") return panelPalette.colorOrange
         }
+        if (role === "killActive") return "#FFFFFF"
+        if (role === "kill")   return "#FF3B3B"
         if (role === "engage") return "#FF7A89"
         if (role === "abort")  return "#FF9F45"
         return root.accentGlow
@@ -142,6 +148,10 @@ Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
+            // STRATUM KAN-49: never scrollable. When the buttons do not fit (short window) the
+            // layout is capped to the available height and the buttons shrink towards their
+            // minimum height instead of being clipped.
+            height: Math.min(implicitHeight, parent.height)
             spacing: 5
 
             // STRATUM KAN-21: single ordered vertical command list. Engage reads red,
@@ -258,7 +268,7 @@ Rectangle {
                         if (!enabled || !root.linkReady)
                             return;
                         root.engagementController.abort();
-                        root.feedback = qsTr("Abort requested — awaiting vehicle response");
+                        root.feedback = qsTr("Abort requested â€” awaiting vehicle response");
                         root.completedCommand = qsTr("Abort");
                         completionTimer.restart();
                     }
@@ -280,7 +290,7 @@ Rectangle {
                         if (!enabled || !root.engageEligible)
                             return;
                         root.engagementController.engage();
-                        root.feedback = qsTr("Engage requested — awaiting vehicle response");
+                        root.feedback = qsTr("Engage requested â€” awaiting vehicle response");
                         root.completedCommand = qsTr("Engage");
                         completionTimer.restart();
                     }
@@ -301,6 +311,28 @@ Rectangle {
                         root.cancelHolds();
                         actionPopup.close();
                         root.guidedController.confirmAction(root.guidedController.actionChangeAlt);
+                    }
+                }
+
+                // STRATUM KAN-49: dedicated Emergency Kill, a LATCHING toggle like the joystick kill
+                // switch. First press force-disarms and holds the kill (Vehicle.killSwitchEngaged:
+                // MANUAL_CONTROL button bit, works with or without a joystick) until it is pressed
+                // again to release. Deliberately NO confirmation, hold or flight-mode / arm gating:
+                // it is a safety control and must act on the first click whenever a vehicle is
+                // connected. Shown in both the Dev and Client builds.
+                CommandButton {
+                    readonly property bool killEngaged: !!root.vehicle && root.vehicle.killSwitchEngaged === true
+
+                    enabled: !!root.vehicle
+                    iconSource: "/InstrumentValueIcons/hand-stop.svg"
+                    objectName: "missionEmergencyKill"
+                    visualRole: killEngaged ? "killActive" : "kill"
+                    text: killEngaged ? qsTr("Release Kill") : qsTr("Emergency Kill")
+                    onClicked: {
+                        root.cancelHolds();
+                        actionPopup.close();
+                        if (root.vehicle)
+                            root.vehicle.setKillSwitchEngaged(!killEngaged);
                     }
                 }
 
@@ -350,7 +382,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 6
         anchors.rightMargin: 6
-        anchors.bottomMargin: 18
+        anchors.bottomMargin: 10
         anchors.right: parent.right
         spacing: 6
 
@@ -371,12 +403,7 @@ Rectangle {
 
         QGCLabel {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: root.headingFresh ? qsTr("%1°").arg(Number(root.vehicle.vehicle.heading.rawValue).toFixed(0)) : qsTr("Heading unavailable")
-        }
-
-        QGCLabel {
-            font.bold: true
-            text: root.cameraPrimary ? qsTr("MAP PREVIEW") : qsTr("CAMERA FEED")
+            text: root.headingFresh ? qsTr("%1Â°").arg(Number(root.vehicle.vehicle.heading.rawValue).toFixed(0)) : qsTr("Heading unavailable")
         }
 
         Item {
@@ -470,7 +497,12 @@ Rectangle {
         textColor: foreground
         Accessible.name: text
         Layout.fillWidth: true
+        // Fill + cap at the normal size: lets the button shrink (to the minimum) on a short
+        // window instead of being clipped, but never grow.
+        Layout.fillHeight: true
         Layout.preferredHeight: 44
+        Layout.minimumHeight: 34
+        Layout.maximumHeight: 44
         _horizontalPadding: 3
         pointSize: ScreenTools.smallFontPointSize
         wrapMode: Text.WordWrap
@@ -536,7 +568,10 @@ Rectangle {
                                             : enabled ? panelPalette.buttonText : (panelPalette.highContrast ? "#B5BDB0" : "#9FB1BE")
 
         Layout.fillWidth: true
+        Layout.fillHeight: true
         Layout.preferredHeight: 46
+        Layout.minimumHeight: 34
+        Layout.maximumHeight: 46
         contextActive: root.contextActive && root.visible && !actionPopup.visible
         font.family: ScreenTools.normalFontFamily
         font.pointSize: ScreenTools.smallFontPointSize

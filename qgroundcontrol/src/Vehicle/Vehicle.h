@@ -158,6 +158,7 @@ public:
     Q_PROPERTY(bool                 flightModeSetAvailable      READ flightModeSetAvailable                                         CONSTANT)
     Q_PROPERTY(QStringList          flightModes                 READ flightModes                                                    NOTIFY flightModesChanged)
     Q_PROPERTY(QString              flightMode                  READ flightMode                 WRITE setFlightMode                 NOTIFY flightModeChanged)
+    Q_PROPERTY(bool                 killSwitchEngaged           READ killSwitchEngaged                                              NOTIFY killSwitchEngagedChanged)
     Q_PROPERTY(TrajectoryPoints*    trajectoryPoints            MEMBER _trajectoryPoints                                            CONSTANT)
     Q_PROPERTY(QmlObjectListModel*  cameraTriggerPoints         READ cameraTriggerPoints                                            CONSTANT)
     Q_PROPERTY(float                latitude                    READ latitude                                                       NOTIFY coordinateChanged)
@@ -358,6 +359,13 @@ public:
     /// Command vehicle to kill all motors no matter what state
     Q_INVOKABLE void emergencyStop();
 
+    /// STRATUM KAN-49: latching kill switch, the on-screen equivalent of a joystick kill toggle.
+    /// Engaging force-disarms the vehicle (like the joystick Emergency Stop action) and keeps
+    /// MANUAL_CONTROL button bit kKillSwitchButton set, whether or not a joystick is connected,
+    /// so the vehicle holds the kill. Releasing clears the bit (zeroed buttons).
+    Q_INVOKABLE void setKillSwitchEngaged(bool engaged);
+    bool killSwitchEngaged() const { return _killSwitchEngaged.load(); }
+
     /// Command vehicle to abort landing
     Q_INVOKABLE void abortLanding(double climbOutAltitude);
 
@@ -461,7 +469,7 @@ public:
 
     void updateFlightDistance(double distance);
 
-    void sendJoystickDataThreadSafe (float roll, float pitch, float yaw, float thrust, quint16 buttons, quint16 buttons2, float pitchExtension, float rollExtension, float aux1, float aux2, float aux3, float aux4, float aux5, float aux6);
+    void sendJoystickDataThreadSafe (float roll, float pitch, float yaw, float thrust, quint16 buttons, quint16 buttons2, float pitchExtension, float rollExtension, float aux1, float aux2, float aux3, float aux4, float aux5, float aux6, bool killSwitchStream = false);
     /// Sends RC_CHANNELS_OVERRIDE for joystick aux axes mapped to RC channels 5–10 only.
     static constexpr int kAuxRcOverrideChannelCount = 6; ///< Number of RC channels overridden (channels 5–10)
     void sendJoystickAuxRcOverrideThreadSafe(const std::array<uint16_t, kAuxRcOverrideChannelCount> &channelValues, const std::array<bool, kAuxRcOverrideChannelCount> &channelEnabled, bool useRcOverride);
@@ -799,6 +807,7 @@ signals:
     void homePositionChanged            (const QGeoCoordinate& homePosition);
     void armedPositionChanged();
     void armedChanged                   (bool armed);
+    void killSwitchEngagedChanged();
     void flightModeChanged              (const QString& flightMode);
     void flyingChanged                  (bool flying);
     void armedTimerReferenceChanged();
@@ -888,6 +897,7 @@ private slots:
     void _offlineCruiseSpeedSettingChanged  (QVariant value);
     void _offlineHoverSpeedSettingChanged   (QVariant value);
     void _prearmErrorTimeout                ();
+    void _sendKillSwitchStream              ();
     void _firstMissionLoadComplete          ();
     void _firstGeoFenceLoadComplete         ();
     void _firstRallyPointLoadComplete       ();
@@ -1009,6 +1019,16 @@ private:
     bool            _allSensorsHealthy                      = true;
     VehicleSigningController* _signingController            = nullptr;
     std::atomic<bool> _joystickAuxRcOverrideActive           = false;
+
+    // STRATUM KAN-49: on-screen latching kill switch (see setKillSwitchEngaged).
+    static constexpr int    kKillSwitchButton               = 0;     ///< MANUAL_CONTROL.buttons bit, same as the joystick kill toggle (button 0)
+    static constexpr int    kKillSwitchStreamIntervalMs     = 40;    ///< 25 Hz, like the joystick polling loop
+    static constexpr int    kKillSwitchReleaseStreamMs      = 2000;  ///< keep sending zeroed buttons this long after release
+    static constexpr qint64 kKillSwitchJoystickActiveMs     = 100;   ///< a joystick sent MANUAL_CONTROL this recently: it carries the bit itself
+    std::atomic<bool>       _killSwitchEngaged              = false;
+    std::atomic<qint64>     _lastManualControlMs{0};         ///< last MANUAL_CONTROL from a joystick (not the kill stream)
+    QTimer                  _killSwitchTimer;
+    QElapsedTimer           _killSwitchReleaseTimer;
 
     std::unique_ptr<SysStatusSensorInfo> _sysStatusSensorInfo;
 
