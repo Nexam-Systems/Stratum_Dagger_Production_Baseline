@@ -557,6 +557,53 @@ actionModel: [modeAction]
                 previous_bottom = bottom
         self.assertFalse(self.errors, self.errors)
 
+    def test_background_opacity_fades_only_the_panel_chrome(self):
+        self.panel_scene(1366, 768)
+        self.display_mode.highContrast = False                     # normal theme: panel base alpha 0.8
+        panel = self.item.property("panel")
+        engage = self.item.findChild(QObject, "missionEngage")
+        preview = self.engine.newQObject(panel).property("previewSlot").toQObject()
+        compass = self.item.findChild(QObject, "missionCompass")
+        QTest.qWait(40)
+        button_color = engage.property("background").property("color")
+        border = lambda: self.engine.newQObject(panel).property("border").toQObject().property("color")
+
+        self.assertAlmostEqual(panel.property("color").alphaF(), 0.8, places=2)      # default 100%: as before
+        self.assertGreater(border().alphaF(), 0.9)
+
+        panel.setProperty("backgroundOpacity", 0.5)
+        QTest.qWait(40)
+        self.assertAlmostEqual(panel.property("color").alphaF(), 0.4, places=2)
+        self.assertAlmostEqual(border().alphaF(), 0.5 * 1.0, places=1)
+
+        panel.setProperty("backgroundOpacity", 0.0)
+        QTest.qWait(40)
+        self.assertEqual(panel.property("color").alpha(), 0)                          # no background ...
+        self.assertEqual(border().alpha(), 0)                                         # ... and no border
+        # buttons, compass and preview are untouched
+        self.assertEqual(engage.property("background").property("color"), button_color)
+        self.assertEqual(engage.property("opacity"), 1.0)
+        self.assertEqual(preview.property("opacity"), 1.0)
+        self.assertTrue(compass.isVisible())
+        self.assertEqual(compass.property("opacity"), 1.0)
+        self.assertTrue(engage.isEnabled())
+        self.assertFalse(self.errors, self.errors)
+
+    def test_opacity_is_an_admin_setting_and_the_map_runs_under_the_panel(self):
+        settings = {f["name"]: f for f in __import__("json").loads(
+            (self.root / "src/Settings/FlyView.SettingsGroup.json").read_text(encoding="utf-8"))["QGC.MetaData.Facts"]}
+        fact = settings["rightPanelOpacity"]
+        self.assertEqual((fact["default"], fact["min"], fact["max"]), (100, 0, 100))
+        self.assertIn("DEFINE_SETTINGFACT(rightPanelOpacity)", (self.root / "src/Settings/FlyViewSettings.h").read_text(encoding="utf-8"))
+        self.assertIn("DECLARE_SETTINGSFACT(FlyViewSettings, rightPanelOpacity)", (self.root / "src/Settings/FlyViewSettings.cc").read_text(encoding="utf-8"))
+        self.assertIn("_flyView.rightPanelOpacity", (self.root / "src/Toolbar/AdminSettingsDialog.qml").read_text(encoding="utf-8"))
+        layer = (self.root / "src/FlyView/FlyViewWidgetLayer.qml").read_text(encoding="utf-8")
+        self.assertIn("rightPanelOpacity.rawValue", layer.split("RightMissionPanel {", 1)[1])
+        fly_view = (self.root / "src/FlyView/FlyView.qml").read_text(encoding="utf-8")
+        surface = fly_view.split("id: flightSurface", 1)[1].split("}", 1)[0]
+        self.assertNotIn("rightMargin", surface)                   # the map is no longer cut off at the panel
+        self.assertIn("rightDockInset:         _root._dockWidth", fly_view)
+
     def test_compass_is_visible_below_secondary_actions(self):
         self.panel_scene(1024, 768)
         panel = self.item.property("panel")

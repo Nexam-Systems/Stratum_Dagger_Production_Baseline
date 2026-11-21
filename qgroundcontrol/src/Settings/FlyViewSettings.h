@@ -28,6 +28,7 @@ public:
     DEFINE_SETTINGFACT(standoffHoldHorizontalTolerance)
     DEFINE_SETTINGFACT(standoffHoldVerticalTolerance)
     DEFINE_SETTINGFACT(standoffHoldDwellTime)
+    DEFINE_SETTINGFACT(rightPanelOpacity)
     DEFINE_SETTINGFACT(maxAOPDistance)
     DEFINE_SETTINGFACT(forwardFlightGoToLocationLoiterRad)
     DEFINE_SETTINGFACT(goToLocationRequiresConfirmInGuided)

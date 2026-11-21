@@ -320,6 +320,25 @@ QGCPopupDialog {
 
             QGCLabel {
                 Layout.topMargin:   ScreenTools.defaultFontPixelHeight / 2
+                text:               qsTr("Right control panel")
+                font.bold:          true
+            }
+            RowLayout {
+                spacing: ScreenTools.defaultFontPixelWidth
+                QGCLabel { text: qsTr("Panel opacity (%)") }
+                FactTextField {
+                    fact:                  _flyView ? _flyView.rightPanelOpacity : null
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                }
+            }
+            QGCLabel {
+                Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 58
+                wrapMode:            Text.WordWrap
+                text:                qsTr("Opacity of the right control panel background and border, 0 to 100. At 0 only the buttons, compass heading and camera/map preview show over the map.")
+            }
+
+            QGCLabel {
+                Layout.topMargin:   ScreenTools.defaultFontPixelHeight / 2
                 text:               qsTr("Assets")
                 font.bold:          true
             }
