@@ -155,6 +155,10 @@ Vehicle::Vehicle(LinkInterface*             link,
     _prearmErrorTimer.setInterval(_prearmErrorTimeoutMSecs);
     _prearmErrorTimer.setSingleShot(true);
 
+    // STRATUM KAN-49: kill switch MANUAL_CONTROL stream (runs only while engaged / just released)
+    connect(&_killSwitchTimer, &QTimer::timeout, this, &Vehicle::_sendKillSwitchStream);
+    _killSwitchTimer.setInterval(kKillSwitchStreamIntervalMs);
+
     // Command queue timer is managed by MavCommandQueue itself.
 
     // MAV_TYPE_GENERIC is used by unit test for creating a vehicle which doesn't do the connect sequence. This
@@ -416,6 +420,8 @@ Vehicle::~Vehicle()
     _sendMultipleTimer.disconnect();
     _prearmErrorTimer.stop();
     _prearmErrorTimer.disconnect();
+    _killSwitchTimer.stop();
+    _killSwitchTimer.disconnect();
 
     delete _missionManager;
     _missionManager = nullptr;
@@ -2177,6 +2183,44 @@ void Vehicle::emergencyStop()
                 21196.0f);  // Magic number for emergency stop
 }
 
+// STRATUM KAN-49: latching kill switch. Mirrors a joystick kill toggle: engaging sends the same
+// force-disarm as the joystick Emergency Stop action and starts holding MANUAL_CONTROL button
+// bit kKillSwitchButton, which the vehicle reads as the kill switch (it holds the kill and
+// rejects arm / takeoff until the bit clears). Releasing clears the bit.
+void Vehicle::setKillSwitchEngaged(bool engaged)
+{
+    if (_killSwitchEngaged.load() == engaged) {
+        return;
+    }
+
+    _killSwitchEngaged = engaged;
+    if (engaged) {
+        emergencyStop();
+    } else {
+        _killSwitchReleaseTimer.start();
+    }
+    _killSwitchTimer.start();
+    _sendKillSwitchStream();    // do not wait for the first tick
+    emit killSwitchEngagedChanged();
+}
+
+void Vehicle::_sendKillSwitchStream()
+{
+    if (!_killSwitchEngaged.load() && _killSwitchReleaseTimer.hasExpired(kKillSwitchReleaseStreamMs)) {
+        _killSwitchTimer.stop();
+        return;
+    }
+
+    // A joystick that is already streaming MANUAL_CONTROL carries the kill bit itself
+    // (sendJoystickDataThreadSafe sets it), so only fill in when there is no such stream.
+    if (QDateTime::currentMSecsSinceEpoch() - _lastManualControlMs.load() < kKillSwitchJoystickActiveMs) {
+        return;
+    }
+
+    // Neutral sticks (like the idle virtual tablet joystick); only the buttons carry the kill.
+    sendJoystickDataThreadSafe(0.f, 0.f, 0.f, 0.f, 0, 0, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, true);
+}
+
 void Vehicle::landingGearDeploy()
 {
     sendMavCommand(
@@ -3331,7 +3375,7 @@ void Vehicle::clearAllParamMapRC(void)
     }
 }
 
-void Vehicle::sendJoystickDataThreadSafe(float roll, float pitch, float yaw, float thrust, quint16 buttons, quint16 buttons2, float pitchExtension, float rollExtension, float aux1, float aux2, float aux3, float aux4, float aux5, float aux6)
+void Vehicle::sendJoystickDataThreadSafe(float roll, float pitch, float yaw, float thrust, quint16 buttons, quint16 buttons2, float pitchExtension, float rollExtension, float aux1, float aux2, float aux3, float aux4, float aux5, float aux6, bool killSwitchStream)
 {
     SharedLinkInterfacePtr sharedLink = vehicleLinkManager()->primaryLink().lock();
     if (!sharedLink) {
@@ -3341,6 +3385,14 @@ void Vehicle::sendJoystickDataThreadSafe(float roll, float pitch, float yaw, flo
 
     if (sharedLink->linkConfiguration()->isHighLatency()) {
         return;
+    }
+
+    if (!killSwitchStream) {
+        _lastManualControlMs = QDateTime::currentMSecsSinceEpoch();
+    }
+    // STRATUM KAN-49: the on-screen kill switch rides on every MANUAL_CONTROL message.
+    if (_killSwitchEngaged.load()) {
+        buttons |= static_cast<quint16>(1u << kKillSwitchButton);
     }
 
     mavlink_message_t message;

@@ -382,7 +382,8 @@ property int killRequests: 0
 property int secondaryRequests: 0
 QtObject {
 id: craft
-function emergencyStop() { killRequests++ }
+property bool killSwitchEngaged: false
+function setKillSwitchEngaged(engaged) { killSwitchEngaged = engaged; killRequests++ }
 property bool initialConnectComplete: true
 property bool armed: true
 property bool flying: true
@@ -493,10 +494,9 @@ actionModel: [modeAction]
             image.save(str(Path(output) / "stratum-compact-toolbar-header.png"))
         self.assertFalse(self.errors, self.errors)
 
-    def test_emergency_kill_is_below_change_height_and_kills_on_one_click(self):
+    def test_emergency_kill_is_below_change_height_and_latches_until_pressed_again(self):
         self.panel_scene(1024, 768)
         craft = self.item.property("craft")
-        self.qgc.manager.activeVehicle = craft
         kill = self.item.findChild(QObject, "missionEmergencyKill")
         change_height = self.item.findChild(QObject, "missionChangeHeight")
         self.assertIsNotNone(kill)
@@ -515,7 +515,16 @@ actionModel: [modeAction]
         point = kill.mapToItem(self.item, kill.width() / 2, kill.height() / 2).toPoint()
         QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point)
         QTest.qWait(30)
-        self.assertEqual(self.item.property("killRequests"), 1)     # first click, no confirmation step
+        self.assertEqual(self.item.property("killRequests"), 1)     # first click engages, no confirmation step
+        self.assertTrue(craft.property("killSwitchEngaged"))
+        self.assertEqual(kill.property("text"), "Release Kill")     # stays latched and says how to release
+        self.assertEqual(kill.property("visualRole"), "killActive")
+
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point)
+        QTest.qWait(30)
+        self.assertEqual(self.item.property("killRequests"), 2)     # second click releases
+        self.assertFalse(craft.property("killSwitchEngaged"))
+        self.assertEqual(kill.property("text"), "Emergency Kill")
         self.assertFalse(self.errors, self.errors)
 
     def test_every_right_panel_button_is_visible_without_scrolling(self):

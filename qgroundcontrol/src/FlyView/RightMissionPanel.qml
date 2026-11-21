@@ -79,14 +79,16 @@ Rectangle {
     // every other command uses the neutral theme button colour. A coloured edge glow is
     // kept on all buttons. accentGlow follows the active theme accent.
     readonly property color accentGlow: panelPalette.lightTheme ? panelPalette.brandingPurple : (panelPalette.highContrast ? "#2EE62E" : "#79CBE8")
-    function actionSpecial(role) { return role === "engage" || role === "abort" || role === "kill" }
+    function actionSpecial(role) { return role === "engage" || role === "abort" || role === "kill" || role === "killActive" }
 
     function actionFill(role) {
         if (panelPalette.lightTheme) {
+            if (role === "killActive") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorRed.r, panelPalette.colorRed.g, panelPalette.colorRed.b, 0.55))
             if (role === "kill") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorRed.r, panelPalette.colorRed.g, panelPalette.colorRed.b, 0.28))
             if (role === "engage") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorRed.r, panelPalette.colorRed.g, panelPalette.colorRed.b, 0.12))
             if (role === "abort") return Qt.tint(panelPalette.window, Qt.rgba(panelPalette.colorOrange.r, panelPalette.colorOrange.g, panelPalette.colorOrange.b, 0.12))
         }
+        if (role === "killActive") return "#E3162B"
         if (role === "kill")   return "#B3141F"
         if (role === "engage") return "#7C202C"
         if (role === "abort")  return "#7A3E12"
@@ -95,9 +97,10 @@ Rectangle {
 
     function actionBorder(role) {
         if (panelPalette.lightTheme) {
-            if (role === "kill" || role === "engage") return panelPalette.colorRed
+            if (role === "kill" || role === "killActive" || role === "engage") return panelPalette.colorRed
             if (role === "abort") return panelPalette.colorOrange
         }
+        if (role === "killActive") return "#FFFFFF"
         if (role === "kill")   return "#FF3B3B"
         if (role === "engage") return "#FF7A89"
         if (role === "abort")  return "#FF9F45"
@@ -311,23 +314,25 @@ Rectangle {
                     }
                 }
 
-                // STRATUM KAN-49: dedicated Emergency Kill. One click stops the motors at once, the
-                // same MAV_CMD_COMPONENT_ARM_DISARM force-disarm as the joystick Emergency Stop
-                // (Vehicle.emergencyStop). Deliberately NO confirmation, hold or flight-mode / arm
-                // gating: it is a safety control and must act on the first click whenever a
-                // vehicle is connected. Shown in both the Dev and Client builds.
+                // STRATUM KAN-49: dedicated Emergency Kill, a LATCHING toggle like the joystick kill
+                // switch. First press force-disarms and holds the kill (Vehicle.killSwitchEngaged:
+                // MANUAL_CONTROL button bit, works with or without a joystick) until it is pressed
+                // again to release. Deliberately NO confirmation, hold or flight-mode / arm gating:
+                // it is a safety control and must act on the first click whenever a vehicle is
+                // connected. Shown in both the Dev and Client builds.
                 CommandButton {
+                    readonly property bool killEngaged: !!root.vehicle && root.vehicle.killSwitchEngaged === true
+
                     enabled: !!root.vehicle
                     iconSource: "/InstrumentValueIcons/hand-stop.svg"
                     objectName: "missionEmergencyKill"
-                    visualRole: "kill"
-                    text: qsTr("Emergency Kill")
+                    visualRole: killEngaged ? "killActive" : "kill"
+                    text: killEngaged ? qsTr("Release Kill") : qsTr("Emergency Kill")
                     onClicked: {
                         root.cancelHolds();
                         actionPopup.close();
-                        var v = QGroundControl.multiVehicleManager.activeVehicle;
-                        if (v)
-                            v.emergencyStop();
+                        if (root.vehicle)
+                            root.vehicle.setKillSwitchEngaged(!killEngaged);
                     }
                 }
 
