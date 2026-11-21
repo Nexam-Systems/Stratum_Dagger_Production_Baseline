@@ -42,6 +42,28 @@ class DisplayMode(QObject):
     lightTheme = Property(bool, lambda self: self._light, set_light, notify=changed)
 
 
+class VehicleManagerStub(QObject):
+    changed = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self._vehicle = None
+
+    def _set(self, vehicle):
+        self._vehicle = vehicle
+        self.changed.emit()
+
+    activeVehicle = Property(QObject, lambda self: self._vehicle, _set, notify=changed)
+
+
+class QGroundControlStub(QObject):
+    def __init__(self):
+        super().__init__()
+        self.manager = VehicleManagerStub()
+
+    multiVehicleManager = Property(QObject, lambda self: self.manager, constant=True)
+
+
 class RightHandFlyViewTest(unittest.TestCase):
     def test_widget_layer_cache_compiles(self):
         compiler = shutil.which("qmlcachegen")
@@ -108,6 +130,8 @@ class RightHandFlyViewTest(unittest.TestCase):
         self.errors = []
         self.engine.warnings.connect(lambda errors: self.errors.extend(error.toString() for error in errors))
         self.engine.rootContext().setContextProperty("mainWindow", None)
+        self.qgc = QGroundControlStub()
+        self.engine.rootContext().setContextProperty("QGroundControl", self.qgc)
         for name, source in {
             "QGCPalette.qml": '''import QtQuick
 QtObject {
@@ -351,11 +375,14 @@ component PtzButton: Button {
 readonly property var panel: panel
 readonly property var craft: craft
 readonly property var header: header
+readonly property var action: modeAction
 property int abortRequests: 0
 property int engageRequests: 0
+property int killRequests: 0
 property int secondaryRequests: 0
 QtObject {
 id: craft
+function emergencyStop() { killRequests++ }
 property bool initialConnectComplete: true
 property bool armed: true
 property bool flying: true
@@ -379,7 +406,7 @@ property var clock: QtObject { property real rawValue: 3661 }
 readonly property var flightTime: clock
 }
 }
-QtObject { id: guided; property bool showTakeoff: true }
+QtObject { id: guided; property bool showTakeoff: true; property bool showChangeAlt: true }
 QtObject {
 id: engagement
 property string abortModeName: "Abort"
@@ -466,6 +493,61 @@ actionModel: [modeAction]
             image.save(str(Path(output) / "stratum-compact-toolbar-header.png"))
         self.assertFalse(self.errors, self.errors)
 
+    def test_emergency_kill_is_below_change_height_and_kills_on_one_click(self):
+        self.panel_scene(1024, 768)
+        craft = self.item.property("craft")
+        self.qgc.manager.activeVehicle = craft
+        kill = self.item.findChild(QObject, "missionEmergencyKill")
+        change_height = self.item.findChild(QObject, "missionChangeHeight")
+        self.assertIsNotNone(kill)
+        self.assertEqual(kill.property("text"), "Emergency Kill")
+        self.assertGreaterEqual(kill.mapToItem(self.item, 0, 0).y(),
+                                change_height.mapToItem(self.item, 0, change_height.height()).y())
+
+        # No gating: any mode, disarmed, on the ground, even with the link reported lost.
+        craft.setProperty("armed", False)
+        craft.setProperty("flying", False)
+        craft.setProperty("flightMode", "Land")
+        self.engine.newQObject(craft).property("vehicleLinkManager").toQObject().setProperty("communicationLost", True)
+        QTest.qWait(60)
+        self.assertTrue(kill.isEnabled())
+
+        point = kill.mapToItem(self.item, kill.width() / 2, kill.height() / 2).toPoint()
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point)
+        QTest.qWait(30)
+        self.assertEqual(self.item.property("killRequests"), 1)     # first click, no confirmation step
+        self.assertFalse(self.errors, self.errors)
+
+    def test_every_right_panel_button_is_visible_without_scrolling(self):
+        names = ["missionDefineAOP", "missionFetchTarget", "missionTakeoff", "missionLand", "missionHold",
+                 "missionManual", "missionRTL", "missionStandoff", "missionAbort", "missionEngage",
+                 "missionChangeHeight", "missionEmergencyKill"]
+        panel_source = (self.root / "src/FlyView/RightMissionPanel.qml").read_text(encoding="utf-8")
+        self.assertNotIn("CAMERA FEED", panel_source)
+        self.assertNotIn("Flickable {", panel_source.split("Popup {", 1)[0])
+        self.panel_scene(1366, 768)
+        self.item.property("action").setProperty("visible", False)   # the profile-specific extra button
+        panel = self.item.property("panel")
+        for width, height in [(1366, 768), (1920, 1080), (1600, 900)]:
+            self.window.resize(width, height)
+            self.item.setWidth(width)
+            self.item.setHeight(height)
+            QTest.qWait(80)
+            compass = self.item.findChild(QObject, "missionCompass")
+            self.assertTrue(compass.isVisible())
+            compass_top = compass.mapToItem(panel, 0, 0).y()
+            previous_bottom = 0
+            for name in names:
+                button = self.item.findChild(QObject, name)
+                self.assertIsNotNone(button, name)
+                top = button.mapToItem(panel, 0, 0).y()
+                bottom = top + button.height()
+                self.assertGreaterEqual(top, previous_bottom - 1, f"{name} overlaps the one above at {height}")
+                self.assertLessEqual(bottom, compass_top, f"{name} is hidden behind the compass at {height}")
+                self.assertGreaterEqual(button.height(), 34, name)
+                previous_bottom = bottom
+        self.assertFalse(self.errors, self.errors)
+
     def test_compass_is_visible_below_secondary_actions(self):
         self.panel_scene(1024, 768)
         panel = self.item.property("panel")
@@ -492,7 +574,7 @@ actionModel: [modeAction]
         self.assertGreater(compass_point.y(), action_point.y())
         preview = self.engine.newQObject(panel).property("previewSlot").toQObject()
         preview_bottom = preview.mapToItem(panel, 0, preview.height()).y()
-        self.assertLessEqual(preview_bottom, panel.height() - 17)
+        self.assertLessEqual(preview_bottom, panel.height() - 9)
         self.assertLessEqual(panel.width(), 138)
         self.assertFalse(self.errors, self.errors)
 
