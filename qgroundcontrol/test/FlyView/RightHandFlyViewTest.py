@@ -594,6 +594,22 @@ actionModel: [modeAction]
         self.assertTrue(engage.isEnabled())
         self.assertFalse(self.errors, self.errors)
 
+    def test_compass_heading_shows_only_the_number(self):
+        self.panel_scene(1366, 768)
+        panel = self.item.property("panel")
+
+        def texts(item):
+            values = [item.property("text")] if item.inherits("QQuickText") and item.isVisible() else []
+            for child in item.childItems():
+                values.extend(texts(child))
+            return values
+
+        shown = texts(panel)
+        self.assertIn("92", shown)                                   # heading value only
+        self.assertFalse([text for text in shown if "°" in str(text) or "Â" in str(text)], shown)
+        source = (self.root / "src/FlyView/RightMissionPanel.qml").read_text(encoding="utf-8")
+        self.assertNotIn("Â", source)                                # no mangled degree sign left in the source
+
     def test_opacity_is_an_admin_setting_and_the_map_runs_under_the_panel(self):
         settings = {f["name"]: f for f in __import__("json").loads(
             (self.root / "src/Settings/FlyView.SettingsGroup.json").read_text(encoding="utf-8"))["QGC.MetaData.Facts"]}
