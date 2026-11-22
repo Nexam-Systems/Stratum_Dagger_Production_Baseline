@@ -412,7 +412,7 @@ Rectangle {
 
         QGCLabel {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: root.headingFresh ? qsTr("%1Â°").arg(Number(root.vehicle.vehicle.heading.rawValue).toFixed(0)) : qsTr("Heading unavailable")
+            text: root.headingFresh ? qsTr("%1").arg(Number(root.vehicle.vehicle.heading.rawValue).toFixed(0)) : qsTr("Heading unavailable")
         }
 
         Item {
