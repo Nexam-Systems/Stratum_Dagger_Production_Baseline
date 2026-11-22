@@ -777,12 +777,14 @@ Item {
                     onClicked:  standoffPanel.close()
                 }
 
-                QGCButton {
-                    text:       qsTr("Set Standoff")
+                QGCHoldButton {
+                    // KAN-53: hold for 1 second to confirm (the hold replaces a separate confirmation).
+                    text:       qsTr("Hold to Set Standoff")
+                    holdDuration: 1000
                     primary:    true
                     enabled:    standoffPanel._coordValid && !standoffPanel._aopReject && standoffPanel._inputsValid && _activeVehicle !== null
                                 && !(mapControl && mapControl.standoffCmdController.awaitingAck)
-                    onClicked: {
+                    onHeld: {
                         if (!standoffPanel._inputsValid) {
                             return
                         }

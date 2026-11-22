@@ -14,6 +14,9 @@ QGCPopupDialog {
     id:         root
     title:      qsTr("Takeoff")
     buttons:    Dialog.Ok | Dialog.Cancel
+    // KAN-53: the Takeoff button must be held for 1 second; the hold is the confirmation.
+    acceptButtonText:   qsTr("Takeoff")
+    acceptHoldDuration: 1000
 
     property var    guidedController
     property var    _activeVehicle:     guidedController ? guidedController._activeVehicle : null
@@ -62,7 +65,7 @@ QGCPopupDialog {
             wrapMode:               Text.WordWrap
             color:                  qgcPal.warningText
             font.bold:              true
-            text:                   qsTr("CAUTION: Pressing OK will launch the vehicle. It will arm (if required) and climb to the altitude above.")
+            text:                   qsTr("CAUTION: Holding Takeoff for 1 second will launch the vehicle. It will arm (if required) and climb to the altitude above.")
         }
     }
 }

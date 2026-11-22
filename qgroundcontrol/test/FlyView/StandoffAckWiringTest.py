@@ -18,13 +18,13 @@ class StandoffAckWiringTest(unittest.TestCase):
         cls.panel = cls.widget.split("id:                 standoffPanel", 1)[1].split("MapScale {", 1)[0]
 
     def test_panel_no_longer_closes_on_send_but_when_the_vehicle_accepts(self):
-        button = self.panel.split('text:       qsTr("Set Standoff")', 1)[1]
+        button = self.panel.split('text:       qsTr("Hold to Set Standoff")', 1)[1]
         self.assertNotIn("standoffPanel.close()", button)
         self.assertIn("beginStandoff(distance, height, speed, direction, target)", button)
         self.assertIn("function onStandoffAccepted() { standoffPanel.close() }", self.panel)
 
     def test_set_standoff_is_disabled_while_waiting_for_the_ack(self):
-        button = self.panel.split('text:       qsTr("Set Standoff")', 1)[1].split("onClicked", 1)[0]
+        button = self.panel.split('text:       qsTr("Hold to Set Standoff")', 1)[1].split("onHeld", 1)[0]
         self.assertIn("standoffCmdController.awaitingAck", button)
 
     def test_panel_shows_waiting_and_rejected_messages_and_keeps_the_values(self):

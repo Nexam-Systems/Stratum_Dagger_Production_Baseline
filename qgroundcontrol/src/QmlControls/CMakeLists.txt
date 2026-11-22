@@ -141,6 +141,7 @@ qt_add_qml_module(QGroundControlControlsModule
         QGCFlickable.qml
         QGCFlickableScrollIndicator.qml
         QGCGroupBox.qml
+        QGCHoldButton.qml
         QGCLabel.qml
         QGCListView.qml
         QGCMapLabel.qml

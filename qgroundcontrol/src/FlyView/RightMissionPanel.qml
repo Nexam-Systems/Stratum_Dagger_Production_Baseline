@@ -10,7 +10,9 @@ Rectangle {
     id: root
 
     property var actionModel: []
-    readonly property var activeHold: abortButton.holding ? abortButton : engageButton.holding ? engageButton : null
+    // KAN-53: whichever hold button is currently being held (any HoldCommand reports itself here).
+    property var activeHold: null
+    property var _holdButtons: []
     property bool cameraPrimary: false
     // STRATUM KAN-51: opacity (0..1) of the panel background, border and separator; set from the
     // hidden Admin panel. 0 leaves only the buttons, compass heading and camera/map preview.
@@ -43,27 +45,26 @@ Rectangle {
     signal viewSelected
 
     function cancelHolds() {
-        abortButton.cancelHold();
-        engageButton.cancelHold();
+        for (var i = 0; i < _holdButtons.length; ++i) {
+            _holdButtons[i].cancelHold();
+        }
     }
 
-    // STRATUM KAN-21: direct flight-mode change behind a confirm dialog (mirrors the
-    // Land/Hold command path). displayName is what the operator sees ("Manual", "RTL");
-    // modeName is the advertised firmware mode actually written to Vehicle.flightMode.
+    // STRATUM KAN-53: shows the completed state on the hold bar for a moment.
+    function holdCommitted(commandName) {
+        root.completedCommand = commandName;
+        completionTimer.restart();
+    }
+
+    // STRATUM KAN-21 / KAN-53: direct flight-mode change. The 1-second hold on the button is the
+    // confirmation, so there is no dialog. modeName is the advertised firmware mode actually
+    // written to Vehicle.flightMode ("Position" for the Manual button, "Safe Recovery" for RTL).
     function commandFlightMode(modeName, displayName) {
         var v = QGroundControl.multiVehicleManager.activeVehicle
         if (!v) return
-        cancelHolds()
         actionPopup.close()
-        QGroundControl.showMessageDialog(
-            mainWindow,
-            displayName,
-            qsTr("Switch the vehicle to %1 flight mode?").arg(displayName),
-            Dialog.Ok | Dialog.Cancel,
-            function() {
-                var vv = QGroundControl.multiVehicleManager.activeVehicle
-                if (vv) vv.flightMode = modeName
-            })
+        v.flightMode = modeName
+        holdCommitted(displayName)
     }
 
     // STRATUM: RTL is PX4 "Safe Recovery" (StandardModes) or "Return"; pick whichever
@@ -169,30 +170,41 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 2
 
-                CommandButton {
+                // KAN-53: Define AOP, Fetch Target, Land, Hold, Manual and RTL send after a 1-second hold;
+                // the hold is the confirmation, so there is no pop-up. Takeoff, Standoff and Change
+                // Height open their input box straight away (the confirm button inside the box is held).
+                HoldCommand {
+                    command: qsTr("Define AOP")
+                    holdDuration: 1000
+                    // Defining the AOP needs no vehicle, so hold on this root when none is connected.
+                    vehicleIdentity: root.vehicle ? root.vehicle : root
                     iconSource: "/InstrumentValueIcons/map.svg"
                     objectName: "missionDefineAOP"
                     visualRole: "navigation"
                     text: qsTr("Define AOP")
                     shortText: qsTr("AOP")
-                    onClicked: {
-                        root.cancelHolds();
+                    onCommitted: {
                         actionPopup.close();
                         root.aopRequested();
+                        root.holdCommitted(command);
                     }
                 }
 
-                CommandButton {
+                HoldCommand {
+                    command: qsTr("Fetch Target")
                     enabled: !!root.vehicle
+                    holdDuration: 1000
                     iconSource: "/InstrumentValueIcons/target.svg"
                     objectName: "missionFetchTarget"
                     visualRole: "navigation"
                     text: qsTr("Fetch Target")
                     shortText: qsTr("Target")
-                    onClicked: {
-                        root.cancelHolds();
+                    onCommitted: {
+                        if (!enabled)
+                            return;
                         actionPopup.close();
                         root.fetchRequested();
+                        root.holdCommitted(command);
                     }
                 }
 
@@ -209,41 +221,61 @@ Rectangle {
                     }
                 }
 
-                CommandButton {
+                HoldCommand {
+                    command: qsTr("Land")
                     enabled: root.linkReady
+                    holdDuration: 1000
                     iconSource: "/InstrumentValueIcons/inbox-download.svg"
                     objectName: "missionLand"
                     visualRole: "navigation"
                     text: qsTr("Land")
-                    onClicked: root.commandFlightMode(qsTr("Land"), qsTr("Land"))
+                    onCommitted: {
+                        if (enabled)
+                            root.commandFlightMode(qsTr("Land"), qsTr("Land"));
+                    }
                 }
 
-                CommandButton {
+                HoldCommand {
+                    command: qsTr("Hold")
                     enabled: root.linkReady
+                    holdDuration: 1000
                     iconSource: "/InstrumentValueIcons/pause-solid.svg"
                     objectName: "missionHold"
                     visualRole: "navigation"
                     text: qsTr("Hold")
-                    onClicked: root.commandFlightMode(qsTr("Hold"), qsTr("Hold"))
+                    onCommitted: {
+                        if (enabled)
+                            root.commandFlightMode(qsTr("Hold"), qsTr("Hold"));
+                    }
                 }
 
-                CommandButton {
+                HoldCommand {
+                    command: qsTr("Manual")
                     enabled: root.linkReady
+                    holdDuration: 1000
                     iconSource: "/qmlimages/PanelGamepad.svg"
                     objectName: "missionManual"
                     visualRole: "navigation"
                     text: qsTr("Manual")
-                    onClicked: root.commandFlightMode(qsTr("Position"), qsTr("Manual"))
+                    onCommitted: {
+                        if (enabled)
+                            root.commandFlightMode(qsTr("Position"), qsTr("Manual"));
+                    }
                 }
 
-                CommandButton {
+                HoldCommand {
+                    command: qsTr("RTL")
                     // STRATUM #42: grayed when the Layer-1 gate forbids RTL.
                     enabled: root.linkReady && root.rtlAllowed
+                    holdDuration: 1000
                     iconSource: "/InstrumentValueIcons/home.svg"
                     objectName: "missionRTL"
                     visualRole: "navigation"
                     text: qsTr("RTL")
-                    onClicked: root.commandFlightMode(root.rtlModeName(), qsTr("RTL"))
+                    onCommitted: {
+                        if (enabled)
+                            root.commandFlightMode(root.rtlModeName(), qsTr("RTL"));
+                    }
                 }
 
                 PrimaryCommand {
@@ -621,6 +653,17 @@ Rectangle {
         font.family: ScreenTools.normalFontFamily
         font.pointSize: ScreenTools.smallFontPointSize
         vehicleIdentity: root.vehicle
+
+        // KAN-53: every hold button registers with the panel, so cancelHolds() reaches all of them
+        // and the hold bar follows whichever one is being held.
+        Component.onCompleted: root._holdButtons.push(holdButton)
+        onHoldingChanged: {
+            if (holding) {
+                root.activeHold = holdButton;
+            } else if (root.activeHold === holdButton) {
+                root.activeHold = null;
+            }
+        }
 
         background: Rectangle {
             readonly property bool _special: root.actionSpecial(holdButton.visualRole)
