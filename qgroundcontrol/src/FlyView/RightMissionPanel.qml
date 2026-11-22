@@ -159,21 +159,22 @@ Rectangle {
             height: Math.min(implicitHeight, parent.height)
             spacing: 5
 
-            // STRATUM KAN-21: single ordered vertical command list. Engage reads red,
-            // Abort reads orange, every other command uses the neutral theme colour; all
-            // keep the edge glow. The flight-mode picker was removed in favour of explicit
-            // Manual + RTL buttons. Engage no longer needs an enable toggle -- the 3 s
-            // hold-to-confirm is the safety interlock.
+            // STRATUM KAN-21 / KAN-51: ordered command column of circular buttons (icon + short label
+            // inside the circle). Engage and Emergency Kill read red, Abort reads orange, every other
+            // command uses the neutral theme colour; all keep the edge glow. The flight-mode picker was
+            // removed in favour of explicit Manual + RTL buttons. Engage no longer needs an enable
+            // toggle -- the 3 s hold-to-confirm is the safety interlock.
             ColumnLayout {
                 id: commandColumn
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: 2
 
                 CommandButton {
                     iconSource: "/InstrumentValueIcons/map.svg"
                     objectName: "missionDefineAOP"
                     visualRole: "navigation"
                     text: qsTr("Define AOP")
+                    shortText: qsTr("AOP")
                     onClicked: {
                         root.cancelHolds();
                         actionPopup.close();
@@ -187,6 +188,7 @@ Rectangle {
                     objectName: "missionFetchTarget"
                     visualRole: "navigation"
                     text: qsTr("Fetch Target")
+                    shortText: qsTr("Target")
                     onClicked: {
                         root.cancelHolds();
                         actionPopup.close();
@@ -209,7 +211,7 @@ Rectangle {
 
                 CommandButton {
                     enabled: root.linkReady
-                    iconSource: "/res/land.svg"
+                    iconSource: "/InstrumentValueIcons/inbox-download.svg"
                     objectName: "missionLand"
                     visualRole: "navigation"
                     text: qsTr("Land")
@@ -218,7 +220,7 @@ Rectangle {
 
                 CommandButton {
                     enabled: root.linkReady
-                    iconSource: "/res/pause-mission.svg"
+                    iconSource: "/InstrumentValueIcons/pause-solid.svg"
                     objectName: "missionHold"
                     visualRole: "navigation"
                     text: qsTr("Hold")
@@ -227,7 +229,7 @@ Rectangle {
 
                 CommandButton {
                     enabled: root.linkReady
-                    iconSource: "/qmlimages/FlightModesComponentIcon.png"
+                    iconSource: "/qmlimages/PanelGamepad.svg"
                     objectName: "missionManual"
                     visualRole: "navigation"
                     text: qsTr("Manual")
@@ -237,7 +239,7 @@ Rectangle {
                 CommandButton {
                     // STRATUM #42: grayed when the Layer-1 gate forbids RTL.
                     enabled: root.linkReady && root.rtlAllowed
-                    iconSource: "/res/rtl.svg"
+                    iconSource: "/InstrumentValueIcons/home.svg"
                     objectName: "missionRTL"
                     visualRole: "navigation"
                     text: qsTr("RTL")
@@ -312,6 +314,7 @@ Rectangle {
                     objectName: "missionChangeHeight"
                     visualRole: "navigation"
                     text: qsTr("Change Height")
+                    shortText: qsTr("Height")
                     onClicked: {
                         root.cancelHolds();
                         actionPopup.close();
@@ -329,10 +332,11 @@ Rectangle {
                     readonly property bool killEngaged: !!root.vehicle && root.vehicle.killSwitchEngaged === true
 
                     enabled: !!root.vehicle
-                    iconSource: "/InstrumentValueIcons/hand-stop.svg"
+                    iconSource: "/qmlimages/PanelAlert.svg"
                     objectName: "missionEmergencyKill"
                     visualRole: killEngaged ? "killActive" : "kill"
                     text: killEngaged ? qsTr("Release Kill") : qsTr("Emergency Kill")
+                    shortText: killEngaged ? qsTr("Release") : qsTr("E-Kill")
                     onClicked: {
                         root.cancelHolds();
                         actionPopup.close();
@@ -502,44 +506,32 @@ Rectangle {
         textColor: foreground
         Accessible.name: text
         Layout.fillWidth: true
-        // Fill + cap at the normal size: lets the button shrink (to the minimum) on a short
-        // window instead of being clipped, but never grow.
+        // Circular button (KAN-51): icon + short label inside the circle. The cell is as tall as the
+        // circle is wide; fill + cap at 60 px lets the circles shrink (down to 32 px) on a short
+        // window so every button stays visible without scrolling, but never grow past 60.
         Layout.fillHeight: true
-        Layout.preferredHeight: 44
-        Layout.minimumHeight: 34
-        Layout.maximumHeight: 44
+        Layout.preferredHeight: 60
+        Layout.minimumHeight: 32
+        Layout.maximumHeight: 60
+        property string shortText: text                     // label shown inside the circle
+        readonly property real circleSize: Math.max(0, Math.min(width, height))
+        padding: 0
+        leftPadding: 0
+        rightPadding: 0
+        topPadding: 0
+        bottomPadding: 0
         _horizontalPadding: 3
         pointSize: ScreenTools.smallFontPointSize
         wrapMode: Text.WordWrap
-        contentItem: Column {
-            spacing: 2
-
-            QGCColoredImage {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: 16
-                height: 16
-                source: actionButton.iconSource
-                sourceSize.height: height
-                fillMode: Image.PreserveAspectFit
-                color: actionButton.foreground
-                visible: actionButton.iconSource !== ""
-            }
-
-            QGCLabel {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: actionButton.text
-                color: actionButton.foreground
-                font.pointSize: ScreenTools.smallFontPointSize
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                wrapMode: Text.WordWrap
-                width: parent.width
-            }
-        }
+        contentItem: CircleContent { control: actionButton }
         background: Rectangle {
             readonly property bool _special: root.actionSpecial(actionButton.visualRole)
             readonly property color baseFill: actionButton.enabled ? root.actionFill(actionButton.visualRole)
                                              : panelPalette.lightTheme ? commandPalette.button : "#172A34"
+            x: (actionButton.width - width) / 2
+            y: 0
+            width: actionButton.circleSize
+            height: width
             // Engage(red)/Abort(orange) keep their saturated fill in BOTH themes; every
             // other button uses the neutral theme button colour.
             color: panelPalette.lightTheme ? (_special ? Qt.darker(baseFill, actionButton.down ? 1.08 : actionButton.hovered ? 1.04 : 1)
@@ -552,15 +544,56 @@ Rectangle {
                           : _special ? root.actionBorder(actionButton.visualRole)
                                       : (panelPalette.highContrast ? commandPalette.buttonBorder : root.actionBorder(actionButton.visualRole))
             border.width: 2
-            radius: 4
+            radius: width / 2
 
             Rectangle {
                 readonly property color glowColor: root.actionBorder(actionButton.visualRole)
                 anchors.fill: parent
                 anchors.margins: -3
                 color: Qt.rgba(glowColor.r, glowColor.g, glowColor.b, actionButton.enabled ? (actionButton.hovered ? 0.42 : 0.20) : 0)
-                radius: 7
+                radius: width / 2
                 z: -1
+            }
+        }
+    }
+    // Icon and short label stacked inside the circle; shared by every panel button. Sizes follow the
+    // circle: icon 36 % of the diameter, label font scales down with the circle and shrinks further
+    // only when its longest word would not fit the circle (e.g. "Standoff" in a small circle).
+    component CircleContent: Item {
+        required property var control
+        readonly property real _d: control.circleSize
+        readonly property real _labelWidth: _d * 0.84
+
+        TextMetrics {
+            id: longestWord
+            font.pointSize: ScreenTools.smallFontPointSize * Math.max(0.55, Math.min(1, _d / 60))
+            text: control.shortText.split(" ").reduce(function (a, b) { return b.length > a.length ? b : a }, "")
+        }
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 1
+
+            QGCColoredImage {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: _d * 0.36
+                height: width
+                source: control.iconSource
+                sourceSize.height: height
+                fillMode: Image.PreserveAspectFit
+                color: control.foreground
+                visible: control.iconSource !== ""
+            }
+
+            QGCLabel {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: _labelWidth
+                text: control.shortText
+                color: control.foreground
+                font.pointSize: longestWord.font.pointSize * Math.min(1, _labelWidth / Math.max(1, longestWord.advanceWidth))
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
             }
         }
     }
@@ -574,9 +607,16 @@ Rectangle {
 
         Layout.fillWidth: true
         Layout.fillHeight: true
-        Layout.preferredHeight: 46
-        Layout.minimumHeight: 34
-        Layout.maximumHeight: 46
+        Layout.preferredHeight: 60
+        Layout.minimumHeight: 32
+        Layout.maximumHeight: 60
+        property string shortText: text
+        readonly property real circleSize: Math.max(0, Math.min(width, height))
+        padding: 0
+        leftPadding: 0
+        rightPadding: 0
+        topPadding: 0
+        bottomPadding: 0
         contextActive: root.contextActive && root.visible && !actionPopup.visible
         font.family: ScreenTools.normalFontFamily
         font.pointSize: ScreenTools.smallFontPointSize
@@ -586,6 +626,10 @@ Rectangle {
             readonly property bool _special: root.actionSpecial(holdButton.visualRole)
             readonly property color baseFill: holdButton.enabled ? root.actionFill(holdButton.visualRole)
                                              : panelPalette.lightTheme ? holdPalette.button : "#172A34"
+            x: (holdButton.width - width) / 2
+            y: 0
+            width: holdButton.circleSize
+            height: width
             // Abort(orange)/Engage(red) keep their saturated fill in BOTH themes.
             color: panelPalette.lightTheme ? (_special ? Qt.darker(baseFill, holdButton.down ? 1.08 : 1)
                                                        : holdButton.down ? holdPalette.toolStripHoverColor : baseFill)
@@ -596,58 +640,19 @@ Rectangle {
                           : _special ? root.actionBorder(holdButton.visualRole)
                                       : (panelPalette.highContrast ? panelPalette.buttonBorder : root.actionBorder(holdButton.visualRole))
             border.width: 2
-            radius: 4
+            radius: width / 2
 
             Rectangle {
                 readonly property color glowColor: root.actionBorder(holdButton.visualRole)
                 anchors.fill: parent
                 anchors.margins: -3
                 color: Qt.rgba(glowColor.r, glowColor.g, glowColor.b, holdButton.enabled ? (holdButton.hovered ? 0.42 : 0.20) : 0)
-                radius: 7
+                radius: width / 2
                 z: -1
             }
         }
-        contentItem: Column {
-            QGCColoredImage {
-                anchors.horizontalCenter: parent.horizontalCenter
-                color: holdButton.foreground
-                fillMode: Image.PreserveAspectFit
-                height: 16
-                source: parent.parent.iconSource
-                sourceSize.height: height
-                width: 16
-            }
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                color: holdButton.foreground
-                font: parent.parent.font
-                horizontalAlignment: Text.AlignHCenter
-                text: parent.parent.text
-                verticalAlignment: Text.AlignVCenter
-                wrapMode: Text.WordWrap
-            }
-        }
+        contentItem: CircleContent { control: holdButton }
     }
     component PrimaryCommand: CommandButton {
-        id: primaryButton
-        contentItem: Column {
-            QGCColoredImage {
-                anchors.horizontalCenter: parent.horizontalCenter
-                color: primaryButton.foreground
-                fillMode: Image.PreserveAspectFit
-                height: 16
-                source: parent.parent.iconSource
-                sourceSize.height: height
-                width: 16
-            }
-
-            QGCLabel {
-                anchors.horizontalCenter: parent.horizontalCenter
-                font.pointSize: ScreenTools.smallFontPointSize
-                text: parent.parent.text
-                color: primaryButton.foreground
-            }
-        }
     }
 }
