@@ -55,6 +55,11 @@ Popup {
     property bool   destroyOnClose:         true
     property bool   preventClose:           false
     property bool   bypassNavigationCheck:  false
+    // STRATUM KAN-53: optional rect (window coordinates) to sit beside. When set, the dialog opens just
+    // to the LEFT of it, vertically centred on it and kept fully on screen, instead of in the screen
+    // centre. Used for boxes opened from the right control panel, so a touch-screen operator can work
+    // at the screen edge. null keeps the default centred placement.
+    property var    anchorRect:             null
 
     property real maxContentAvailableWidth:    mainWindow.width - _contentMargin * 6
     property real maxContentAvailableHeight:   mainWindow.height - titleRowLayout.height - _contentMargin * 7
@@ -223,9 +228,14 @@ Popup {
 
     ColumnLayout {
         id:                 mainLayout
-        anchors.centerIn:   parent
-        x:                  _contentMargin
-        y:                  _contentMargin
+        // Centred by default; beside the anchorRect when one is given (x / y below then apply).
+        anchors.centerIn:   root.anchorRect ? undefined : parent
+        x:                  root.anchorRect
+                                ? Math.max(_contentMargin * 2, Math.min(root.width - width - _contentMargin * 2, root.anchorRect.x - width - _frameSize * 2))
+                                : _contentMargin
+        y:                  root.anchorRect
+                                ? Math.max(_contentMargin * 2, Math.min(root.height - height - _contentMargin * 2, root.anchorRect.y + root.anchorRect.height / 2 - height / 2))
+                                : _contentMargin
         spacing:            _contentMargin
 
         RowLayout {

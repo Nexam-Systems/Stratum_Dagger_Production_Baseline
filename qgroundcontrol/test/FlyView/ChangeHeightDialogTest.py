@@ -30,7 +30,7 @@ class ChangeHeightDialogTest(unittest.TestCase):
     def test_dialog_is_registered_and_instantiated_by_the_controller(self):
         self.assertIn("GuidedActionChangeHeightDialog.qml", self.cmake)
         self.assertIn("GuidedActionChangeHeightDialog {", self.controller)
-        self.assertIn("changeHeightDialogFactory.open()", self.controller)
+        self.assertIn("changeHeightDialogFactory.open({ anchorRect: anchor })", self.controller)
 
     def test_dialog_has_a_change_height_button_and_limits_the_value(self):
         self.assertIn('acceptButtonText:   qsTr("Change Height")', self.dialog)

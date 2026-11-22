@@ -407,7 +407,10 @@ Item {
         z:                  QGroundControl.zOrderTopMost
         anchors.right:      parent.right
         anchors.rightMargin: Math.min(toolStrip.width + _toolsMargin, Math.max(0, _root.width - width - _toolsMargin))
-        anchors.top:        toolStrip.top
+        // KAN-53: lined up with the Standoff button (top-aligned with the panel until it is opened),
+        // and kept fully on screen.
+        y:                  isNaN(_anchorCenterY) ? toolStrip.y
+                                                  : Math.max(_toolsMargin, Math.min(_root.height - height - _toolsMargin, _anchorCenterY - height / 2))
         radius:             _margins
         color:              qgcPal.window
         border.color:       "#D11A35"
@@ -430,6 +433,9 @@ Item {
 
         // STRATUM: set when the last commit was rejected for being outside the AOP.
         property bool _aopReject: false
+
+        // KAN-53: vertical centre (this layer's coordinates) of the Standoff button; NaN until opened.
+        property real _anchorCenterY: NaN
 
         // STRATUM #98: single geometry/validation model for the panel. Fed straight from the
         // panel fields; limits come from Admin settings > Standoff limits.
@@ -456,6 +462,7 @@ Item {
         }
 
         function open() {
+            _anchorCenterY = toolStrip.standoffAnchorCenterY()
             visible = true
             if (mapControl) {
                 mapControl.startStandoffPick()

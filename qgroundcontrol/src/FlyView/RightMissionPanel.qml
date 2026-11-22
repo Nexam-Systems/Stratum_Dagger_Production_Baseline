@@ -44,6 +44,21 @@ Rectangle {
     signal takeoffRequested
     signal viewSelected
 
+    // STRATUM KAN-53: where a box opened from `item` (a panel button) should sit: a rect in window
+    // coordinates covering the panel's left edge at the button's height. The box opens just left of
+    // it, vertically centred on the button, so a touch-screen operator can stay at the screen edge.
+    function anchorRectFor(item) {
+        var panelTopLeft = root.mapToItem(null, 0, 0);
+        var buttonTopLeft = item.mapToItem(null, 0, 0);
+        return Qt.rect(panelTopLeft.x, buttonTopLeft.y, root.width, item.height);
+    }
+
+    // Vertical centre of the Standoff button in the coordinates of this panel's parent (the Set
+    // Standoff panel is a sibling and lines up with it).
+    function standoffAnchorCenterY() {
+        return standoffButton.mapToItem(root.parent, 0, standoffButton.height / 2).y;
+    }
+
     function cancelHolds() {
         for (var i = 0; i < _holdButtons.length; ++i) {
             _holdButtons[i].cancelHold();
@@ -209,6 +224,8 @@ Rectangle {
                 }
 
                 PrimaryCommand {
+                    id: takeoffButton
+
                     enabled: root.linkReady && root.guidedController && root.guidedController.showTakeoff
                     iconSource: "/InstrumentValueIcons/arrow-thick-up.svg"
                     objectName: "missionTakeoff"
@@ -217,6 +234,7 @@ Rectangle {
                     onClicked: {
                         root.cancelHolds();
                         actionPopup.close();
+                        root.guidedController.popupAnchorRect = root.anchorRectFor(takeoffButton);
                         root.takeoffRequested();
                     }
                 }
@@ -279,6 +297,8 @@ Rectangle {
                 }
 
                 PrimaryCommand {
+                    id: standoffButton
+
                     enabled: !!root.vehicle
                     iconSource: "/qmlimages/StandoffMarker.svg"
                     objectName: "missionStandoff"
@@ -341,6 +361,8 @@ Rectangle {
                 // delta from altitudeRelative and calls guidedModeChangeAltitude(). Enabled only
                 // while flying/armed/guided-capable (showChangeAlt).
                 CommandButton {
+                    id: changeHeightButton
+
                     enabled: root.guidedController && root.guidedController.showChangeAlt
                     iconSource: "/res/chevron-up.svg"
                     objectName: "missionChangeHeight"
@@ -350,6 +372,7 @@ Rectangle {
                     onClicked: {
                         root.cancelHolds();
                         actionPopup.close();
+                        root.guidedController.popupAnchorRect = root.anchorRectFor(changeHeightButton);
                         root.guidedController.confirmAction(root.guidedController.actionChangeAlt);
                     }
                 }
@@ -384,6 +407,8 @@ Rectangle {
                     model: root.actionModel
 
                     CommandButton {
+                        id: secondaryButton
+
                         readonly property var entry: modelData
                         required property var modelData
 
@@ -399,6 +424,8 @@ Rectangle {
                             root.cancelHolds();
                             if (entry.dropPanelComponent) {
                                 actionLoader.sourceComponent = entry.dropPanelComponent;
+                                // KAN-53: open beside the panel, lined up with this button.
+                                actionPopup.anchorCenterY = secondaryButton.mapToItem(null, 0, secondaryButton.height / 2).y;
                                 actionPopup.open();
                             } else
                                 entry.triggered(this);
@@ -476,6 +503,9 @@ Rectangle {
             close();
         }
 
+        // KAN-53: window-coordinate centre of the button that opened this box; NaN = centred.
+        property real anchorCenterY: NaN
+
         implicitWidth: panelItem ? panelItem.implicitWidth + padding * 2 : ScreenTools.defaultFontPixelWidth * 24
         implicitHeight: panelItem ? panelItem.implicitHeight + padding * 2 : ScreenTools.defaultFontPixelHeight * 8
         height: parent ? Math.min(implicitHeight, parent.height - 16) : implicitHeight
@@ -484,7 +514,7 @@ Rectangle {
         parent: Overlay.overlay
         width: parent ? Math.min(implicitWidth, parent.width - 16) : implicitWidth
         x: parent ? Math.max(8, parent.width - root.width - width - 20) : 8
-        y: parent ? Math.max(8, (parent.height - height) / 2) : 8
+        y: parent ? Math.max(8, Math.min(parent.height - height - 8, isNaN(anchorCenterY) ? (parent.height - height) / 2 : anchorCenterY - height / 2)) : 8
 
         background: Rectangle {
             border.color: panelPalette.buttonBorder

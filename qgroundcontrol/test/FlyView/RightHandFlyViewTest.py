@@ -12,7 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
 
-from PySide6.QtCore import QUrl, Qt, QPoint, QObject, Property, Signal
+from PySide6.QtCore import QUrl, Qt, QPoint, QObject, Property, Signal, QMetaObject
 from PySide6.QtGui import QGuiApplication, QFontDatabase, QFont, QColor
 from PySide6.QtQml import QQmlEngine, QQmlComponent, QJSValue
 from PySide6.QtQuick import QQuickWindow
@@ -56,12 +56,33 @@ class VehicleManagerStub(QObject):
     activeVehicle = Property(QObject, lambda self: self._vehicle, _set, notify=changed)
 
 
+class PaletteStub(QObject):
+    windowShade = Property(QColor, lambda self: QColor("#202020"), constant=True)
+    windowShadeLight = Property(QColor, lambda self: QColor("#404040"), constant=True)
+    window = Property(QColor, lambda self: QColor("#101010"), constant=True)
+
+
+class WindowStub(QObject):
+    def __init__(self, width, height):
+        super().__init__()
+        self._w, self._h = width, height
+
+    width = Property(int, lambda self: self._w, constant=True)
+    height = Property(int, lambda self: self._h, constant=True)
+
+
+class GlobalsStub(QObject):
+    validationErrorCount = Property(int, lambda self: 0, lambda self, value: None)
+
+
 class QGroundControlStub(QObject):
     def __init__(self):
         super().__init__()
         self.manager = VehicleManagerStub()
+        self.palette = PaletteStub()
 
     multiVehicleManager = Property(QObject, lambda self: self.manager, constant=True)
+    globalPalette = Property(QObject, lambda self: self.palette, constant=True)
 
 
 class RightHandFlyViewTest(unittest.TestCase):
@@ -160,6 +181,7 @@ property string iconSource: ""
 property color textColor: "white"
 property int _horizontalPadding: 3
 property real backRadius: 0
+property bool primary: false
 property real pointSize: 10
 property int wrapMode: Text.WordWrap
 font.pointSize: pointSize
@@ -216,10 +238,11 @@ contentItem: Text { text: control.text; color: control.textColor; font: control.
         source = source.replace("ScreenTools.", "screenTools.")
         prefix = '''import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 Item {
 width: 1024; height: 768
-QtObject { id: screenTools; property int smallFontPointSize: 10; property string normalFontFamily: "Segoe UI"; property string fixedFontFamily: "Consolas" }
+QtObject { id: screenTools; property int smallFontPointSize: 10; property string normalFontFamily: "Segoe UI"; property string fixedFontFamily: "Consolas"; property real defaultFontPixelHeight: 16; property real defaultFontPixelWidth: 8; property real mediumFontPointSize: 12; property real defaultFontPointSize: 10 }
 '''
         path = self.folder / "Harness.qml"
         path.write_text(prefix + source + "\n}", encoding="utf-8")
@@ -413,7 +436,8 @@ property var clock: QtObject { property real rawValue: 3661 }
 readonly property var flightTime: clock
 }
 }
-QtObject { id: guided; property bool showTakeoff: true; property bool showChangeAlt: true }
+QtObject { id: guided; property bool showTakeoff: true; property bool showChangeAlt: true; property var popupAnchorRect: null; property int actionChangeAlt: 6; function confirmAction(action) {} }
+readonly property var guided: guided
 QtObject {
 id: engagement
 property string abortModeName: "Abort"
@@ -746,6 +770,89 @@ readonly property var plain: plain
         self.assertIn("holdDuration: 1000", standoff_button)
         panel = (self.root / "src/FlyView/RightMissionPanel.qml").read_text(encoding="utf-8")
         self.assertNotIn("showMessageDialog", panel)                # no more "switch to X?" confirmation
+
+    def mount_popup_dialog(self, anchor):
+        """Mount the real QGCPopupDialog, optionally with an anchorRect, in a 1024x768 window."""
+        source = (self.root / "src/QmlControls/QGCPopupDialog.qml").read_text(encoding="utf-8")
+        source = "\n".join(line for line in source.splitlines() if not line.startswith("import QGroundControl"))
+        (self.folder / "QGCPopupDialog.qml").write_text(source.replace("ScreenTools.", "screenTools."), encoding="utf-8")
+        (self.folder / "QGCMouseArea.qml").write_text("import QtQuick\nMouseArea { }", encoding="utf-8")
+        (self.folder / "QGCFlickable.qml").write_text("import QtQuick\nFlickable { }", encoding="utf-8")
+        self._stubs = [WindowStub(1024, 768), GlobalsStub()]          # keep them alive for the engine
+        self.engine.rootContext().setContextProperty("mainWindow", self._stubs[0])
+        self.engine.rootContext().setContextProperty("globals", self._stubs[1])
+        rect = f"Qt.rect({anchor[0]}, {anchor[1]}, {anchor[2]}, {anchor[3]})" if anchor else "null"
+        self.load('''
+QGCPopupDialog {
+    id: dlg
+    title: "Box"
+    buttons: Dialog.Ok | Dialog.Cancel
+    destroyOnClose: false
+    anchorRect: %s
+    Rectangle { objectName: "probe"; width: 200; height: 80; color: "red" }
+}
+function openDialog() { dlg.open() }
+''' % rect)
+        QMetaObject.invokeMethod(self.item, "openDialog", Qt.DirectConnection)
+        QTest.qWait(80)
+        probe = self.item.findChild(QObject, "probe")
+        self.assertIsNotNone(probe)
+        top_left = probe.mapToItem(None, 0, 0)
+        return top_left.x(), top_left.y(), probe.width(), probe.height()
+
+    def test_boxes_open_beside_the_panel_lined_up_with_the_button_and_on_screen(self):
+        # A button in the middle: the box sits just left of the panel edge (x = 900) and centred on it.
+        x, y, w, h = self.mount_popup_dialog((900, 300, 120, 60))
+        self.assertLessEqual(x + w, 900)
+        self.assertGreater(x + w, 700)                                   # right next to it, not across the screen
+        self.assertLess(abs((y + h / 2) - 330), 60)
+
+    def test_boxes_stay_fully_on_screen_near_the_top_and_bottom(self):
+        x, y, w, h = self.mount_popup_dialog((900, 0, 120, 30))
+        self.assertGreaterEqual(y, 0)
+        self.tearDown(); self.setUp()
+        x, y, w, h = self.mount_popup_dialog((900, 740, 120, 28))
+        self.assertLessEqual(y + h, 768)
+
+    def test_boxes_without_an_anchor_stay_centred(self):
+        x, y, w, h = self.mount_popup_dialog(None)
+        self.assertLess(abs((x + w / 2) - 512), 40)
+        self.assertLess(abs((y + h / 2) - 384), 60)
+
+    def test_takeoff_and_change_height_ask_for_a_box_beside_their_own_button(self):
+        self.panel_scene(1366, 900)
+        guided = self.item.property("guided")
+        panel = self.item.property("panel")
+        panel_left = panel.mapToItem(None, 0, 0).x()
+        for name in ["missionTakeoff", "missionChangeHeight"]:
+            guided.setProperty("popupAnchorRect", None)
+            button = self.item.findChild(QObject, name)
+            point = button.mapToItem(self.item, button.width() / 2, button.height() / 2).toPoint()
+            QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point)
+            QTest.qWait(30)
+            rect = guided.property("popupAnchorRect")
+            top_left = button.mapToItem(None, 0, 0)
+            self.assertAlmostEqual(rect.x(), panel_left, delta=1, msg=name)        # the box goes left of the panel edge ...
+            self.assertAlmostEqual(rect.y(), top_left.y(), delta=1, msg=name)      # ... lined up with this button
+            self.assertAlmostEqual(rect.height(), button.height(), delta=1, msg=name)
+
+    def test_standoff_panel_lines_up_with_the_standoff_button(self):
+        self.panel_scene(1366, 900)
+        panel = self.item.property("panel")
+        standoff = self.item.findChild(QObject, "missionStandoff")
+        expected = standoff.mapToItem(self.item, 0, standoff.height() / 2).y()
+        self.assertAlmostEqual(self.call(panel, "standoffAnchorCenterY").toNumber(), expected, delta=1)
+        layer = (self.root / "src/FlyView/FlyViewWidgetLayer.qml").read_text(encoding="utf-8")
+        standoff_panel = layer.split("id:                 standoffPanel", 1)[1].split("property bool _coordValid", 1)[0]
+        self.assertNotIn("anchors.top", standoff_panel)
+        self.assertIn("_anchorCenterY - height / 2", standoff_panel)
+        self.assertIn("_anchorCenterY = toolStrip.standoffAnchorCenterY()", layer)
+        # the other secondary box opened from a panel button is lined up with its button as well
+        panel_source = (self.root / "src/FlyView/RightMissionPanel.qml").read_text(encoding="utf-8")
+        self.assertIn("actionPopup.anchorCenterY = secondaryButton.mapToItem(null", panel_source)
+        controller = (self.root / "src/FlyView/GuidedActionsController.qml").read_text(encoding="utf-8")
+        self.assertIn("takeoffDialogFactory.open({ anchorRect: anchor })", controller)
+        self.assertIn("changeHeightDialogFactory.open({ anchorRect: anchor })", controller)
 
     def test_compass_is_visible_below_secondary_actions(self):
         self.panel_scene(1024, 768)
