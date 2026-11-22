@@ -25,9 +25,15 @@ Rectangle {
     required property var guidedController
     readonly property bool headingFresh: linkReady && vehicle.vehicle.attitudeTimestampMs > 0 && nowMs - vehicle.vehicle.attitudeTimestampMs < 2000 && isFinite(Number(vehicle.vehicle.heading.rawValue))
     property string completedCommand: ""
+    // KAN-53: role ("engage", "abort", "navigation" ...) of the button whose hold just completed.
+    property string completedRole: "navigation"
     readonly property string holdCommand: activeHold ? activeHold.command : completedCommand
     readonly property real holdProgress: activeHold ? activeHold.holdProgress : (completedCommand !== "" ? 1 : 0)
     readonly property bool holdComplete: !activeHold && completedCommand !== ""
+    // KAN-53: colour of the hold bar. The normal accent while the button is still being held; once the
+    // hold has COMPLETED (the bar is full and it is safe to lift the finger) it takes the colour of the
+    // button that was held: red for Engage, orange for Abort, the neutral accent for the other commands.
+    readonly property color holdColor: holdComplete ? actionBorder(completedRole) : accentGlow
     readonly property bool linkReady: vehicle && vehicle.initialConnectComplete && !vehicle.vehicleLinkManager.communicationLost
     readonly property bool engageEligible: linkReady && vehicle.armed && vehicle.flying && engagementController && vehicle.flightModes.indexOf(engagementController.engagementModeName) >= 0 && vehicle.flightMode !== engagementController.engagementModeName
     // STRATUM #42: RTL (Safe Recovery) and Abort availability from the Layer-1 gate.
@@ -65,8 +71,10 @@ Rectangle {
         }
     }
 
-    // STRATUM KAN-53: shows the completed state on the hold bar for a moment.
-    function holdCommitted(commandName) {
+    // STRATUM KAN-53: shows the completed state on the hold bar for a moment, in the colour of the
+    // button that was held (role: "engage", "abort", or "navigation" for the neutral commands).
+    function holdCommitted(commandName, role) {
+        root.completedRole = role ? role : "navigation";
         root.completedCommand = commandName;
         completionTimer.restart();
     }
@@ -328,8 +336,7 @@ Rectangle {
                             return;
                         root.engagementController.abort();
                         root.feedback = qsTr("Abort requested â€” awaiting vehicle response");
-                        root.completedCommand = qsTr("Abort");
-                        completionTimer.restart();
+                        root.holdCommitted(qsTr("Abort"), "abort");
                     }
                 }
 
@@ -350,8 +357,7 @@ Rectangle {
                             return;
                         root.engagementController.engage();
                         root.feedback = qsTr("Engage requested â€” awaiting vehicle response");
-                        root.completedCommand = qsTr("Engage");
-                        completionTimer.restart();
+                        root.holdCommitted(qsTr("Engage"), "engage");
                     }
                 }
 

@@ -30,6 +30,7 @@ Item {
     readonly property real holdProgress: toolStrip.holdProgress
     readonly property string holdCommand: toolStrip.holdCommand
     readonly property bool holdComplete: toolStrip.holdComplete
+    readonly property color holdColor: toolStrip.holdColor     // KAN-53: hold bar colour (button colour once complete)
     property var    standoffController              // STRATUM: forwarded to the dropper drop check
 
     property var    _activeVehicle:         QGroundControl.multiVehicleManager.activeVehicle

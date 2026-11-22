@@ -854,6 +854,46 @@ function openDialog() { dlg.open() }
         self.assertIn("takeoffDialogFactory.open({ anchorRect: anchor })", controller)
         self.assertIn("changeHeightDialogFactory.open({ anchorRect: anchor })", controller)
 
+    def test_hold_bar_takes_the_button_colour_only_once_the_hold_completes(self):
+        self.panel_scene(1366, 900)
+        craft = self.item.property("craft")
+        self.qgc.manager.activeVehicle = craft
+        panel = self.item.property("panel")
+        accent = panel.property("accentGlow")
+
+        # Released before the hold completes: the bar never leaves the normal accent.
+        self.hold_button("missionEngage", 1500)
+        self.assertFalse(panel.property("holdComplete"))
+        self.assertEqual(panel.property("holdColor"), accent)
+
+        # Still being held, not yet complete: normal accent.
+        self.hold_button("missionEngage", 2000, release=False)
+        self.assertFalse(panel.property("holdComplete"))
+        self.assertEqual(panel.property("holdColor"), accent)
+        engage = self.item.findChild(QObject, "missionEngage")
+        point = engage.mapToItem(self.item, engage.width() / 2, engage.height() / 2).toPoint()
+        QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, point)
+        QTest.qWait(30)
+
+        # Completed: the bar takes the colour of the button that was held.
+        self.hold_button("missionEngage", 3000)
+        self.assertTrue(panel.property("holdComplete"))
+        self.assertEqual(panel.property("holdColor"), QColor("#FF3B3B"))          # Engage: red
+        self.hold_button("missionAbort", 1000)
+        self.assertTrue(panel.property("holdComplete"))
+        self.assertEqual(panel.property("holdColor"), QColor("#FF9F45"))          # Abort: orange
+        self.hold_button("missionLand", 1000)
+        self.assertTrue(panel.property("holdComplete"))
+        self.assertEqual(panel.property("holdColor"), accent)                     # neutral command: its accent
+        self.assertFalse(self.errors, self.errors)
+
+    def test_the_fly_view_hold_bar_uses_the_panel_hold_colour(self):
+        fly_view = (self.root / "src/FlyView/FlyView.qml").read_text(encoding="utf-8")
+        layer = (self.root / "src/FlyView/FlyViewWidgetLayer.qml").read_text(encoding="utf-8")
+        bar = fly_view.split("id: holdConfirmBox", 1)[1].split("ColumnLayout {", 1)[0]
+        self.assertIn("_holdAccent: widgetLayer.holdColor", bar)
+        self.assertIn("holdColor: toolStrip.holdColor", layer)
+
     def test_compass_is_visible_below_secondary_actions(self):
         self.panel_scene(1024, 768)
         panel = self.item.property("panel")
