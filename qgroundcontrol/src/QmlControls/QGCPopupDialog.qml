@@ -45,6 +45,9 @@ Popup {
 
     property string title
     property string acceptButtonText                    // optional override of the accept button label
+    // STRATUM KAN-53: > 0 makes the accept button a hold-to-confirm button (the hold is the
+    // confirmation); 0 keeps the ordinary click.
+    property int    acceptHoldDuration:     0
     property var    buttons:                Dialog.Ok
     property alias  acceptButtonEnabled:    acceptButton.enabled
     property alias  rejectButtonEnabled:    rejectButton.enabled
@@ -193,6 +196,9 @@ Popup {
         if (acceptButton.visible && acceptButtonText !== "") {
             acceptButton.text = acceptButtonText
         }
+        if (acceptButton.visible && acceptHoldDuration > 0) {
+            acceptButton.text = qsTr("Hold to %1").arg(acceptButton.text)
+        }
 
         closePolicy = Popup.NoAutoClose
         if (buttons & Dialog.Cancel) {
@@ -243,11 +249,12 @@ Popup {
                 Layout.minimumWidth:    height * 1.5
             }
 
-            QGCButton {
+            QGCHoldButton {
                 id:                     acceptButton
                 objectName:             "popupDialog_acceptButton"
                 primary:                true
-                onClicked:              _accept()
+                holdDuration:           root.acceptHoldDuration
+                onHeld:                 _accept()
                 Layout.minimumWidth:    height * 1.5
             }
         }

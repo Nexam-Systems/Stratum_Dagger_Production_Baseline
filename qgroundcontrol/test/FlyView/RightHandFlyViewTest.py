@@ -159,6 +159,7 @@ id: control
 property string iconSource: ""
 property color textColor: "white"
 property int _horizontalPadding: 3
+property real backRadius: 0
 property real pointSize: 10
 property int wrapMode: Text.WordWrap
 font.pointSize: pointSize
@@ -189,6 +190,9 @@ contentItem: Text { text: control.text; color: control.textColor; font: control.
             source = (self.root / "src/FlyView" / filename).read_text(encoding="utf-8")
             source = "\n".join(line for line in source.splitlines() if not line.startswith("import QGroundControl"))
             (self.folder / filename).write_text(source, encoding="utf-8")
+        hold_source = (self.root / "src/QmlControls/QGCHoldButton.qml").read_text(encoding="utf-8")
+        (self.folder / "QGCHoldButton.qml").write_text(
+            "\n".join(line for line in hold_source.splitlines() if not line.startswith("import QGroundControl")), encoding="utf-8")
         source = (self.root / "src/QmlControls/PipState.qml").read_text(encoding="utf-8")
         (self.folder / "PipState.qml").write_text(source, encoding="utf-8")
         header = (self.root / "src/Toolbar/FlightTelemetryHeader.qml").read_text(encoding="utf-8")
@@ -379,6 +383,8 @@ readonly property var action: modeAction
 property int abortRequests: 0
 property int engageRequests: 0
 property int killRequests: 0
+property int aopRequests: 0
+property int fetchRequests: 0
 property int secondaryRequests: 0
 QtObject {
 id: craft
@@ -440,6 +446,8 @@ id: panel; width: Math.min(138, Math.max(122, parent.width * 0.11)); height: par
 x: parent.width - width - 6; y: header.height
 vehicle: craft; guidedController: guided; engagementController: engagement
 actionModel: [modeAction]
+onAopRequested: aopRequests++
+onFetchRequested: fetchRequests++
 }
 ''', width, height)
 
@@ -624,6 +632,120 @@ actionModel: [modeAction]
         surface = fly_view.split("id: flightSurface", 1)[1].split("}", 1)[0]
         self.assertNotIn("rightMargin", surface)                   # the map is no longer cut off at the panel
         self.assertIn("rightDockInset:         _root._dockWidth", fly_view)
+
+    def hold_button(self, name, held_ms, release=True):
+        """Press a panel button and pretend `held_ms` milliseconds have passed."""
+        button = self.item.findChild(QObject, name)
+        button.setProperty("applicationActive", True)
+        point = button.mapToItem(self.item, button.width() / 2, button.height() / 2).toPoint()
+        QTest.mouseMove(self.window, point)
+        QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, point)
+        button.setProperty("_startedMs", int(time.time() * 1000) - held_ms)
+        QTest.qWait(40)
+        if release:
+            QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, point)
+            QTest.qWait(20)
+
+    def test_direct_buttons_need_a_one_second_hold_and_engage_keeps_three(self):
+        self.panel_scene(1366, 900)
+        craft = self.item.property("craft")
+        self.qgc.manager.activeVehicle = craft
+        for name in ["missionDefineAOP", "missionFetchTarget", "missionLand", "missionHold", "missionManual", "missionRTL", "missionAbort"]:
+            self.assertEqual(self.item.findChild(QObject, name).property("holdDuration"), 1000, name)
+        self.assertEqual(self.item.findChild(QObject, "missionEngage").property("holdDuration"), 3000)
+        # Takeoff, Standoff, Change Height and Emergency Kill are not hold buttons.
+        for name in ["missionTakeoff", "missionStandoff", "missionChangeHeight", "missionEmergencyKill"]:
+            self.assertIsNone(self.item.findChild(QObject, name).property("holdDuration"), name)
+
+        # Releasing before 1 second sends nothing.
+        craft.setProperty("flightMode", "Position")
+        self.hold_button("missionLand", 600)
+        self.assertEqual(craft.property("flightMode"), "Position")
+        # Holding for 1 second changes the mode at once, with no confirmation dialog.
+        self.hold_button("missionLand", 1000)
+        self.assertEqual(craft.property("flightMode"), "Land")
+        self.hold_button("missionHold", 1000)
+        self.assertEqual(craft.property("flightMode"), "Hold")
+        self.hold_button("missionManual", 1000)
+        self.assertEqual(craft.property("flightMode"), "Position")
+        self.assertFalse(self.errors, self.errors)
+
+    def test_define_aop_and_fetch_target_send_after_the_hold_only(self):
+        self.panel_scene(1366, 900)
+        self.qgc.manager.activeVehicle = self.item.property("craft")
+        self.hold_button("missionDefineAOP", 600)
+        self.hold_button("missionFetchTarget", 600)
+        self.assertEqual((self.item.property("aopRequests"), self.item.property("fetchRequests")), (0, 0))
+        self.hold_button("missionDefineAOP", 1000)
+        self.hold_button("missionFetchTarget", 1000)
+        self.assertEqual((self.item.property("aopRequests"), self.item.property("fetchRequests")), (1, 1))
+        self.assertFalse(self.errors, self.errors)
+
+    def test_the_hold_bar_follows_any_hold_button(self):
+        self.panel_scene(1366, 900)
+        self.qgc.manager.activeVehicle = self.item.property("craft")
+        panel = self.item.property("panel")
+        self.hold_button("missionRTL", 400, release=False)
+        self.assertEqual(panel.property("holdCommand"), "RTL")
+        self.assertGreater(panel.property("holdProgress"), 0)
+        self.assertLess(panel.property("holdProgress"), 1)
+        button = self.item.findChild(QObject, "missionRTL")
+        point = button.mapToItem(self.item, button.width() / 2, button.height() / 2).toPoint()
+        QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, point)
+        QTest.qWait(30)
+        self.assertEqual(panel.property("holdProgress"), 0)         # released early: the bar clears
+        self.assertEqual(panel.property("holdCommand"), "")
+
+    def test_hold_confirm_button_in_boxes_needs_the_hold(self):
+        self.load('''
+property int helds: 0
+QGCHoldButton { id: hb; x: 20; y: 20; width: 160; height: 50; text: "Hold to Go"; holdDuration: 1000; onHeld: helds++ }
+QGCHoldButton { id: plain; x: 20; y: 100; width: 160; height: 50; text: "Plain"; holdDuration: 0; onHeld: helds += 10 }
+readonly property var hb: hb
+readonly property var plain: plain
+''')
+        self.window = QQuickWindow()
+        self.item.setParentItem(self.window.contentItem())
+        self.window.resize(300, 200)
+        self.window.show()
+        QTest.qWait(40)
+        hb = self.item.property("hb")
+        point = hb.mapToItem(self.item, hb.width() / 2, hb.height() / 2).toPoint()
+        QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, point)
+        QTest.qWait(30)
+        hb.setProperty("_startedMs", int(time.time() * 1000) - 600)
+        QTest.qWait(40)
+        QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, point)
+        QTest.qWait(30)
+        self.assertEqual(self.item.property("helds"), 0)            # released early: nothing
+        QTest.mousePress(self.window, Qt.LeftButton, Qt.NoModifier, point)
+        QTest.qWait(30)
+        hb.setProperty("_startedMs", int(time.time() * 1000) - 1000)
+        QTest.qWait(60)
+        self.assertEqual(self.item.property("helds"), 1)            # held for a second: confirmed once
+        QTest.mouseRelease(self.window, Qt.LeftButton, Qt.NoModifier, point)
+        QTest.qWait(30)
+        self.assertEqual(self.item.property("helds"), 1)            # releasing does not confirm again
+        plain = self.item.property("plain")
+        point = plain.mapToItem(self.item, plain.width() / 2, plain.height() / 2).toPoint()
+        QTest.mouseClick(self.window, Qt.LeftButton, Qt.NoModifier, point)
+        QTest.qWait(30)
+        self.assertEqual(self.item.property("helds"), 11)           # holdDuration 0 = ordinary click
+        self.assertFalse(self.errors, self.errors)
+
+    def test_boxes_use_a_one_second_hold_on_their_confirm_button(self):
+        takeoff = (self.root / "src/FlyView/GuidedActionTakeoffDialog.qml").read_text(encoding="utf-8")
+        height = (self.root / "src/FlyView/GuidedActionChangeHeightDialog.qml").read_text(encoding="utf-8")
+        popup = (self.root / "src/QmlControls/QGCPopupDialog.qml").read_text(encoding="utf-8")
+        layer = (self.root / "src/FlyView/FlyViewWidgetLayer.qml").read_text(encoding="utf-8")
+        self.assertIn("acceptHoldDuration: 1000", takeoff)
+        self.assertIn("acceptHoldDuration: 1000", height)
+        self.assertIn("holdDuration:           root.acceptHoldDuration", popup)
+        self.assertIn("onHeld:                 _accept()", popup)
+        standoff_button = layer.split('text:       qsTr("Hold to Set Standoff")', 1)[1].split("onHeld", 1)[0]
+        self.assertIn("holdDuration: 1000", standoff_button)
+        panel = (self.root / "src/FlyView/RightMissionPanel.qml").read_text(encoding="utf-8")
+        self.assertNotIn("showMessageDialog", panel)                # no more "switch to X?" confirmation
 
     def test_compass_is_visible_below_secondary_actions(self):
         self.panel_scene(1024, 768)

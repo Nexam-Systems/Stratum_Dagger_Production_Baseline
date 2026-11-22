@@ -52,8 +52,8 @@ class StandoffPanelTest(unittest.TestCase):
         self.assertIn("The command is not blocked.", self.panel)
 
     def test_set_standoff_is_blocked_by_invalid_inputs(self):
-        button = self.panel.split('text:       qsTr("Set Standoff")', 1)[1]
-        self.assertIn("standoffPanel._inputsValid", button.split("onClicked", 1)[0])
+        button = self.panel.split('text:       qsTr("Hold to Set Standoff")', 1)[1]
+        self.assertIn("standoffPanel._inputsValid", button.split("onHeld", 1)[0])
         self.assertIn("if (!standoffPanel._inputsValid)", button)
         self.assertNotIn("linkRangeExceeded", button)
 

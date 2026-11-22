@@ -15,6 +15,7 @@ QGCPopupDialog {
     title:              qsTr("Change Height")
     buttons:            Dialog.Ok | Dialog.Cancel
     acceptButtonText:   qsTr("Change Height")
+    acceptHoldDuration: 1000                    // KAN-53: hold for 1 second to confirm
 
     property var    guidedController
     property var    _activeVehicle:     guidedController ? guidedController._activeVehicle : null
