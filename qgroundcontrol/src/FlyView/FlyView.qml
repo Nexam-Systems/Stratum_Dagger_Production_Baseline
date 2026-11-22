@@ -331,9 +331,11 @@ Item {
             z: QGroundControl.zOrderTopMost + 2
             visible: widgetLayer.holdCommand !== ""
 
-            // STRATUM: theme-aware accent (cyan normal / neon-green high-contrast),
-            // matching the top status bar.
-            readonly property color _holdAccent: qgcPal.lightTheme ? qgcPal.brandingPurple : (qgcPal.highContrast ? "#2EE62E" : "#79CBE8")
+            // STRATUM: theme-aware accent (cyan normal / neon-green high-contrast), matching the top
+            // status bar, while the button is still being held. KAN-53: once the hold has completed
+            // the bar takes the colour of the button that was held (red Engage, orange Abort, ...),
+            // so the operator knows it is safe to lift their finger.
+            readonly property color _holdAccent: widgetLayer.holdColor
 
             color: qgcPal.window
             border.color: _holdAccent
