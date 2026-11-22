@@ -415,11 +415,18 @@ Item {
         width:              Math.min(_root.width - 12, standoffPanelGrid.implicitWidth + _toolsMargin * 4)
         height:             Math.min(_root.height, standoffPanelGrid.implicitHeight + _toolsMargin * 4)
 
-        property bool _coordValid: {
+        // The target typed or picked into the Lat / Lon fields, or an invalid coordinate. Read
+        // straight from the fields: _updatePending() runs from their onTextChanged handlers, where a
+        // binding such as _coordValid may not have been refreshed yet (the first map pick drew nothing).
+        function _targetFromFields() {
             var lat = parseFloat(standoffLatField.text)
             var lon = parseFloat(standoffLonField.text)
-            return !isNaN(lat) && !isNaN(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
+            if (isNaN(lat) || isNaN(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+                return QtPositioning.coordinate()
+            }
+            return QtPositioning.coordinate(lat, lon)
         }
+        property bool _coordValid: _targetFromFields().isValid
 
         // STRATUM: set when the last commit was rejected for being outside the AOP.
         property bool _aopReject: false
@@ -495,8 +502,8 @@ Item {
             if (!mapControl) {
                 return
             }
-            if (_coordValid) {
-                const coordinate = QtPositioning.coordinate(parseFloat(standoffLatField.text), parseFloat(standoffLonField.text))
+            const coordinate = _targetFromFields()
+            if (coordinate.isValid) {
                 if (!mapControl.isCoordinateInsideAOP(coordinate)) {
                     _aopReject = true
                     mapControl.setStandoffPendingCoordinate(QtPositioning.coordinate())
