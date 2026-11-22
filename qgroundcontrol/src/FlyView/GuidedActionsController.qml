@@ -384,16 +384,28 @@ Item {
         guidedValueSlider.visible = false
     }
 
+    // STRATUM KAN-53: where the next Takeoff / Change Height box should sit (a rect in window
+    // coordinates, set by the right control panel just before it asks for the box). The box opens
+    // just left of it, lined up with the pressed button. null (any other caller) keeps the box centred.
+    property var popupAnchorRect: null
+
+    function _consumePopupAnchor() {
+        var rect = popupAnchorRect
+        popupAnchorRect = null
+        return rect
+    }
+
     // STRATUM: Takeoff is confirmed through a dedicated modal dialog (altitude entry +
     // launch caution) rather than the inline slide-to-confirm bar. Vehicles that only
     // support takeoff without an altitude skip straight to execution.
     function showTakeoffDialog() {
         closeAll()
+        var anchor = _consumePopupAnchor()
         if (!_activeVehicle) {
             return
         }
         if (_activeVehicle.supports.guidedTakeoffWithAltitude) {
-            takeoffDialogFactory.open()
+            takeoffDialogFactory.open({ anchorRect: anchor })
         } else {
             executeAction(actionTakeoff, undefined, 0, false)
         }
@@ -417,10 +429,11 @@ Item {
     // which redirects here.
     function showChangeHeightDialog() {
         closeAll()
+        var anchor = _consumePopupAnchor()
         if (!_activeVehicle || !showChangeAlt) {
             return
         }
-        changeHeightDialogFactory.open()
+        changeHeightDialogFactory.open({ anchorRect: anchor })
     }
 
     QGCPopupDialogFactory {
